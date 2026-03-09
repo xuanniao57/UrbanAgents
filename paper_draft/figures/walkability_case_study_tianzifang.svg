@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="620" viewBox="0 0 960 620" role="img" aria-labelledby="title desc">
+  <title id="title">Walkability case study in Tianzifang</title>
+  <desc id="desc">Stylized case-study map showing walkability zones, arterial barriers, and proposed interventions in Tianzifang.</desc>
+  <style>
+    .title { font: 700 24px 'Segoe UI', Arial, sans-serif; fill: #1f2937; }
+    .subtitle { font: 14px 'Segoe UI', Arial, sans-serif; fill: #4b5563; }
+    .label { font: 700 14px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+    .text { font: 13px 'Segoe UI', Arial, sans-serif; fill: #1f2937; }
+    .small { font: 12px 'Segoe UI', Arial, sans-serif; fill: #374151; }
+  </style>
+  <rect width="960" height="620" fill="#fffdf8"/>
+  <text x="34" y="40" class="title">Case study 1: walkability assessment in Tianzifang</text>
+  <text x="34" y="64" class="subtitle">Stylized publication figure showing poor-connectivity zones, arterial barriers, and proposed interventions described in Section 5.1.</text>
+
+  <rect x="36" y="96" width="640" height="470" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5" rx="12"/>
+  <rect x="60" y="122" width="592" height="420" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1" rx="10"/>
+
+  <rect x="86" y="150" width="220" height="130" fill="#dcfce7" stroke="#22c55e" opacity="0.85"/>
+  <rect x="328" y="150" width="150" height="130" fill="#fef3c7" stroke="#f59e0b" opacity="0.9"/>
+  <rect x="498" y="150" width="128" height="130" fill="#fee2e2" stroke="#ef4444" opacity="0.9"/>
+  <rect x="86" y="302" width="260" height="210" fill="#fef3c7" stroke="#f59e0b" opacity="0.85"/>
+  <rect x="368" y="302" width="258" height="210" fill="#fee2e2" stroke="#ef4444" opacity="0.92"/>
+
+  <path d="M104 210 L616 210" stroke="#475569" stroke-width="10" stroke-linecap="round"/>
+  <path d="M178 136 L178 522" stroke="#64748b" stroke-width="6" stroke-linecap="round"/>
+  <path d="M260 136 L260 522" stroke="#64748b" stroke-width="5" stroke-linecap="round"/>
+  <path d="M420 136 L420 522" stroke="#64748b" stroke-width="7" stroke-linecap="round"/>
+  <path d="M540 136 L540 522" stroke="#64748b" stroke-width="5" stroke-linecap="round"/>
+  <path d="M330 302 L330 522" stroke="#475569" stroke-width="12" stroke-linecap="round"/>
+  <text x="340" y="414" transform="rotate(90 340 414)" class="small">Jianguo Road barrier</text>
+
+  <circle cx="330" cy="220" r="11" fill="#ef4444"/>
+  <circle cx="330" cy="300" r="11" fill="#ef4444"/>
+  <line x1="330" y1="232" x2="330" y2="288" stroke="#ef4444" stroke-width="5" stroke-dasharray="6 6"/>
+  <circle cx="220" cy="390" r="18" fill="#2563eb"/>
+  <circle cx="460" cy="408" r="20" fill="#10b981"/>
+  <circle cx="540" cy="208" r="18" fill="#f59e0b"/>
+  <text x="243" y="395" class="small">activity-node enhancement</text>
+  <text x="486" y="413" class="small">pocket park</text>
+  <text x="560" y="213" class="small">pedestrian bridge / crossing</text>
+
+  <rect x="714" y="110" width="210" height="212" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.3" rx="12"/>
+  <text x="734" y="138" class="label">Legend</text>
+  <rect x="736" y="158" width="18" height="18" fill="#dcfce7" stroke="#22c55e"/>
+  <text x="764" y="172" class="text">high walkability core</text>
+  <rect x="736" y="188" width="18" height="18" fill="#fef3c7" stroke="#f59e0b"/>
+  <text x="764" y="202" class="text">transitional mixed zone</text>
+  <rect x="736" y="218" width="18" height="18" fill="#fee2e2" stroke="#ef4444"/>
+  <text x="764" y="232" class="text">poor walkability edge</text>
+  <line x1="736" y1="252" x2="754" y2="252" stroke="#ef4444" stroke-width="4" stroke-dasharray="6 4"/>
+  <text x="764" y="256" class="text">connectivity gap</text>
+  <circle cx="745" cy="282" r="8" fill="#2563eb"/>
+  <text x="764" y="286" class="text">node intervention</text>
+  <circle cx="745" cy="310" r="8" fill="#10b981"/>
+  <text x="764" y="314" class="text">open-space intervention</text>
+
+  <rect x="714" y="344" width="210" height="160" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.3" rx="12"/>
+  <text x="734" y="372" class="label">Case metrics</text>
+  <text x="734" y="398" class="text">Core walkability: 0.78</text>
+  <text x="734" y="420" class="text">Southern edge: 0.42</text>
+  <text x="734" y="442" class="text">Intersection density:</text>
+  <text x="752" y="462" class="small">42 / km² core, 18 / km² south</text>
+  <text x="734" y="486" class="text">High POI density but barrier-limited</text>
+
+  <text x="36" y="598" class="small">The map is schematic rather than cartographically exact; it is designed to communicate analysis structure, intervention logic, and visual evidence for the case-study narrative.</text>
+</svg>

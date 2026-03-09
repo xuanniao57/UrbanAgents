@@ -1,0 +1,138 @@
+import os
+
+svg_content = """<svg width="1000" height="850" viewBox="0 0 1000 850" xmlns="http://www.w3.org/2000/svg" style="background-color:#ffffff; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+    <defs>
+        <!-- Arrowhead for paths -->
+        <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L0,6 L9,3 z" fill="#2C3E50" />
+        </marker>
+        <marker id="arrow-loop" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L0,6 L9,3 z" fill="#E67E22" />
+        </marker>
+        <marker id="arrow-box" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L0,6 L9,3 z" fill="#7F8C8D" />
+        </marker>
+        
+        <!-- Gradients -->
+        <linearGradient id="grad-phase1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#E3F2FD"/><stop offset="100%" stop-color="#BBDEFB"/></linearGradient>
+        <linearGradient id="grad-phase2" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#E8F5E9"/><stop offset="100%" stop-color="#C8E6C9"/></linearGradient>
+        <linearGradient id="grad-phase3" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#FFF3E0"/><stop offset="100%" stop-color="#FFE0B2"/></linearGradient>
+        <linearGradient id="grad-phase4" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#F3E5F5"/><stop offset="100%" stop-color="#E1BEE7"/></linearGradient>
+
+        <filter id="drop-shadow" x="-5%" y="-5%" width="120%" height="120%">
+            <feDropShadow dx="2" dy="4" stdDeviation="4" flood-color="#000000" flood-opacity="0.1"/>
+        </filter>
+        <filter id="shadow-light" x="-5%" y="-5%" width="110%" height="110%">
+            <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.05"/>
+        </filter>
+    </defs>
+
+    <!-- Main Wrapper box for top section -->
+    <rect x="40" y="40" width="920" height="440" rx="16" fill="#F8F9F9" stroke="#D5DBDB" stroke-width="1.5"/>
+    <text x="80" y="80" font-size="22" font-weight="bold" fill="#2C3E50">Analytical Workflow</text>
+    <text x="80" y="105" font-size="14" fill="#7F8C8D">Recurrent loop of perception, cognition, reasoning, and action</text>
+
+    <!-- Inner Wrapper for Workflow Loop -->
+    <rect x="80" y="130" width="840" height="200" rx="12" fill="#FFFFFF" stroke="#BDC3C7" stroke-width="1" stroke-dasharray="4,4"/>
+
+    <g transform="translate(100, 150)">
+        <!-- Phase 1 -->
+        <rect x="0" y="0" width="180" height="120" rx="8" fill="url(#grad-phase1)" stroke="#64B5F6" stroke-width="2" filter="url(#drop-shadow)"/>
+        <path d="M0,8 L0,32 L180,32 L180,8 Q180,0 172,0 L8,0 Q0,0 0,8 Z" fill="#2196F3"/>
+        <text x="90" y="22" text-anchor="middle" font-size="14" font-weight="bold" fill="#FFFFFF">Phase I</text>
+        <text x="90" y="58" text-anchor="middle" font-size="15" font-weight="bold" fill="#2C3E50">Task Grounding</text>
+        <text x="90" y="80" text-anchor="middle" font-size="13" fill="#34495E">Context Construction</text>
+        <text x="90" y="100" text-anchor="middle" font-size="11" fill="#5D6D7E">User Query → Task Space</text>
+
+        <path d="M185,60 L215,60" stroke="#2C3E50" stroke-width="2.5" fill="none" marker-end="url(#arrow)"/>
+
+        <!-- Phase 2 -->
+        <rect x="220" y="0" width="180" height="120" rx="8" fill="url(#grad-phase2)" stroke="#81C784" stroke-width="2" filter="url(#drop-shadow)"/>
+        <path d="M220,8 L220,32 L400,32 L400,8 Q400,0 392,0 L228,0 Q220,0 220,8 Z" fill="#4CAF50"/>
+        <text x="310" y="22" text-anchor="middle" font-size="14" font-weight="bold" fill="#FFFFFF">Phase II</text>
+        <text x="310" y="58" text-anchor="middle" font-size="15" font-weight="bold" fill="#2C3E50">Perception &amp;</text>
+        <text x="310" y="80" text-anchor="middle" font-size="15" font-weight="bold" fill="#2C3E50">Dual-Space Cognition</text>
+        <text x="310" y="100" text-anchor="middle" font-size="11" fill="#5D6D7E">Vector &amp; Topology</text>
+
+        <path d="M405,60 L435,60" stroke="#2C3E50" stroke-width="2.5" fill="none" marker-end="url(#arrow)"/>
+
+        <!-- Phase 3 -->
+        <rect x="440" y="0" width="180" height="120" rx="8" fill="url(#grad-phase3)" stroke="#FFB74D" stroke-width="2" filter="url(#drop-shadow)"/>
+        <path d="M440,8 L440,32 L620,32 L620,8 Q620,0 612,0 L448,0 Q440,0 440,8 Z" fill="#FF9800"/>
+        <text x="530" y="22" text-anchor="middle" font-size="14" font-weight="bold" fill="#FFFFFF">Phase III</text>
+        <text x="530" y="58" text-anchor="middle" font-size="15" font-weight="bold" fill="#2C3E50">Task Reasoning</text>
+        <text x="530" y="80" text-anchor="middle" font-size="15" font-weight="bold" fill="#2C3E50">&amp; Decision</text>
+        <text x="530" y="100" text-anchor="middle" font-size="11" fill="#5D6D7E">Inference &amp; Interventions</text>
+
+        <path d="M625,60 L655,60" stroke="#2C3E50" stroke-width="2.5" fill="none" marker-end="url(#arrow)"/>
+
+        <!-- Phase 4 -->
+        <rect x="660" y="0" width="140" height="120" rx="8" fill="url(#grad-phase4)" stroke="#BA68C8" stroke-width="2" filter="url(#drop-shadow)"/>
+        <path d="M660,8 L660,32 L800,32 L800,8 Q800,0 792,0 L668,0 Q660,0 660,8 Z" fill="#9C27B0"/>
+        <text x="730" y="22" text-anchor="middle" font-size="14" font-weight="bold" fill="#FFFFFF">Phase IV</text>
+        <text x="730" y="58" text-anchor="middle" font-size="15" font-weight="bold" fill="#2C3E50">Action &amp;</text>
+        <text x="730" y="80" text-anchor="middle" font-size="15" font-weight="bold" fill="#2C3E50">Output</text>
+        <text x="730" y="100" text-anchor="middle" font-size="11" fill="#5D6D7E">Tools &amp; Artifacts</text>
+
+        <!-- Feedback Loop -->
+        <path d="M730,120 L730,170 L90,170 L90,130" stroke="#E67E22" stroke-width="2.5" stroke-dasharray="6,4" fill="none" marker-end="url(#arrow-loop)"/>
+        <text x="410" y="185" text-anchor="middle" font-size="13" font-style="italic" font-weight="bold" fill="#E67E22">Feedback-driven iterative refinement</text>
+    </g>
+
+    <!-- Cross-Cutting Mechanisms -->
+    <g transform="translate(80, 365)">
+        <text x="420" y="15" text-anchor="middle" font-size="15" font-weight="bold" fill="#7F8C8D">Cross-cutting Mechanisms:</text>
+
+        <rect x="80" y="30" width="200" height="45" rx="22.5" fill="#FFFFFF" stroke="#E74C3C" stroke-width="2" filter="url(#shadow-light)"/>
+        <text x="180" y="58" text-anchor="middle" font-size="14" font-weight="bold" fill="#C0392B">Spatio-Temporal Memory</text>
+
+        <rect x="320" y="30" width="200" height="45" rx="22.5" fill="#FFFFFF" stroke="#1ABC9C" stroke-width="2" filter="url(#shadow-light)"/>
+        <text x="420" y="58" text-anchor="middle" font-size="14" font-weight="bold" fill="#16A085">Human Checkpoints</text>
+
+        <rect x="560" y="30" width="200" height="45" rx="22.5" fill="#FFFFFF" stroke="#3498DB" stroke-width="2" filter="url(#shadow-light)"/>
+        <text x="660" y="58" text-anchor="middle" font-size="14" font-weight="bold" fill="#2980B9">MCP Interoperability</text>
+    </g>
+
+    <!-- Vertical Connector -->
+    <path d="M500,480 L500,535" stroke="#7F8C8D" stroke-width="3" stroke-dasharray="6,6" fill="none" marker-end="url(#arrow-box)"/>
+    <rect x="430" y="495" width="140" height="24" fill="#FFFFFF" stroke="none"/>
+    <text x="500" y="512" text-anchor="middle" font-size="14" font-weight="bold" fill="#7F8C8D">Supported by</text>
+
+
+    <!-- BOTTOM SECTION: Software Stack -->
+    <rect x="40" y="545" width="920" height="280" rx="16" fill="#F8F9F9" stroke="#D5DBDB" stroke-width="1.5"/>
+    <text x="80" y="585" font-size="22" font-weight="bold" fill="#2C3E50">Implementation Stack</text>
+
+    <g transform="translate(80, 605)">
+        
+        <!-- Layer 5: Orchestration -->
+        <rect x="0" y="0" width="840" height="38" rx="4" fill="#E3F2FD" stroke="#90CAF9" stroke-width="1" filter="url(#shadow-light)"/>
+        <text x="20" y="24" font-size="16" font-weight="bold" fill="#1565C0">L5 | Application Orchestration</text>
+        <text x="270" y="24" font-size="14" fill="#1E88E5">Task Planning, Memory Management, Agent Routing</text>
+        
+        <!-- Layer 4: Adapters -->
+        <rect x="0" y="44" width="840" height="38" rx="4" fill="#F3E5F5" stroke="#CE93D8" stroke-width="1" filter="url(#shadow-light)"/>
+        <text x="20" y="68" font-size="16" font-weight="bold" fill="#6A1B9A">L4 | Semantic / Protocol Adapters</text>
+        <text x="270" y="68" font-size="14" fill="#8E24AA">Task Contextualization, Benchmark Parsing (CityBench, etc.)</text>
+        
+        <!-- Layer 3: Connectors -->
+        <rect x="0" y="88" width="840" height="38" rx="4" fill="#FFF3E0" stroke="#FFCC80" stroke-width="1" filter="url(#shadow-light)"/>
+        <text x="20" y="112" font-size="16" font-weight="bold" fill="#EF6C00">L3 | External Connectors</text>
+        <text x="270" y="112" font-size="14" fill="#F57C00">Rhino.Compute, Grasshopper Hops, Web APIs, OpenStreetMap Servers</text>
+        
+        <!-- Layer 2: Geospatial Capabilities -->
+        <rect x="0" y="132" width="840" height="38" rx="4" fill="#E8F5E9" stroke="#A5D6A7" stroke-width="1" filter="url(#shadow-light)"/>
+        <text x="20" y="156" font-size="16" font-weight="bold" fill="#2E7D32">L2 | Reusable Geospatial Capabilities</text>
+        <text x="320" y="156" font-size="14" fill="#388E3C">Topological Graphs, Vector Alignments, Geometric Measurement</text>
+        
+        <!-- Layer 1: Foundation -->
+        <rect x="0" y="176" width="840" height="38" rx="4" fill="#ECEFF1" stroke="#B0BEC5" stroke-width="1" filter="url(#shadow-light)"/>
+        <text x="20" y="200" font-size="16" font-weight="bold" fill="#37474F">L1 | Foundation Execution</text>
+        <text x="270" y="200" font-size="14" fill="#455A64">LLM Endpoints, Submarine Envs, Container Sandboxes</text>
+
+    </g>
+
+</svg>"""
+
+with open('d:/GitHub_1/world_agent/urban-mobility-agent/paper4_urban_svgagent/paper_draft/figures/urbanagent_framework_flow.svg', 'w', encoding='utf-8') as f:
+    f.write(svg_content)
