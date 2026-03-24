@@ -8,7 +8,7 @@ from .cognition import SpatialCognition
 from .decision import SpatialDecision
 from .version import __version__
 
-# Multi-agent architecture (v0.3+)
+# Multi-agent architecture (v0.3+) [EXPERIMENTAL — 结构与论文对齐，待完整验证]
 from .agents import MultiAgentOrchestrator
 
 AsyncUrbanAgent = UrbanTaskAgent

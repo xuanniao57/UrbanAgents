@@ -14,7 +14,7 @@ UrbanAgent is a multi-agent framework that uses Large Language Models to perform
 
 ### Key Features
 
-- **Three-Layer Multi-Agent Architecture**
+- **Three-Layer Multi-Agent Architecture** *(experimental — aligned with paper design, pending full validation)*
   - **PlannerAgent**: Task decomposition and complexity assessment
   - **ManagerAgent + Workers**: Coordinated execution with information isolation (Perception, Analyst, Cartographer, Reporter)
   - **SpatialReviewer + HumanCheckpoint**: Quality review and human-in-the-loop gating
@@ -40,7 +40,7 @@ urbanagent/
 ├── urban_agent/               # Core framework
 │   ├── cli.py                 # CLI: python -m urban_agent <command>
 │   ├── config.py              # Configuration dataclasses
-│   ├── agents/                # Three-layer multi-agent system
+│   ├── agents/                # Three-layer multi-agent system [experimental]
 │   │   ├── orchestrator.py    # MultiAgentOrchestrator (main runtime)
 │   │   ├── planner.py         # Task decomposition
 │   │   ├── manager.py         # Execution orchestration
