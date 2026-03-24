@@ -130,14 +130,19 @@ class SpatialCognition:
     def _extract_features(self, context) -> Dict:
         """从原始数据中提取关键空间特征"""
         features = context.raw_features
+
+        def _resolve(name: str, extractor):
+            if name in features:
+                return features.get(name) or []
+            return extractor(features)
         
         extracted = {
-            'junctions': self._identify_junctions(features),
-            'clusters': self._identify_building_clusters(features),
-            'corridors': self._identify_corridors(features),
-            'open_spaces': self._identify_open_spaces(features),
-            'barriers': self._identify_barriers(features),
-            'landmarks': self._identify_landmarks(features)
+            'junctions': _resolve('junctions', self._identify_junctions),
+            'clusters': _resolve('clusters', self._identify_building_clusters),
+            'corridors': _resolve('corridors', self._identify_corridors),
+            'open_spaces': _resolve('open_spaces', self._identify_open_spaces),
+            'barriers': _resolve('barriers', self._identify_barriers),
+            'landmarks': _resolve('landmarks', self._identify_landmarks)
         }
         
         return extracted
@@ -190,6 +195,38 @@ class SpatialCognition:
                 'centroid': space.get('centroid')
             }
             node.vector_anchor = space.get('centroid')
+            graph.add_node(node)
+
+        # 地标节点
+        for i, landmark in enumerate(features['landmarks']):
+            node = TopologicalNode(
+                node_id=f"landmark_{i}",
+                node_type="landmark",
+                semantic_label=landmark.get('name', f"Landmark {i}")
+            )
+            coordinates = landmark.get('coordinates') or landmark.get('centroid')
+            node.properties = {
+                'category': landmark.get('type', 'landmark'),
+                'importance': landmark.get('importance', 1.0),
+                'coordinates': coordinates
+            }
+            node.vector_anchor = coordinates
+            graph.add_node(node)
+
+        # 屏障节点
+        for i, barrier in enumerate(features['barriers']):
+            node = TopologicalNode(
+                node_id=f"barrier_{i}",
+                node_type="barrier",
+                semantic_label=barrier.get('description', f"Barrier {i}")
+            )
+            coordinates = barrier.get('coordinates') or barrier.get('centroid')
+            node.properties = {
+                'barrier_type': barrier.get('type', 'barrier'),
+                'strength': barrier.get('strength', 1.0),
+                'coordinates': coordinates
+            }
+            node.vector_anchor = coordinates
             graph.add_node(node)
         
         # 2. 建立关系
@@ -409,12 +446,18 @@ class SpatialCognition:
                     
                     mask = labels == label
                     cluster_buildings = buildings_gdf[mask]
+                    bounds = cluster_buildings.total_bounds
+                    width = max(float(bounds[2] - bounds[0]), 1.0)
+                    height = max(float(bounds[3] - bounds[1]), 1.0)
+                    envelope_area = width * height
+                    footprint_area = float(cluster_buildings.area.sum())
                     
                     clusters.append({
                         'id': int(label),
                         'count': int(mask.sum()),
-                        'density': float(cluster_buildings.area.sum() / cluster_buildings.total_bounds[2] - cluster_buildings.total_bounds[0]),
-                        'centroid': (float(coords[mask, 0].mean()), float(coords[mask, 1].mean()))
+                        'density': float(footprint_area / max(envelope_area, 1.0)),
+                        'centroid': (float(coords[mask, 0].mean()), float(coords[mask, 1].mean())),
+                        'radius': float(max(width, height) / 2.0)
                     })
         
         return clusters
@@ -446,7 +489,9 @@ class SpatialCognition:
             if lutype in ['park', 'recreation_ground', 'plaza', 'square']:
                 spaces.append({
                     'type': lutype,
-                    'area': info.get('area', 0)
+                    'area': info.get('area', 0),
+                    'centroid': info.get('centroid'),
+                    'shape_type': info.get('shape_type', 'polygon')
                 })
         
         return spaces
@@ -490,6 +535,22 @@ class SpatialCognition:
                                   node2: TopologicalNode, 
                                   distance: float) -> Optional[str]:
         """确定节点间关系类型"""
+        if node1.type == 'barrier' or node2.type == 'barrier':
+            if distance < 200:
+                return 'separated'
+
+        if {node1.type, node2.type} & {'cluster'} and {node1.type, node2.type} & {'plaza', 'landmark'}:
+            cluster_node = node1 if node1.type == 'cluster' else node2
+            cluster_radius = float(cluster_node.properties.get('radius', 80.0) or 80.0)
+            if distance <= cluster_radius:
+                return 'contains'
+
+        if node1.vector_anchor and node2.vector_anchor:
+            dx = abs(node1.vector_anchor[0] - node2.vector_anchor[0])
+            dy = abs(node1.vector_anchor[1] - node2.vector_anchor[1])
+            if distance < 250 and (dx < 20 or dy < 20):
+                return 'aligned'
+
         # 基于距离阈值
         if distance < 100:  # 100米内
             return 'adjacent'

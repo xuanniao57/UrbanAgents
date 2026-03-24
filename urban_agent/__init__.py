@@ -8,6 +8,9 @@ from .cognition import SpatialCognition
 from .decision import SpatialDecision
 from .version import __version__
 
+# Multi-agent architecture (v0.3+)
+from .agents import MultiAgentOrchestrator
+
 AsyncUrbanAgent = UrbanTaskAgent
 LegacyUrbanAgent = UrbanAgent
 
@@ -17,6 +20,7 @@ __all__ = [
 	"AgentState",
 	"AsyncUrbanAgent",
 	"LegacyUrbanAgent",
+	"MultiAgentOrchestrator",
 	"OSMProcessor",
 	"SpatialCognition",
 	"SpatialContext",

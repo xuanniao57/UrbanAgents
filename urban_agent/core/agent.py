@@ -54,6 +54,7 @@ class UrbanAgent:
         self.vlm_client = vlm_client
         self.mcp_client = mcp_client
         self.config = config or {}
+        self.enable_memory = self.config.get("enable_memory", True)
         
         # 初始化模块
         self.perception = PerceptionModule(
@@ -66,8 +67,9 @@ class UrbanAgent:
             config=self.config.get("reasoning", {})
         )
         self.memory = MemoryModule(
-            config=self.config.get("memory", {})
-        )
+            config=self.config.get("memory", {}),
+            llm_client=llm_client,
+        ) if self.enable_memory else None
         self.action = ActionModule(
             mcp_client=mcp_client,
             llm_client=llm_client,
@@ -114,7 +116,7 @@ class UrbanAgent:
             self.current_state.perception_data = perception_result
             
             # Step 2: 记忆检索 - 获取相关上下文
-            memory_context = await self._retrieve_memory(perception_result)
+            memory_context = await self._retrieve_memory(task_payload, perception_result)
             self.current_state.memory_context = memory_context
             
             # Step 3: 推理 - 空间推理和决策
@@ -132,6 +134,7 @@ class UrbanAgent:
             
             # Step 5: 记忆更新
             await self._update_memory(
+                task_payload,
                 perception_result,
                 reasoning_result,
                 action_result
@@ -172,10 +175,17 @@ class UrbanAgent:
     
     async def _retrieve_memory(
         self,
+        task_data: Dict,
         perception_data: Dict
     ) -> Dict[str, Any]:
         """检索相关记忆"""
-        return await self.memory.retrieve(perception_data)
+        if self.memory is None:
+            return {}
+        query = {
+            **task_data,
+            "perception": perception_data,
+        }
+        return await self.memory.retrieve(query)
     
     async def _reason(
         self,
@@ -200,12 +210,16 @@ class UrbanAgent:
     
     async def _update_memory(
         self,
+        task: Dict,
         perception: Dict,
         reasoning: Dict,
         action: Dict
     ):
         """更新记忆"""
+        if self.memory is None:
+            return
         await self.memory.store({
+            "task": task,
             "perception": perception,
             "reasoning": reasoning,
             "action": action,
@@ -219,4 +233,5 @@ class UrbanAgent:
     def reset(self):
         """重置智能体状态"""
         self.current_state = None
-        self.memory.clear_working_memory()
+        if self.memory is not None:
+            self.memory.clear_working_memory()

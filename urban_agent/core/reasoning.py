@@ -158,6 +158,44 @@ class ReasoningModule:
             )
         )
         return ranked[0]
+
+    def _memory_records(self, memory_context: Dict) -> List[Dict[str, Any]]:
+        records = []
+        if not isinstance(memory_context, dict):
+            return records
+
+        working = memory_context.get("working")
+        if isinstance(working, dict) and working:
+            records.append(working)
+
+        for item in memory_context.get("relevant_short_term", []):
+            if isinstance(item, dict):
+                records.append(item)
+
+        long_term = memory_context.get("relevant_long_term", {})
+        if isinstance(long_term, dict):
+            for group in long_term.values():
+                if isinstance(group, list):
+                    for item in group:
+                        if isinstance(item, dict):
+                            experience = item.get("experience") if isinstance(item.get("experience"), dict) else item
+                            if isinstance(experience, dict):
+                                records.append(experience)
+
+        best_match = memory_context.get("best_match")
+        if isinstance(best_match, dict):
+            experience = best_match.get("experience") if isinstance(best_match.get("experience"), dict) else best_match
+            if isinstance(experience, dict):
+                records.append(experience)
+
+        return records
+
+    def _find_memory_value(self, memory_context: Dict, predicate) -> Optional[Any]:
+        for record in self._memory_records(memory_context):
+            value = predicate(record)
+            if value is not None:
+                return value
+        return None
     
     async def infer(
         self,
@@ -427,10 +465,19 @@ class ReasoningModule:
         avg_length = flow_patterns.get("avg_length", 0)
         pattern_count = flow_patterns.get("pattern_count", 0)
 
+        memory_prediction = self._find_memory_value(
+            memory_context,
+            lambda record: record.get("action", {}).get("predicted_location")
+            if record.get("task", {}).get("task_type") == "mobility_prediction" and record.get("task", {}).get("city") == task.get("city")
+            else None,
+        )
+
         if self._is_enhanced_mode() and (historical_data or context_stay):
             prediction = self._infer_next_place(historical_data, context_stay, target_stay)
             if prediction is None:
-                prediction = "commercial_area"
+                prediction = memory_prediction or "commercial_area"
+        elif self._is_enhanced_mode() and memory_prediction is not None:
+            prediction = memory_prediction
         elif self.llm_client:
             prompt = f"""Predict mobility flow based on:
             Average trajectory length: {avg_length}
@@ -480,6 +527,12 @@ class ReasoningModule:
         queue_lengths = task.get("queue_lengths", {})
         phase_options = task.get("phase_options", [])
         road_count = road_network.get("road_count", 0)
+        memory_phase = self._find_memory_value(
+            memory_context,
+            lambda record: record.get("action", {}).get("selected_phase")
+            if record.get("task", {}).get("task_type") == "traffic_signal" and record.get("task", {}).get("city") == task.get("city")
+            else None,
+        )
 
         if self._is_enhanced_mode() and phase_options:
             best_option = max(
@@ -501,6 +554,10 @@ class ReasoningModule:
             selected_option = self.traffic_adapter.pick_default_option(proxy_task)
             selected_phase = proxy_task.get("phase_map", {}).get(selected_option, selected_option)
             green_time = min(25 + int(max(queue_lengths.values())) * 3, 90)
+        elif self._is_enhanced_mode() and memory_phase is not None:
+            selected_option = None
+            selected_phase = memory_phase
+            green_time = 45
         else:
             selected_option = None
             selected_phase = "north_south"
@@ -538,11 +595,24 @@ class ReasoningModule:
         steps = task.get("steps", [])
         start = task.get("start", "current_location")
         end = task.get("end", "destination")
+        memory_route = self._find_memory_value(
+            memory_context,
+            lambda record: record.get("action", {}).get("route_actions")
+            if record.get("task", {}).get("task_type") == "outdoor_navigation"
+            and record.get("task", {}).get("start") == start
+            and record.get("task", {}).get("end") == end
+            else None,
+        )
 
         if self._is_enhanced_mode() and steps:
             summary = self._build_navigation_summary(steps)
             directions = summary["text"]
             route_actions = summary["actions"]
+        elif self._is_enhanced_mode() and memory_route:
+            route_actions = [str(item).lower() for item in memory_route]
+            directions = self._build_navigation_summary([
+                {"action": action} for action in route_actions
+            ])["text"]
         elif self.llm_client:
             prompt = f"""Generate navigation directions from {start} to {end}.
             Road network: {road_network}
@@ -584,9 +654,23 @@ class ReasoningModule:
         ]
         
         candidates = task.get("candidates", [])
+        memory_destination = self._find_memory_value(
+            memory_context,
+            lambda record: record.get("action", {}).get("selected_destination")
+            if record.get("task", {}).get("task_type") == "urban_exploration"
+            and record.get("task", {}).get("city") == task.get("city")
+            else None,
+        )
 
         if self._is_enhanced_mode() and candidates:
-            best_candidate = self._select_best_exploration_candidate(candidates)
+            if memory_destination:
+                remembered = next(
+                    (candidate for candidate in candidates if candidate.get("des_name") == memory_destination),
+                    None,
+                )
+            else:
+                remembered = None
+            best_candidate = remembered or self._select_best_exploration_candidate(candidates)
             exploration_plan = {
                 "targets": [best_candidate.get("des_name", "")],
                 "priority": "high",
