@@ -34,6 +34,13 @@ degim/
 # ── Paper draft (not for public repo) ──
 paper_draft/
 
+# ── Private presentation / research workflow notes ──
+ppt_first_report/
+ppt_minimax_first_report/
+docs/GBRAIN_MEMORY_LESSONS.md
+docs/GRAPHIFY_OBSIDIAN_WORKFLOW.md
+docs/URBANAGENT_EXPERIMENT_CHECKLIST.md
+
 # ── Dev-only docs / status files ──
 SESSION_STATE.md
 project_plan.md
@@ -69,9 +76,6 @@ requirements_citybench_windows.txt
 *.pdf
 *.log
 *.tmp
-
-# ── Web (not ready for release) ──
-web/
 
 # ── OS files ──
 .DS_Store

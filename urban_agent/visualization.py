@@ -5,6 +5,7 @@ Spatial Visualization: 空间可视化模块
 
 from typing import Dict, List, Any, Tuple
 import json
+from html import escape
 from shapely.geometry import Point, LineString, Polygon, mapping
 from shapely.affinity import scale, translate
 import xml.etree.ElementTree as ET
@@ -275,6 +276,184 @@ class SpatialVisualizer:
             },
             'features': features
         }
+
+    def create_inspection_bundle(self,
+                                 cognition_result: Dict,
+                                 memory_context: Dict | None = None,
+                                 corrections: List[Dict] | None = None) -> Dict:
+        """Build a linked review bundle for HTML or frontend rendering."""
+        inspection_payload = cognition_result.get('inspection_payload', {})
+        alignment = cognition_result.get('alignment_diagnostics', {})
+        distribution = cognition_result.get('distribution_preview', {})
+        memory_trace = {}
+        if isinstance(memory_context, dict):
+            memory_trace = memory_context.get('retrieval_trace', {})
+
+        return {
+            'nodes': inspection_payload.get('nodes', cognition_result.get('nodes', [])),
+            'edges': inspection_payload.get('edges', cognition_result.get('edges', [])),
+            'alignment_diagnostics': alignment,
+            'distribution_preview': distribution,
+            'memory_trace': memory_trace,
+            'correction_audit': corrections or cognition_result.get('correction_audit', []),
+            'human_alignment': cognition_result.get('human_alignment', {}),
+        }
+
+    def create_inspection_html(self,
+                               cognition_result: Dict,
+                               memory_context: Dict | None = None,
+                               corrections: List[Dict] | None = None,
+                               title: str = 'UrbanAgent Spatial Review') -> str:
+        """Render a self-contained HTML review page for inspectable cognition output."""
+        bundle = self.create_inspection_bundle(
+            cognition_result,
+            memory_context=memory_context,
+            corrections=corrections,
+        )
+        safe_title = escape(title)
+        alignment = bundle.get('alignment_diagnostics', {})
+        distribution = bundle.get('distribution_preview', {})
+        correction_audit = bundle.get('correction_audit', [])
+        memory_trace = bundle.get('memory_trace', {})
+
+        def _render_pills(items: List[str]) -> str:
+            if not items:
+                return '<div class="meta">No review prompts.</div>'
+            return ''.join(f'<span class="pill">{escape(str(item))}</span>' for item in items)
+
+        def _render_table(headers: List[str], rows: List[List[str]]) -> str:
+            if not rows:
+                return '<div class="meta">No records.</div>'
+            header_html = ''.join(f'<th>{escape(header)}</th>' for header in headers)
+            body_html = ''
+            for row in rows:
+                body_html += '<tr>' + ''.join(f'<td>{cell}</td>' for cell in row) + '</tr>'
+            return f'<table><thead><tr>{header_html}</tr></thead><tbody>{body_html}</tbody></table>'
+
+        node_rows = []
+        for node in bundle.get('nodes', []):
+            node_rows.append([
+                f"<strong>{escape(str(node.get('label') or node.get('id') or '-'))}</strong><br/><span class=\"meta\">{escape(str(node.get('type', '')))}</span>",
+                escape(f"{node.get('lng', node.get('x', '-'))}, {node.get('lat', node.get('y', '-'))}"),
+                '<br/>'.join(escape(str(trace.get('explanation', ''))) for trace in node.get('trace', [])) or '-',
+            ])
+
+        edge_rows = []
+        for edge in bundle.get('edges', []):
+            edge_rows.append([
+                escape(f"{edge.get('from', '-')} -> {edge.get('to', '-')}"),
+                escape(str(edge.get('type', '-'))),
+                '<br/>'.join(escape(str(trace.get('explanation', ''))) for trace in edge.get('trace', [])) or '-',
+            ])
+
+        audit_rows = []
+        for item in correction_audit:
+            audit_rows.append([
+                escape(str(item.get('module', '-'))),
+                escape(str(item.get('status', '-'))),
+                escape(str(item.get('notes', '-'))),
+            ])
+
+        memory_html = '<div class="meta">No memory trace attached.</div>'
+        if memory_trace:
+            memory_html = f"<pre>{escape(json.dumps(memory_trace, ensure_ascii=False, indent=2, default=str))}</pre>"
+
+        return f"""<!DOCTYPE html>
+<html lang=\"en\">
+<head>
+    <meta charset=\"UTF-8\" />
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />
+    <title>{safe_title}</title>
+    <style>
+        :root {{
+            color-scheme: light;
+            --bg: #f4efe6;
+            --card: rgba(255, 251, 245, 0.94);
+            --line: #d8cbb7;
+            --ink: #253039;
+            --muted: #68737d;
+            --accent: #005a5b;
+            --accent-2: #bf6a2b;
+        }}
+        * {{ box-sizing: border-box; }}
+        body {{
+            margin: 0;
+            padding: 24px;
+            font-family: Georgia, 'Noto Serif', serif;
+            background:
+                radial-gradient(circle at top right, rgba(0, 90, 91, 0.12), transparent 32%),
+                linear-gradient(180deg, #fbf7f1 0%, var(--bg) 100%);
+            color: var(--ink);
+        }}
+        h1, h2 {{ margin: 0 0 12px; }}
+        .layout {{ display: grid; grid-template-columns: 1.25fr 1fr; gap: 18px; }}
+        .card {{
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            padding: 18px;
+            box-shadow: 0 14px 35px rgba(34, 38, 42, 0.07);
+        }}
+        .meta {{ color: var(--muted); font-size: 14px; line-height: 1.6; }}
+        .pill {{
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: rgba(0, 90, 91, 0.08);
+            color: var(--accent);
+            margin: 0 8px 8px 0;
+            font-size: 13px;
+        }}
+        table {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
+        th, td {{ border-top: 1px solid var(--line); padding: 8px 0; text-align: left; vertical-align: top; }}
+        th {{ color: var(--muted); font-weight: 600; }}
+        pre {{
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+            background: rgba(37, 48, 57, 0.04);
+            border-radius: 12px;
+            padding: 14px;
+            font-size: 12px;
+        }}
+        .warn {{ color: var(--accent-2); font-weight: 700; }}
+        @media (max-width: 900px) {{
+            body {{ padding: 16px; }}
+            .layout {{ grid-template-columns: 1fr; }}
+        }}
+    </style>
+</head>
+<body>
+    <section class=\"card\" style=\"margin-bottom: 18px;\">
+        <h1>{safe_title}</h1>
+        <div class=\"meta\">Inspectable cognition output with scale diagnostics, distribution checks, memory trace, and correction audit.</div>
+    </section>
+    <div class=\"layout\">
+        <section class=\"card\">
+            <h2>Alignment</h2>
+            <div class=\"meta\">Preferred scale: {escape(str(alignment.get('preferred_scale', 'unknown')))}</div>
+            <div class=\"meta\">Scale span: {escape(str(alignment.get('scale_span_m', 0)))}</div>
+            <div class=\"meta\">MAUP-like risk: <span class=\"warn\">{escape(str(alignment.get('maup_like_risk', 'unknown')))}</span></div>
+            <div style=\"margin-top: 12px;\">{_render_pills(alignment.get('human_review_prompts', []))}</div>
+            <h2 style=\"margin-top: 20px;\">Distribution</h2>
+            <div class=\"meta\">Dominant layer: {escape(str(distribution.get('dominant_layer', 'unknown')))}</div>
+            <div class=\"meta\">Missing layers: {escape(', '.join(distribution.get('missing_layers', [])) or 'none')}</div>
+            <div class=\"meta\">Feature counts: {escape(json.dumps(distribution.get('feature_counts', {}), ensure_ascii=False, default=str))}</div>
+            <div style=\"margin-top: 12px;\">{_render_pills(distribution.get('review_questions', []))}</div>
+            <h2 style=\"margin-top: 20px;\">Correction Audit</h2>
+            {_render_table(['Module', 'Status', 'Notes'], audit_rows)}
+        </section>
+        <section class=\"card\">
+            <h2>Nodes</h2>
+            {_render_table(['Node', 'Anchor', 'Trace'], node_rows)}
+            <h2 style=\"margin-top: 20px;\">Relations</h2>
+            {_render_table(['Relation', 'Type', 'Trace'], edge_rows)}
+            <h2 style=\"margin-top: 20px;\">Memory Trace</h2>
+            {memory_html}
+        </section>
+    </div>
+</body>
+</html>"""
     
     def _geometry_to_svg_points(self, geom, geo_to_svg_func) -> str:
         """将几何对象转换为SVG点字符串"""

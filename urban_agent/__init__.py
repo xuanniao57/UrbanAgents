@@ -6,10 +6,11 @@ from .config import AgentConfig
 from .perception import OSMProcessor
 from .cognition import SpatialCognition
 from .decision import SpatialDecision
+from .core import CorrectionModuleRegistry, CorrectionModuleSpec
 from .version import __version__
 
-# Multi-agent architecture (v0.3+) [EXPERIMENTAL — 结构与论文对齐，待完整验证]
-from .agents import MultiAgentOrchestrator
+# Multi-agent architecture
+from .agents import MultiAgentOrchestrator, QualityController
 
 AsyncUrbanAgent = UrbanTaskAgent
 LegacyUrbanAgent = UrbanAgent
@@ -19,9 +20,12 @@ __all__ = [
 	"AgentConfig",
 	"AgentState",
 	"AsyncUrbanAgent",
+	"CorrectionModuleRegistry",
+	"CorrectionModuleSpec",
 	"LegacyUrbanAgent",
 	"MultiAgentOrchestrator",
 	"OSMProcessor",
+	"QualityController",
 	"SpatialCognition",
 	"SpatialContext",
 	"SpatialDecision",

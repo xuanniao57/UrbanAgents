@@ -41,7 +41,21 @@ class UrbanMCPTools:
         self._register_default_tools()
 
     def _register_default_connectors(self):
-        self.connector_registry.register(RhinoComputeConnector())
+        self.connector_registry.register(
+            RhinoComputeConnector(),
+            capabilities=[
+                "parametric_design",
+                "grasshopper_evaluation",
+                "geometry_generation",
+            ],
+            input_modalities=["vector_geometry", "parametric_schema", "json"],
+            output_modalities=["geometry", "metrics", "design_options"],
+            human_review_surfaces=["visual_preview", "parameter_adjustment"],
+            metadata={
+                "open_spec_version": "urban-agent-open-spec/v1",
+                "adapter_role": "external_design_connector",
+            },
+        )
     
     def _register_default_tools(self):
         """注册默认工具集"""
@@ -659,7 +673,8 @@ class UrbanMCPTools:
 
     def _handle_list_connectors(self, args: Dict) -> Dict:
         return {
-            "connectors": self.connector_registry.list_connectors()
+            "connectors": self.connector_registry.list_connectors(),
+            "connector_specs": self.connector_registry.list_specs(),
         }
 
     def _handle_rhino_health_check(self, args: Dict) -> Dict:

@@ -231,6 +231,16 @@ class CityBenchEvaluatorV2:
         try:
             pred_city = str(prediction).lower().strip() if prediction else ""
             gt_city = str(ground_truth).lower().strip() if ground_truth else ""
+
+            if not pred_city or not gt_city:
+                return {
+                    "accuracy": 0.0,
+                    "exact_match": 0.0,
+                    "partial_match": 0.0,
+                    "predicted": prediction,
+                    "ground_truth": ground_truth,
+                    "metric_type": "City_Accuracy"
+                }
             
             # 精确匹配
             exact_match = 1.0 if pred_city == gt_city else 0.0
@@ -265,6 +275,15 @@ class CityBenchEvaluatorV2:
         try:
             pred_answer = str(prediction).lower().strip() if prediction else ""
             gt_answer = str(ground_truth).lower().strip() if ground_truth else ""
+
+            if not pred_answer or not gt_answer:
+                return {
+                    "accuracy": 0.0,
+                    "match_type": "empty",
+                    "predicted": prediction,
+                    "ground_truth": ground_truth,
+                    "metric_type": "GeoQA_Accuracy"
+                }
             
             # 直接包含匹配
             if gt_answer in pred_answer or pred_answer in gt_answer:
@@ -641,4 +660,88 @@ class CityBenchEvaluatorV2:
         if agent_results:
             summary["agent_overall"] = np.mean([r["overall_score"] for r in agent_results])
         
+        return summary
+
+    # ------------------------------------------------------------------
+    # Complexity Stratification (GeoJSON Agents Table 5-7 style)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def classify_complexity(
+        task: Dict[str, Any],
+        task_type: str = "",
+    ) -> str:
+        """
+        Classify a single task into complexity tier: basic / intermediate / advanced.
+
+        Heuristics (aligned with GeoJSON Agents' 3-tier scheme):
+        - basic:        ≤ 1 reasoning step, single data source, factual recall
+        - intermediate: 2-3 reasoning steps, multi-source, requires spatial reasoning
+        - advanced:     ≥ 4 steps or open-ended workflow, requires tool chaining
+        """
+        # Step count signals
+        steps = task.get("workflow_steps", task.get("steps", []))
+        tools = task.get("reference_tools", task.get("reference_tool_steps", []))
+        question = str(task.get("question", task.get("task_instruction", "")))
+
+        step_count = len(steps) if isinstance(steps, list) else 0
+        tool_count = len(tools) if isinstance(tools, list) else 0
+
+        # Keyword signals for complexity
+        advanced_keywords = {"workflow", "pipeline", "multi-step", "综合分析", "对比", "跨区域", "预测"}
+        intermediate_keywords = {"分析", "计算", "evaluate", "compare", "accessibility", "density"}
+
+        q_lower = question.lower()
+        has_advanced = any(k in q_lower for k in advanced_keywords)
+        has_intermediate = any(k in q_lower for k in intermediate_keywords)
+
+        if step_count >= 4 or tool_count >= 3 or has_advanced:
+            return "advanced"
+        if step_count >= 2 or tool_count >= 1 or has_intermediate:
+            return "intermediate"
+        return "basic"
+
+    def get_summary_by_complexity(
+        self,
+        tasks: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Get summary stratified by complexity (GeoJSON Agents Table 5 format).
+
+        Args:
+            tasks: Optional list of raw task dicts (for complexity classification).
+                   If not provided, all results are treated as 'unknown' complexity.
+
+        Returns:
+            {
+                "basic":        {"count": N, "avg_score": 0.xx, ...},
+                "intermediate": {...},
+                "advanced":     {...},
+            }
+        """
+        # Map case results to complexity tiers
+        if tasks and len(tasks) == len(self.results):
+            complexities = [self.classify_complexity(t) for t in tasks]
+        else:
+            complexities = ["unknown"] * len(self.results)
+
+        from collections import defaultdict
+        by_tier: Dict[str, list] = defaultdict(list)
+        for cpx, result in zip(complexities, self.results):
+            by_tier[cpx].append(result)
+
+        summary = {}
+        for tier in ["basic", "intermediate", "advanced", "unknown"]:
+            recs = by_tier.get(tier, [])
+            if not recs:
+                continue
+            scores = [r["overall_score"] for r in recs]
+            bare = [r for r in recs if r.get("is_bare_model")]
+            agent = [r for r in recs if not r.get("is_bare_model")]
+            summary[tier] = {
+                "count": len(recs),
+                "avg_score": float(np.mean(scores)) if scores else 0,
+                "bare_avg": float(np.mean([r["overall_score"] for r in bare])) if bare else None,
+                "agent_avg": float(np.mean([r["overall_score"] for r in agent])) if agent else None,
+            }
         return summary

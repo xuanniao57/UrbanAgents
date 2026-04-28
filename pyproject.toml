@@ -32,6 +32,7 @@ dependencies = [
   "pydantic>=2.7.0",
   "pydantic-settings>=2.2.1",
   "python-dotenv>=1.0.1",
+  "rich>=13.9.0",
   "scikit-learn>=1.5.0",
   "shapely>=2.0.0",
   "uvicorn>=0.30.0",
@@ -48,16 +49,22 @@ vision = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/xuanniao57/urbanagent"
-Documentation = "https://github.com/xuanniao57/urbanagent/tree/main/docs"
-Issues = "https://github.com/xuanniao57/urbanagent/issues"
+Homepage = "https://github.com/xuanniao57/UrbanAgents"
+Documentation = "https://github.com/xuanniao57/UrbanAgents/tree/main/docs"
+Issues = "https://github.com/xuanniao57/UrbanAgents/issues"
+
+[project.scripts]
+urban-agent = "urban_agent.cli:main"
 
 [tool.setuptools]
 include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["urban_agent*"]
+include = ["urban_agent*", "web*"]
+
+[tool.setuptools.package-data]
+web = ["README.md", "requirements.txt", "static/index.html", "static/css/*.css", "static/js/*.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

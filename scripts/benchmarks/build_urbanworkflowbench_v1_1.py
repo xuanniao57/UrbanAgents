@@ -130,6 +130,7 @@ def build_dual_space_cases() -> List[Dict[str, Any]]:
 
 
 def build_memory_cases() -> List[Dict[str, Any]]:
+    # --- Original 3 cases (common_seed, preserved) ---
     common_seed = [
         {
             "task": {"task_type": "mobility_prediction", "city": "Tokyo", "target_stay": ["09:00 AM", "Saturday", None]},
@@ -147,7 +148,7 @@ def build_memory_cases() -> List[Dict[str, Any]]:
             "action": {"selected_option": "A", "selected_destination": "Rue Mehul nearby"}
         }
     ]
-    return [
+    original_cases = [
         {
             "case_id": "memory_mobility_1",
             "suite": "memory_continuity",
@@ -201,6 +202,389 @@ def build_memory_cases() -> List[Dict[str, Any]]:
             "evaluation": {"expected": "Rue Mehul nearby"}
         }
     ]
+
+    # --- Helper: make a memory_continuity case ---
+    def _mobility_seed(city: str, place_id: int) -> Dict[str, Any]:
+        return {
+            "task": {"task_type": "mobility_prediction", "city": city},
+            "perception": {"type": "trajectory", "city": city},
+            "action": {"predicted_location": place_id}
+        }
+
+    def _traffic_seed(city: str, phase: str) -> Dict[str, Any]:
+        return {
+            "task": {"task_type": "traffic_signal", "city": city},
+            "perception": {"type": "text", "city": city},
+            "action": {"selected_phase": phase}
+        }
+
+    def _nav_seed(start: str, end: str, route: List[str], city: str = "") -> Dict[str, Any]:
+        t: Dict[str, Any] = {"task_type": "outdoor_navigation", "start": start, "end": end}
+        if city:
+            t["city"] = city
+        return {
+            "task": t,
+            "perception": {"type": "text"} if not city else {"type": "text", "city": city},
+            "action": {"route_actions": route}
+        }
+
+    def _explore_seed(city: str, dest: str, option: str = "A") -> Dict[str, Any]:
+        return {
+            "task": {"task_type": "urban_exploration", "city": city},
+            "perception": {"type": "text", "city": city},
+            "action": {"selected_option": option, "selected_destination": dest}
+        }
+
+    # =====================================================================
+    # Expanded memory_continuity cases (20 new → total 23 with originals)
+    # =====================================================================
+    expanded: List[Dict[str, Any]] = []
+
+    # --- mobility_prediction (6 cases) ---
+    # easy: Tokyo, 1 relevant seed, 0 distractors
+    expanded.append({
+        "case_id": "memory_mobility_easy_tokyo_2",
+        "suite": "memory_continuity", "protocol": "memory_probe",
+        "capability": "memory_continuity", "source": "urbanagent_native",
+        "memory_seed": [_mobility_seed("Tokyo", 36200)],
+        "task": {"task_type": "mobility_prediction", "city": "Tokyo",
+                 "historical_data": [], "context_stay": [], "target_stay": ["10:00 AM", "Monday", None]},
+        "perception": {"flow_patterns": {}},
+        "evaluation": {"expected": 36200}
+    })
+    # easy: London
+    expanded.append({
+        "case_id": "memory_mobility_easy_london_1",
+        "suite": "memory_continuity", "protocol": "memory_probe",
+        "capability": "memory_continuity", "source": "urbanagent_native",
+        "memory_seed": [_mobility_seed("London", 50100)],
+        "task": {"task_type": "mobility_prediction", "city": "London",
+                 "historical_data": [], "context_stay": [], "target_stay": ["08:30 AM", "Wednesday", None]},
+        "perception": {"flow_patterns": {}},
+        "evaluation": {"expected": 50100}
+    })
+    # medium: NewYork target with distractors from Sydney and Mumbai
+    expanded.append({
+        "case_id": "memory_mobility_medium_newyork_1",
+        "suite": "memory_continuity", "protocol": "memory_probe",
+        "capability": "memory_continuity", "source": "urbanagent_native",
+        "memory_seed": [
+            _mobility_seed("Sydney", 60001),
+            _mobility_seed("NewYork", 55000),
+            _mobility_seed("Mumbai", 70001),
+        ],
+        "task": {"task_type": "mobility_prediction", "city": "NewYork",
+                 "historical_data": [], "context_stay": [], "target_stay": ["07:00 AM", "Tuesday", None]},
+        "perception": {"flow_patterns": {}},
+        "evaluation": {"expected": 55000}
+    })
+    # medium: Sydney target with distractors
+    expanded.append({
+        "case_id": "memory_mobility_medium_sydney_1",
+        "suite": "memory_continuity", "protocol": "memory_probe",
+        "capability": "memory_continuity", "source": "urbanagent_native",
+        "memory_seed": [
+            _mobility_seed("London", 50200),
+            _traffic_seed("Shanghai", "north_south"),
+            _mobility_seed("Sydney", 60500),
+        ],
+        "task": {"task_type": "mobility_prediction", "city": "Sydney",
+                 "historical_data": [], "context_stay": [], "target_stay": ["09:00 AM", "Thursday", None]},
+        "perception": {"flow_patterns": {}},
+        "evaluation": {"expected": 60500}
+    })
+    # hard: Mumbai — two seeds for same city, different place_ids, must pick latest
+    expanded.append({
+        "case_id": "memory_mobility_hard_mumbai_1",
+        "suite": "memory_continuity", "protocol": "memory_probe",
+        "capability": "memory_continuity", "source": "urbanagent_native",
+        "memory_seed": [
+            _mobility_seed("Mumbai", 70100),
+            _mobility_seed("Mumbai", 70200),
+            _mobility_seed("Tokyo", 36300),
+            _traffic_seed("London", "east_west"),
+        ],
+        "task": {"task_type": "mobility_prediction", "city": "Mumbai",
+                 "historical_data": [], "context_stay": [], "target_stay": ["06:00 PM", "Friday", None]},
+        "perception": {"flow_patterns": {}},
+        "evaluation": {"expected": 70200}
+    })
+    # hard: London — two London seeds + cross-task distractors
+    expanded.append({
+        "case_id": "memory_mobility_hard_london_2",
+        "suite": "memory_continuity", "protocol": "memory_probe",
+        "capability": "memory_continuity", "source": "urbanagent_native",
+        "memory_seed": [
+            _mobility_seed("London", 50300),
+            _explore_seed("London", "Tower Bridge"),
+            _mobility_seed("London", 50400),
+            _nav_seed("King's Cross", "Paddington", ["forward", "right", "forward", "stop"], "London"),
+        ],
+        "task": {"task_type": "mobility_prediction", "city": "London",
+                 "historical_data": [], "context_stay": [], "target_stay": ["05:30 PM", "Monday", None]},
+        "perception": {"flow_patterns": {}},
+        "evaluation": {"expected": 50400}
+    })
+
+    # --- traffic_signal (5 cases) ---
+    # easy: Shanghai
+    expanded.append({
+        "case_id": "memory_traffic_easy_shanghai_1",
+        "suite": "memory_continuity", "protocol": "memory_probe",
+        "capability": "memory_continuity", "source": "urbanagent_native",
+        "memory_seed": [_traffic_seed("Shanghai", "north_south")],
+        "task": {"task_type": "traffic_signal", "city": "Shanghai",
+                 "queue_lengths": {}, "phase_options": []},
+        "perception": {"road_network": {}},
+        "evaluation": {"expected_phase": "north_south", "expected": "north_south"}
+    })
+    # easy: Beijing
+    expanded.append({
+        "case_id": "memory_traffic_easy_beijing_1",
+        "suite": "memory_continuity", "protocol": "memory_probe",
+        "capability": "memory_continuity", "source": "urbanagent_native",
+        "memory_seed": [_traffic_seed("Beijing", "east_west")],
+        "task": {"task_type": "traffic_signal", "city": "Beijing",
+                 "queue_lengths": {}, "phase_options": []},
+        "perception": {"road_network": {}},
+        "evaluation": {"expected_phase": "east_west", "expected": "east_west"}
+    })
+    # medium: London with distractors from CapeTown and Moscow
+    expanded.append({
+        "case_id": "memory_traffic_medium_london_1",
+        "suite": "memory_continuity", "protocol": "memory_probe",
+        "capability": "memory_continuity", "source": "urbanagent_native",
+        "memory_seed": [
+            _traffic_seed("CapeTown", "all_red"),
+            _traffic_seed("London", "pedestrian_crossing"),
+            _traffic_seed("Moscow", "left_turn_arrow"),
+        ],
+        "task": {"task_type": "traffic_signal", "city": "London",
+                 "queue_lengths": {}, "phase_options": []},
+        "perception": {"road_network": {}},
+        "evaluation": {"expected_phase": "pedestrian_crossing", "expected": "pedestrian_crossing"}
+    })
+    # hard: Moscow — two seeds, same city, different phases
+    expanded.append({
+        "case_id": "memory_traffic_hard_moscow_1",
+        "suite": "memory_continuity", "protocol": "memory_probe",
+        "capability": "memory_continuity", "source": "urbanagent_native",
+        "memory_seed": [
+            _traffic_seed("Moscow", "north_south"),
+            _traffic_seed("Moscow", "east_west"),
+            _mobility_seed("Beijing", 10500),
+            _explore_seed("Shanghai", "Yu Garden"),
+        ],
+        "task": {"task_type": "traffic_signal", "city": "Moscow",
+                 "queue_lengths": {}, "phase_options": []},
+        "perception": {"road_network": {}},
+        "evaluation": {"expected_phase": "east_west", "expected": "east_west"}
+    })
+    # hard: CapeTown — two seeds + cross-task noise
+    expanded.append({
+        "case_id": "memory_traffic_hard_capetown_1",
+        "suite": "memory_continuity", "protocol": "memory_probe",
+        "capability": "memory_continuity", "source": "urbanagent_native",
+        "memory_seed": [
+            _traffic_seed("CapeTown", "all_red"),
+            _nav_seed("Waterfront", "Table Mountain", ["forward", "left", "forward", "right", "stop"], "CapeTown"),
+            _traffic_seed("CapeTown", "left_turn_arrow"),
+        ],
+        "task": {"task_type": "traffic_signal", "city": "CapeTown",
+                 "queue_lengths": {}, "phase_options": []},
+        "perception": {"road_network": {}},
+        "evaluation": {"expected_phase": "left_turn_arrow", "expected": "left_turn_arrow"}
+    })
+
+    # --- outdoor_navigation (6 cases) ---
+    # easy: Paris
+    expanded.append({
+        "case_id": "memory_navigation_easy_paris_1",
+        "suite": "memory_continuity", "protocol": "memory_probe",
+        "capability": "memory_continuity", "source": "urbanagent_native",
+        "memory_seed": [_nav_seed("Gare du Nord", "Sacre Coeur", ["forward", "right", "forward", "left", "stop"], "Paris")],
+        "task": {"task_type": "outdoor_navigation", "start": "Gare du Nord", "end": "Sacre Coeur", "steps": []},
+        "perception": {"road_network": {}, "topology": {}},
+        "evaluation": {"expected": ["forward", "right", "forward", "left", "stop"]}
+    })
+    # easy: Tokyo
+    expanded.append({
+        "case_id": "memory_navigation_easy_tokyo_1",
+        "suite": "memory_continuity", "protocol": "memory_probe",
+        "capability": "memory_continuity", "source": "urbanagent_native",
+        "memory_seed": [_nav_seed("Shibuya Station", "Meiji Shrine", ["forward", "left", "forward", "stop"], "Tokyo")],
+        "task": {"task_type": "outdoor_navigation", "start": "Shibuya Station", "end": "Meiji Shrine", "steps": []},
+        "perception": {"road_network": {}, "topology": {}},
+        "evaluation": {"expected": ["forward", "left", "forward", "stop"]}
+    })
+    # medium: NewYork with distractors
+    expanded.append({
+        "case_id": "memory_navigation_medium_newyork_1",
+        "suite": "memory_continuity", "protocol": "memory_probe",
+        "capability": "memory_continuity", "source": "urbanagent_native",
+        "memory_seed": [
+            _nav_seed("Eiffel Tower", "Arc de Triomphe", ["forward", "right", "stop"], "Paris"),
+            _nav_seed("Times Square", "Central Park", ["forward", "forward", "left", "stop"], "NewYork"),
+            _mobility_seed("NewYork", 55200),
+        ],
+        "task": {"task_type": "outdoor_navigation", "start": "Times Square", "end": "Central Park", "steps": []},
+        "perception": {"road_network": {}, "topology": {}},
+        "evaluation": {"expected": ["forward", "forward", "left", "stop"]}
+    })
+    # medium: London with distractors
+    expanded.append({
+        "case_id": "memory_navigation_medium_london_1",
+        "suite": "memory_continuity", "protocol": "memory_probe",
+        "capability": "memory_continuity", "source": "urbanagent_native",
+        "memory_seed": [
+            _traffic_seed("London", "north_south"),
+            _nav_seed("Big Ben", "Buckingham Palace", ["forward", "right", "forward", "right", "stop"], "London"),
+            _explore_seed("London", "British Museum"),
+        ],
+        "task": {"task_type": "outdoor_navigation", "start": "Big Ben", "end": "Buckingham Palace", "steps": []},
+        "perception": {"road_network": {}, "topology": {}},
+        "evaluation": {"expected": ["forward", "right", "forward", "right", "stop"]}
+    })
+    # hard: Beijing — two routes same endpoints, must pick latest
+    expanded.append({
+        "case_id": "memory_navigation_hard_beijing_2",
+        "suite": "memory_continuity", "protocol": "memory_probe",
+        "capability": "memory_continuity", "source": "urbanagent_native",
+        "memory_seed": [
+            _nav_seed("Tiananmen", "Temple of Heaven", ["forward", "left", "forward", "stop"], "Beijing"),
+            _nav_seed("Tiananmen", "Temple of Heaven", ["forward", "right", "forward", "right", "stop"], "Beijing"),
+            _mobility_seed("Beijing", 10800),
+            _traffic_seed("Shanghai", "east_west"),
+        ],
+        "task": {"task_type": "outdoor_navigation", "start": "Tiananmen", "end": "Temple of Heaven", "steps": []},
+        "perception": {"road_network": {}, "topology": {}},
+        "evaluation": {"expected": ["forward", "right", "forward", "right", "stop"]}
+    })
+    # hard: Tokyo — two routes + cross-task noise
+    expanded.append({
+        "case_id": "memory_navigation_hard_tokyo_2",
+        "suite": "memory_continuity", "protocol": "memory_probe",
+        "capability": "memory_continuity", "source": "urbanagent_native",
+        "memory_seed": [
+            _nav_seed("Tokyo Station", "Imperial Palace", ["forward", "forward", "stop"], "Tokyo"),
+            _explore_seed("Tokyo", "Senso-ji Temple"),
+            _nav_seed("Tokyo Station", "Imperial Palace", ["forward", "left", "right", "forward", "stop"], "Tokyo"),
+        ],
+        "task": {"task_type": "outdoor_navigation", "start": "Tokyo Station", "end": "Imperial Palace", "steps": []},
+        "perception": {"road_network": {}, "topology": {}},
+        "evaluation": {"expected": ["forward", "left", "right", "forward", "stop"]}
+    })
+
+    # --- urban_exploration (6 cases) ---
+    # easy: London
+    expanded.append({
+        "case_id": "memory_exploration_easy_london_1",
+        "suite": "memory_continuity", "protocol": "memory_probe",
+        "capability": "memory_continuity", "source": "urbanagent_native",
+        "memory_seed": [_explore_seed("London", "British Museum")],
+        "task": {"task_type": "urban_exploration", "city": "London",
+                 "candidates": [
+                     {"option": "A", "des_name": "British Museum", "completion": 1.0, "average_step": 3.0, "success_time": 10.0},
+                     {"option": "B", "des_name": "Tower of London", "completion": 1.0, "average_step": 5.0, "success_time": 16.0},
+                     {"option": "C", "des_name": "Hyde Park", "completion": 1.0, "average_step": 4.0, "success_time": 13.0},
+                 ]},
+        "perception": {"poi_categories": {}},
+        "evaluation": {"expected": "British Museum"}
+    })
+    # easy: Tokyo
+    expanded.append({
+        "case_id": "memory_exploration_easy_tokyo_1",
+        "suite": "memory_continuity", "protocol": "memory_probe",
+        "capability": "memory_continuity", "source": "urbanagent_native",
+        "memory_seed": [_explore_seed("Tokyo", "Senso-ji Temple")],
+        "task": {"task_type": "urban_exploration", "city": "Tokyo",
+                 "candidates": [
+                     {"option": "A", "des_name": "Senso-ji Temple", "completion": 1.0, "average_step": 4.0, "success_time": 12.0},
+                     {"option": "B", "des_name": "Meiji Shrine", "completion": 1.0, "average_step": 6.0, "success_time": 18.0},
+                     {"option": "C", "des_name": "Ueno Park", "completion": 1.0, "average_step": 5.0, "success_time": 14.0},
+                 ]},
+        "perception": {"poi_categories": {}},
+        "evaluation": {"expected": "Senso-ji Temple"}
+    })
+    # medium: NewYork with distractors
+    expanded.append({
+        "case_id": "memory_exploration_medium_newyork_1",
+        "suite": "memory_continuity", "protocol": "memory_probe",
+        "capability": "memory_continuity", "source": "urbanagent_native",
+        "memory_seed": [
+            _explore_seed("Paris", "Louvre"),
+            _explore_seed("NewYork", "Metropolitan Museum"),
+            _mobility_seed("NewYork", 55500),
+        ],
+        "task": {"task_type": "urban_exploration", "city": "NewYork",
+                 "candidates": [
+                     {"option": "A", "des_name": "Metropolitan Museum", "completion": 1.0, "average_step": 4.0, "success_time": 12.0},
+                     {"option": "B", "des_name": "Brooklyn Bridge", "completion": 1.0, "average_step": 7.0, "success_time": 20.0},
+                     {"option": "C", "des_name": "High Line Park", "completion": 1.0, "average_step": 5.0, "success_time": 15.0},
+                 ]},
+        "perception": {"poi_categories": {}},
+        "evaluation": {"expected": "Metropolitan Museum"}
+    })
+    # medium: Shanghai with distractors
+    expanded.append({
+        "case_id": "memory_exploration_medium_shanghai_1",
+        "suite": "memory_continuity", "protocol": "memory_probe",
+        "capability": "memory_continuity", "source": "urbanagent_native",
+        "memory_seed": [
+            _traffic_seed("Shanghai", "east_west"),
+            _explore_seed("Shanghai", "Yu Garden"),
+            _nav_seed("The Bund", "Nanjing Road", ["forward", "right", "stop"], "Shanghai"),
+        ],
+        "task": {"task_type": "urban_exploration", "city": "Shanghai",
+                 "candidates": [
+                     {"option": "A", "des_name": "Yu Garden", "completion": 1.0, "average_step": 4.0, "success_time": 13.0},
+                     {"option": "B", "des_name": "Oriental Pearl Tower", "completion": 1.0, "average_step": 6.0, "success_time": 17.0},
+                     {"option": "C", "des_name": "Xintiandi", "completion": 1.0, "average_step": 5.0, "success_time": 15.0},
+                 ]},
+        "perception": {"poi_categories": {}},
+        "evaluation": {"expected": "Yu Garden"}
+    })
+    # hard: Paris — two seeds same city, different dests
+    expanded.append({
+        "case_id": "memory_exploration_hard_paris_2",
+        "suite": "memory_continuity", "protocol": "memory_probe",
+        "capability": "memory_continuity", "source": "urbanagent_native",
+        "memory_seed": [
+            _explore_seed("Paris", "Musee d'Orsay", "A"),
+            _explore_seed("Paris", "Jardin du Luxembourg", "B"),
+            _mobility_seed("Paris", 33100),
+            _traffic_seed("London", "north_south"),
+        ],
+        "task": {"task_type": "urban_exploration", "city": "Paris",
+                 "candidates": [
+                     {"option": "A", "des_name": "Musee d'Orsay", "completion": 1.0, "average_step": 4.0, "success_time": 12.0},
+                     {"option": "B", "des_name": "Jardin du Luxembourg", "completion": 1.0, "average_step": 5.0, "success_time": 14.0},
+                     {"option": "C", "des_name": "Montmartre", "completion": 1.0, "average_step": 6.0, "success_time": 18.0},
+                 ]},
+        "perception": {"poi_categories": {}},
+        "evaluation": {"expected": "Jardin du Luxembourg"}
+    })
+    # hard: London — two dests + cross-task noise
+    expanded.append({
+        "case_id": "memory_exploration_hard_london_2",
+        "suite": "memory_continuity", "protocol": "memory_probe",
+        "capability": "memory_continuity", "source": "urbanagent_native",
+        "memory_seed": [
+            _explore_seed("London", "Tate Modern", "A"),
+            _nav_seed("Westminster", "London Eye", ["forward", "left", "stop"], "London"),
+            _explore_seed("London", "Camden Market", "B"),
+        ],
+        "task": {"task_type": "urban_exploration", "city": "London",
+                 "candidates": [
+                     {"option": "A", "des_name": "Tate Modern", "completion": 1.0, "average_step": 4.0, "success_time": 12.0},
+                     {"option": "B", "des_name": "Camden Market", "completion": 1.0, "average_step": 5.0, "success_time": 14.0},
+                     {"option": "C", "des_name": "Greenwich Park", "completion": 1.0, "average_step": 6.0, "success_time": 17.0},
+                 ]},
+        "perception": {"poi_categories": {}},
+        "evaluation": {"expected": "Camden Market"}
+    })
+
+    return original_cases + expanded
 
 
 def build_tool_orchestration_cases() -> List[Dict[str, Any]]:

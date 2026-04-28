@@ -10,7 +10,10 @@ Manager Agent — Execution Layer Orchestrator
 
 from __future__ import annotations
 
+import json
 import logging
+import math
+import time
 from typing import Any, Dict, List, Optional
 
 from .base import (
@@ -82,7 +85,15 @@ class ManagerAgent(BaseAgent):
         aggregated = self._aggregate_results(subtasks)
 
         # 送审 Review Layer
+        review_input_snapshot = json.loads(json.dumps(aggregated, ensure_ascii=False, default=str))
+        review_start = time.perf_counter()
         reviewed = await self._send_to_review(aggregated, trace_id)
+        review_latency = round(time.perf_counter() - review_start, 4)
+        reviewed.setdefault("_meta", {})["review"] = {
+            "latency_s": review_latency,
+            "input_tokens_est": self._estimate_tokens(review_input_snapshot),
+            "output_tokens_est": self._estimate_tokens(reviewed.get("review", {})),
+        }
 
         result_msg = AgentMessage(
             sender=AgentRole.MANAGER,
@@ -93,6 +104,16 @@ class ManagerAgent(BaseAgent):
         )
         self.log_message(result_msg)
         return result_msg
+
+    @staticmethod
+    def _estimate_tokens(payload: Any) -> int:
+        try:
+            text = json.dumps(payload, ensure_ascii=False, default=str)
+        except Exception:
+            text = str(payload)
+        if not text:
+            return 0
+        return max(1, math.ceil(len(text) / 4))
 
     # ------------------------------------------------------------------
     # 子任务执行
@@ -207,6 +228,7 @@ class ManagerAgent(BaseAgent):
                     subtask_id=st_data["subtask_id"],
                     objective=st_data["objective"],
                     assigned_role=AgentRole(st_data["assigned_role"]),
+                    input_data=st_data.get("input_data", {}),
                     dependencies=st_data.get("dependencies", []),
                     expected_output=st_data.get("expected_output", ""),
                 )

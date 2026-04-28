@@ -27,7 +27,7 @@ UrbanAgent is a multi-agent framework that uses Large Language Models to perform
 
 - **UrbanWorkflowBench**: Built-in benchmark suite for evaluating agent capabilities across 8 urban task types
 
-- **CLI + Python API + MCP Server**: Multiple integration modes
+- **Task-Oriented CLI + Python API**: A real terminal workflow for arbitrary city analysis tasks, plus advanced pipeline commands for power users
 
 ### Project Layout
 
@@ -84,26 +84,31 @@ urbanagent/
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/xuanniao57/urbanagent.git
-cd urbanagent
+git clone https://github.com/xuanniao57/UrbanAgents.git
+cd UrbanAgents
 
 # 2. Create environment
 conda create -n urban-mobility python=3.10 -y
 conda activate urban-mobility
 
 # 3. Install dependencies
-pip install -e .
-# Or: pip install -r requirements_combined.txt
+python -m pip install .
+# Developer mode: python -m pip install -e .
 
-# 4. Configure API key
-cp .env.example .env
-# Edit .env → set at least ONE provider key (e.g., QWEN_API_KEY)
+# 4. Create user-level config (works from any directory after install)
+urban-agent init
+# Edit ~/.urban-agent/.env -> set at least ONE provider key.
+# Default provider is Qwen: LLM_PROVIDER=qwen, QWEN_MODEL=qwen-plus
 
 # 5. Run tests
 pytest tests/ -q
 
-# 6. Try the CLI
-python -m urban_agent run --task-type geoqa --question "Analyze walkability around Tongji University"
+# 6. Check environment and start the CLI from any directory
+urban-agent doctor
+urban-agent shell
+
+# Or run a single real-world task directly
+urban-agent analyze --task-type geoqa --task "Analyze walkability around Tongji University"
 ```
 
 ### Usage
@@ -111,16 +116,35 @@ python -m urban_agent run --task-type geoqa --question "Analyze walkability arou
 #### CLI
 
 ```bash
-# End-to-end analysis pipeline
+# Start an interactive UrbanAgent shell
+urban-agent shell
+
+# Preview the multi-agent decomposition before running a task
+urban-agent shell
+# then inside the shell:
+# /plan Analyze walkability and open-space deficits around this district
+
+# Run a single real-world task with your own data payload
+urban-agent analyze --task-type open_workflow --task "Assess street connectivity and open-space deficits" --input ./my_city_task.json
+
+# Check provider and environment status before handing it to a collaborator
+urban-agent doctor
+
+# Show the active config file and configured providers
+urban-agent config
+
+# Backward-compatible end-to-end pipeline entry
 python -m urban_agent run --task-type geoqa --question "分析同济大学周边步行可达性"
 
-# Step-by-step
+# Advanced step-by-step pipeline commands
 python -m urban_agent perceive --data-type osm --bbox "121.4,31.2,121.5,31.3"
 python -m urban_agent cognize --input perception_result.json
 python -m urban_agent reason --task-type geoqa --input cognition_result.json --question "..."
 python -m urban_agent visualize --input analysis_result.json --format svg
 python -m urban_agent review --input results.json
 ```
+
+The recommended collaborator-facing surface is `urban-agent shell`, `urban-agent analyze`, `urban-agent doctor`, and `urban-agent config`, not the internal pipeline stages above. Standard installation does not require entering the repository path: the CLI loads `~/.urban-agent/.env` unless `URBAN_AGENT_ENV` or `URBAN_AGENT_HOME` is set. The built-in case-study workflow is kept as a source-repo demo path rather than part of the standard installed product surface.
 
 #### Python API
 
@@ -136,7 +160,7 @@ result = await orchestrator.run(
 
 ### LLM Configuration
 
-Edit `.env` to switch providers:
+Run `urban-agent init` once to create a user-level config at `~/.urban-agent/.env`, then edit that file to switch providers. Qwen is the default provider.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -266,26 +290,28 @@ UrbanAgent 是一个基于大语言模型（LLM）驱动的城市空间分析多
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/xuanniao57/urbanagent.git
-cd urbanagent
+git clone https://github.com/xuanniao57/UrbanAgents.git
+cd UrbanAgents
 
 # 2. 创建环境
 conda create -n urban-mobility python=3.10 -y
 conda activate urban-mobility
 
 # 3. 安装依赖
-pip install -e .
-# 或者: pip install -r requirements_combined.txt
+python -m pip install .
+# 开发模式: python -m pip install -e .
 
-# 4. 配置密钥
-cp .env.example .env
-# 编辑 .env → 至少设置一个 LLM 密钥（如 QWEN_API_KEY）
+# 4. 初始化用户级配置（安装后可在任意目录运行）
+urban-agent init
+# 编辑 ~/.urban-agent/.env，至少设置一个 LLM 密钥。
+# 默认 provider 为 Qwen: LLM_PROVIDER=qwen, QWEN_MODEL=qwen-plus
 
 # 5. 运行测试
 pytest tests/ -q
 
 # 6. 试用 CLI
-python -m urban_agent run --task-type geoqa --question "分析同济大学周边步行可达性"
+urban-agent doctor
+urban-agent shell
 ```
 
 ### 使用方式
@@ -293,15 +319,27 @@ python -m urban_agent run --task-type geoqa --question "分析同济大学周边
 #### 命令行
 
 ```bash
-# 端到端分析
-python -m urban_agent run --task-type geoqa --question "分析同济大学周边步行可达性"
+# 启动交互式 UrbanAgent shell
+urban-agent shell
 
-# 分步执行
+# 在 shell 中预览多智能体任务分解
+/plan 分析同济大学周边步行可达性，并给出开放空间优化建议
+
+# 直接运行任意真实城市分析任务
+urban-agent analyze --task-type geoqa --task "分析同济大学周边步行可达性"
+
+# 查看当前配置路径和 provider 状态
+urban-agent config
+urban-agent doctor
+
+# 高级用户可使用分步 pipeline
 python -m urban_agent perceive --data-type osm --bbox "121.4,31.2,121.5,31.3"
 python -m urban_agent cognize --input perception_result.json
 python -m urban_agent reason --task-type geoqa --input cognition_result.json --question "..."
 python -m urban_agent visualize --input analysis_result.json --format svg
 ```
+
+推荐给合作者使用的入口是 `urban-agent shell`、`urban-agent analyze`、`urban-agent doctor` 和 `urban-agent config`。标准安装后不需要进入源码目录；CLI 默认读取 `~/.urban-agent/.env`，也可以通过 `URBAN_AGENT_ENV` 或 `URBAN_AGENT_HOME` 覆盖配置位置。内置 case-study 仅保留为源码仓库中的开发演示，不作为标准安装后的产品入口。
 
 #### Python API
 
@@ -317,7 +355,7 @@ result = await orchestrator.run(
 
 ### 大模型配置
 
-编辑 `.env` 切换服务商（详见 `.env.example`）：
+运行 `urban-agent init` 会创建 `~/.urban-agent/.env`。编辑该文件即可切换服务商（详见 `.env.example`）：
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|

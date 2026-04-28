@@ -7,10 +7,14 @@ Multi-Agent Orchestrator — 三层架构总调度器
 
 from __future__ import annotations
 
+import json
 import logging
+import math
 from datetime import datetime
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from ..core import CorrectionModuleRegistry
+from .efficiency import MODEL_PRICING
 from .base import AgentMessage, AgentRole, ExecutionPlan
 from .planner import PlannerAgent
 from .manager import ManagerAgent
@@ -21,18 +25,20 @@ from .workers import (
     ReporterWorker,
 )
 from .reviewers import HumanCheckpointAgent, SpatialReviewerAgent
+from .quality_controller import QualityController
 
 logger = logging.getLogger(__name__)
 
 
 class MultiAgentOrchestrator:
     """
-    三层多智能体编排器
+    四层多智能体编排器
 
     Architecture:
-      Planning Layer  → PlannerAgent
-      Execution Layer → ManagerAgent + Workers
-      Review Layer    → SpatialReviewer + HumanCheckpoint
+      Planning Layer     → PlannerAgent
+      Execution Layer    → ManagerAgent + Workers
+      Review Layer       → SpatialReviewer + HumanCheckpoint
+      Quality Control    → QualityController (cross-cutting)
 
     Usage:
         orchestrator = MultiAgentOrchestrator(llm_client=my_llm)
@@ -47,17 +53,40 @@ class MultiAgentOrchestrator:
         config: Optional[Dict[str, Any]] = None,
         interaction_mode: str = "autonomous",
         human_callback: Optional[Callable] = None,
+        # Feature flags for ablation experiments
+        enable_planning: bool = True,
+        enable_review: bool = True,
+        enable_quality_control: bool = True,
+        enable_dual_space: bool = True,
+        enable_memory: bool = True,
         # 可选注入已有模块 (向后兼容)
         perception_module: Optional[Any] = None,
         reasoning_module: Optional[Any] = None,
         visualization_module: Optional[Any] = None,
         memory_module: Optional[Any] = None,
+        correction_registry: Optional[CorrectionModuleRegistry] = None,
     ):
         self.config = config or {}
-        self.memory_module = memory_module
+        self.memory_module = memory_module if enable_memory else None
+        self.correction_registry = correction_registry or CorrectionModuleRegistry()
+
+        # Feature flags
+        self.enable_planning = enable_planning
+        self.enable_review = enable_review
+        self.enable_quality_control = enable_quality_control
+        self.enable_dual_space = enable_dual_space
+        self.enable_memory = enable_memory
+        self.model_name = getattr(llm_client, "model", "default") if llm_client is not None else "default"
+
+        # — Efficiency tracking —
+        self._token_log: list[Dict[str, Any]] = []
+        self._start_times: Dict[str, float] = {}
 
         # — Planning Layer —
         self.planner = PlannerAgent(llm_client=llm_client, config=self.config)
+
+        # — Quality Controller (RMDA-style cross-cutting) —
+        self.quality_controller = QualityController(llm_client=llm_client) if enable_quality_control else None
 
         # — Execution Layer: Workers —
         workers = {
@@ -92,6 +121,109 @@ class MultiAgentOrchestrator:
             llm_client=llm_client,
         )
 
+    # ------------------------------------------------------------------
+    # Efficiency helpers
+    # ------------------------------------------------------------------
+
+    def _tick(self, label: str) -> None:
+        import time
+        self._start_times[label] = time.perf_counter()
+
+    def _tock(self, label: str) -> float:
+        import time
+        return time.perf_counter() - self._start_times.pop(label, time.perf_counter())
+
+    def _estimate_tokens(self, payload: Any) -> int:
+        try:
+            text = json.dumps(payload, ensure_ascii=False, default=str)
+        except Exception:
+            text = str(payload)
+        if not text:
+            return 0
+        return max(1, math.ceil(len(text) / 4))
+
+    def _estimate_cost(self, input_tokens: int, output_tokens: int) -> float:
+        pricing = MODEL_PRICING.get(self.model_name, MODEL_PRICING["default"])
+        return round((input_tokens * pricing["input"] + output_tokens * pricing["output"]) / 1000, 6)
+
+    def _record_efficiency(self, layer: str, latency_s: float, input_payload: Any = None, output_payload: Any = None) -> Dict[str, Any]:
+        input_tokens = self._estimate_tokens(input_payload)
+        output_tokens = self._estimate_tokens(output_payload)
+        record = {
+            "layer": layer,
+            "latency_s": round(latency_s, 4),
+            "input_tokens_est": input_tokens,
+            "output_tokens_est": output_tokens,
+            "est_cost_usd": self._estimate_cost(input_tokens, output_tokens),
+        }
+        self._token_log.append(record)
+        return record
+
+    def get_efficiency_summary(self) -> Dict[str, Dict[str, Any]]:
+        summary: Dict[str, Dict[str, Any]] = {}
+        layer_alias = {
+            "quality_control_plan": "quality_control",
+            "quality_control_exec": "quality_control",
+        }
+        for record in self._token_log:
+            layer = layer_alias.get(record["layer"], record["layer"])
+            stats = summary.setdefault(layer, {
+                "count": 0,
+                "input_tokens_est": 0,
+                "output_tokens_est": 0,
+                "latency_s": 0.0,
+                "est_cost_usd": 0.0,
+            })
+            stats["count"] += 1
+            stats["input_tokens_est"] += record.get("input_tokens_est", 0)
+            stats["output_tokens_est"] += record.get("output_tokens_est", 0)
+            stats["latency_s"] += record.get("latency_s", 0.0)
+            stats["est_cost_usd"] += record.get("est_cost_usd", 0.0)
+
+        for stats in summary.values():
+            stats["latency_s"] = round(stats["latency_s"], 4)
+            stats["est_cost_usd"] = round(stats["est_cost_usd"], 6)
+        return summary
+
+    def get_efficiency_report(self) -> List[Dict[str, Any]]:
+        """Return per-layer latency log (for ablation / Table 4 data)."""
+        return list(self._token_log)
+
+    # ------------------------------------------------------------------
+    # Quality-control helper
+    # ------------------------------------------------------------------
+
+    async def _qc_check(
+        self,
+        source_role: str,
+        output: Dict[str, Any],
+        task_context: Dict[str, Any],
+        mode: str = "recommender",
+        trace_id: str = "",
+    ) -> Tuple[bool, Dict]:
+        """Run QualityController and return (passed, report_payload)."""
+        if self.quality_controller is None:
+            return True, {}
+        qc_msg = AgentMessage(
+            sender=AgentRole.MANAGER,
+            receiver=AgentRole.QUALITY_CONTROLLER,
+            msg_type="quality_check",
+            payload={
+                "source_role": source_role,
+                "output": output,
+                "task_context": task_context,
+                "qc_mode": mode,
+            },
+            trace_id=trace_id,
+        )
+        qc_result = await self.quality_controller.execute(qc_msg)
+        report = qc_result.payload
+        return report.get("passed", True), report
+
+    # ------------------------------------------------------------------
+    # Main pipeline
+    # ------------------------------------------------------------------
+
     async def run(
         self,
         task: Dict[str, Any],
@@ -99,7 +231,13 @@ class MultiAgentOrchestrator:
         city_data: Optional[Dict] = None,
     ) -> Dict[str, Any]:
         """
-        执行完整的三层多智能体协作流程
+        执行四层多智能体协作流程
+
+        Layers:
+          1. Memory Retrieval  (skippable via enable_memory=False)
+          2. Planning          (skippable via enable_planning=False)
+          3. Execution + Review (review skippable via enable_review=False)
+          4. Quality Control   (skippable via enable_quality_control=False)
 
         兼容原 UrbanAgent.execute_task() 参数签名
         """
@@ -110,42 +248,128 @@ class MultiAgentOrchestrator:
             task_payload["city_data"] = city_data
 
         logger.info(f"[Orchestrator] Starting multi-agent pipeline: {trace_id}")
+        self._token_log = []
+        self._start_times = {}
+        self._tick("total")
 
-        # Step 1: Memory retrieval (if available)
-        memory_context = {}
-        if self.memory_module is not None:
+        # ── Step 1: Memory Retrieval ──
+        memory_context: Dict = {}
+        if self.enable_memory and self.memory_module is not None:
+            self._tick("memory_retrieve")
             try:
                 memory_context = await self.memory_module.retrieve(task_payload)
             except Exception as e:
                 logger.warning(f"Memory retrieval failed: {e}")
+            memory_retrieve_latency = self._tock("memory_retrieve")
+            self._record_efficiency("memory_retrieve", memory_retrieve_latency, task_payload, memory_context)
         task_payload["memory_context"] = memory_context
 
-        # Step 2: Planning Layer
-        plan_msg = AgentMessage(
-            sender=AgentRole.MANAGER,  # 外部触发
-            receiver=AgentRole.PLANNER,
-            msg_type="task_plan",
-            payload=task_payload,
+        # ── Step 2: Planning Layer ──
+        self._tick("planning")
+        if self.enable_planning:
+            plan_msg = AgentMessage(
+                sender=AgentRole.MANAGER,
+                receiver=AgentRole.PLANNER,
+                msg_type="task_plan",
+                payload=task_payload,
+                trace_id=trace_id,
+            )
+            plan_result = await self.planner.execute(plan_msg)
+        else:
+            # Ablation: skip planner — pass task directly as a single-step plan
+            plan_result = AgentMessage(
+                sender=AgentRole.PLANNER,
+                receiver=AgentRole.MANAGER,
+                msg_type="plan_result",
+                payload={
+                    "execution_plan": {"steps": [{"description": task_payload.get("question", str(task_payload))}]},
+                    "subtasks": [task_payload],
+                },
+                trace_id=trace_id,
+            )
+        plan_latency = self._tock("planning")
+        self._record_efficiency("planning", plan_latency, task_payload, plan_result.payload)
+
+        # QC gate: validate plan
+        plan_qc_payload = {
+            "source_role": "planner",
+            "output": plan_result.payload,
+            "task_context": task_payload,
+            "qc_mode": "configurator",
+        }
+        self._tick("quality_control_plan")
+        plan_passed, plan_qc = await self._qc_check(
+            source_role="planner",
+            output=plan_result.payload,
+            task_context=task_payload,
+            mode="configurator",
             trace_id=trace_id,
         )
-        plan_result = await self.planner.execute(plan_msg)
+        plan_qc_latency = self._tock("quality_control_plan")
+        self._record_efficiency("quality_control_plan", plan_qc_latency, plan_qc_payload, plan_qc)
+        if not plan_passed:
+            logger.warning(f"[QC] Plan quality below threshold: {plan_qc}")
 
-        # Step 3: Execution Layer (Manager → Workers → Review)
+        # ── Step 3: Execution Layer (Manager → Workers → Review) ──
+        self._tick("execution")
         exec_result = await self.manager.execute(plan_result)
+        exec_total_latency = self._tock("execution")
+        review_meta = exec_result.payload.get("results", {}).get("_meta", {}).get("review", {})
+        review_latency = float(review_meta.get("latency_s", 0.0))
+        exec_latency = max(exec_total_latency - review_latency, 0.0)
+        self._record_efficiency("execution", exec_latency, plan_result.payload, exec_result.payload)
+        if review_latency > 0 or review_meta:
+            self._token_log.append({
+                "layer": "review",
+                "latency_s": round(review_latency, 4),
+                "input_tokens_est": int(review_meta.get("input_tokens_est", 0)),
+                "output_tokens_est": int(review_meta.get("output_tokens_est", 0)),
+                "est_cost_usd": self._estimate_cost(
+                    int(review_meta.get("input_tokens_est", 0)),
+                    int(review_meta.get("output_tokens_est", 0)),
+                ),
+            })
 
-        # Step 4: Memory update (if available)
-        if self.memory_module is not None:
+        # QC gate: validate execution output
+        exec_qc_payload = {
+            "source_role": "execution",
+            "output": exec_result.payload,
+            "task_context": task_payload,
+            "qc_mode": "recommender",
+        }
+        self._tick("quality_control_exec")
+        exec_passed, exec_qc = await self._qc_check(
+            source_role="execution",
+            output=exec_result.payload,
+            task_context=task_payload,
+            mode="recommender",
+            trace_id=trace_id,
+        )
+        exec_qc_latency = self._tock("quality_control_exec")
+        self._record_efficiency("quality_control_exec", exec_qc_latency, exec_qc_payload, exec_qc)
+        if not exec_passed:
+            logger.warning(f"[QC] Execution output confidence low: {exec_qc}")
+
+        # ── Step 4: Memory Update ──
+        if self.enable_memory and self.memory_module is not None:
+            self._tick("memory_store")
+            memory_store_payload = {
+                "task": task_payload,
+                "plan": plan_result.payload,
+                "results": exec_result.payload,
+                "timestamp": datetime.now().isoformat(),
+            }
             try:
-                await self.memory_module.store({
-                    "task": task_payload,
-                    "plan": plan_result.payload,
-                    "results": exec_result.payload,
-                    "timestamp": datetime.now().isoformat(),
-                })
+                await self.memory_module.store(memory_store_payload)
             except Exception as e:
                 logger.warning(f"Memory update failed: {e}")
+            memory_store_latency = self._tock("memory_store")
+            self._record_efficiency("memory_store", memory_store_latency, memory_store_payload, {"stored": True})
 
-        # Step 5: 组装最终输出 (兼容原接口)
+        total_latency = self._tock("total")
+        self._record_efficiency("total", total_latency, task_payload, exec_result.payload)
+
+        # ── Step 5: Assemble output ──
         results = exec_result.payload.get("results", {})
         return {
             "trace_id": trace_id,
@@ -155,23 +379,69 @@ class MultiAgentOrchestrator:
             "results": results,
             "final_answer": self._extract_answer(results),
             "review": results.get("review", {}),
+            # New: quality & efficiency metadata
+            "quality_control": {
+                "plan_qc": plan_qc,
+                "exec_qc": exec_qc,
+                "plan_passed": plan_passed,
+                "exec_passed": exec_passed,
+            },
+            "alignment_support": {
+                "correction_modules": self.correction_registry.list_modules(),
+                "memory_snapshot": self.memory_module.inspect_state() if self.memory_module is not None and hasattr(self.memory_module, "inspect_state") else {},
+            },
+            "efficiency": {
+                "plan_latency_s": plan_latency,
+                "exec_latency_s": exec_latency,
+                "review_latency_s": round(review_latency, 4),
+                "quality_control_latency_s": round(plan_qc_latency + exec_qc_latency, 4),
+                "total_latency_s": total_latency,
+                "detail": self.get_efficiency_report(),
+                "summary": self.get_efficiency_summary(),
+            },
+            "ablation_config": {
+                "planning": self.enable_planning,
+                "review": self.enable_review,
+                "quality_control": self.enable_quality_control,
+                "dual_space": self.enable_dual_space,
+                "memory": self.enable_memory,
+            },
         }
 
     @staticmethod
     def _extract_answer(results: Dict) -> str:
         """从子任务结果中提取最终答案"""
         subtask_results = results.get("subtask_results", {})
-        # 优先取 reporter 的结果
+        # 优先取 reporter 的完整报告。
         for st_data in subtask_results.values():
             if st_data.get("role") == "reporter":
                 report = st_data.get("result", {})
-                if isinstance(report, dict):
+                if isinstance(report, dict) and report.get("report"):
                     return report.get("report", "")
-        # 否则取最后一个完成的子任务
+
+        for st_data in subtask_results.values():
+            if st_data.get("status") != "completed":
+                continue
+            result = st_data.get("result", {})
+            if isinstance(result, dict) and result.get("answer"):
+                return str(result["answer"])
+
+        for st_data in subtask_results.values():
+            if st_data.get("status") != "completed":
+                continue
+            result = st_data.get("result", {})
+            if isinstance(result, dict) and result.get("report"):
+                return str(result["report"])
+
         for st_data in reversed(list(subtask_results.values())):
             if st_data.get("status") == "completed":
                 result = st_data.get("result", {})
+                if isinstance(result, str):
+                    return result.strip()
                 if isinstance(result, dict):
-                    return result.get("answer", result.get("report", str(result)))
-                return str(result)
+                    content = result.get("content")
+                    if isinstance(content, str) and content.strip():
+                        return content.strip()
+                    if content:
+                        return str(content)
         return ""

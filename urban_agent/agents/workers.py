@@ -11,9 +11,17 @@ Worker Agents — Execution Layer Specialists
 
 from __future__ import annotations
 
+from datetime import datetime
 import logging
 from typing import Any, Dict, Optional
 
+from ..governance import (
+    EvidenceManifest,
+    GovernanceEvidence,
+    PopulationEvidence,
+    SpatialEvidence,
+    TemporalEvidence,
+)
 from .base import AgentMessage, AgentRole, BaseAgent
 
 logger = logging.getLogger(__name__)
@@ -64,6 +72,8 @@ class PerceptionWorker(BaseAgent):
                 "features": task_data,
             }
 
+        result = self._attach_evidence_manifest(task_data, result)
+
         return AgentMessage(
             sender=self.role,
             receiver=AgentRole.MANAGER,
@@ -71,6 +81,141 @@ class PerceptionWorker(BaseAgent):
             payload=result,
             trace_id=message.trace_id,
         )
+
+    def _attach_evidence_manifest(self, task_data: Dict[str, Any], result: Any) -> Dict[str, Any]:
+        if not isinstance(result, dict):
+            result = {
+                "status": "perception_complete",
+                "features": result,
+            }
+
+        existing_manifest = result.get("evidence_manifest")
+        if not isinstance(existing_manifest, dict):
+            existing_manifest = {}
+
+        spatial_existing = existing_manifest.get("spatial", {})
+        temporal_existing = existing_manifest.get("temporal", {})
+        population_existing = existing_manifest.get("population", {})
+        governance_existing = existing_manifest.get("governance", {})
+
+        bounds = (
+            result.get("bounds")
+            or task_data.get("bounds")
+            or task_data.get("bbox")
+            or spatial_existing.get("bbox")
+        )
+        data_sources = self._unique_list(
+            self._as_list(result.get("data_sources"))
+            + self._as_list(task_data.get("required_data"))
+            + self._as_list(existing_manifest.get("data_sources"))
+        )
+        task_type = task_data.get("task_type") or task_data.get("type") or result.get("type")
+        tags = self._unique_list(
+            self._as_list(existing_manifest.get("tags"))
+            + self._as_list(task_data.get("tags"))
+            + self._as_list(data_sources)
+            + ([task_type] if task_type else [])
+            + ([task_data.get("admin_level")] if task_data.get("admin_level") else [])
+        )
+
+        manifest = EvidenceManifest(
+            spatial=SpatialEvidence(
+                bbox=self._normalize_bbox(bounds),
+                crs=spatial_existing.get("crs") or task_data.get("crs"),
+                admin_level=spatial_existing.get("admin_level") or task_data.get("admin_level"),
+                scale_band=spatial_existing.get("scale_band") or task_data.get("scale_band"),
+                spatial_relation_frame=(
+                    spatial_existing.get("spatial_relation_frame")
+                    or task_data.get("spatial_relation_frame")
+                ),
+            ),
+            temporal=TemporalEvidence(
+                timestamp=self._coerce_timestamp(
+                    temporal_existing.get("timestamp") or task_data.get("timestamp")
+                ),
+                time_window=temporal_existing.get("time_window") or task_data.get("time_window"),
+                granularity=temporal_existing.get("granularity") or task_data.get("granularity"),
+                forecast_horizon=(
+                    temporal_existing.get("forecast_horizon")
+                    or task_data.get("forecast_horizon")
+                ),
+                freshness=temporal_existing.get("freshness") or task_data.get("freshness"),
+            ),
+            population=PopulationEvidence(
+                target_group=population_existing.get("target_group") or task_data.get("target_group"),
+                observed_group=(
+                    population_existing.get("observed_group") or task_data.get("observed_group")
+                ),
+                affected_group=(
+                    population_existing.get("affected_group") or task_data.get("affected_group")
+                ),
+                sampling_bias=(
+                    population_existing.get("sampling_bias") or task_data.get("sampling_bias")
+                ),
+                stakeholder_source=(
+                    population_existing.get("stakeholder_source")
+                    or task_data.get("stakeholder_source")
+                ),
+            ),
+            governance=GovernanceEvidence(
+                provenance=(
+                    governance_existing.get("provenance")
+                    or task_data.get("provenance")
+                    or "+".join(data_sources)
+                ),
+                license=governance_existing.get("license") or task_data.get("license"),
+                collection_method=(
+                    governance_existing.get("collection_method")
+                    or task_data.get("collection_method")
+                ),
+                uncertainty=(
+                    governance_existing.get("uncertainty") or task_data.get("uncertainty")
+                ),
+                missing_layers=self._as_list(
+                    governance_existing.get("missing_layers") or task_data.get("missing_layers")
+                ),
+            ),
+            tags=tags,
+            data_sources=data_sources,
+        ).to_dict()
+
+        result["data_sources"] = data_sources
+        result["evidence_manifest"] = manifest
+        return result
+
+    def _normalize_bbox(self, bounds: Any):
+        if isinstance(bounds, dict):
+            keys = ("min_lon", "min_lat", "max_lon", "max_lat")
+            if all(key in bounds for key in keys):
+                return [bounds[key] for key in keys]
+        if isinstance(bounds, (list, tuple)) and len(bounds) == 4:
+            return list(bounds)
+        return None
+
+    def _coerce_timestamp(self, value: Any) -> str:
+        if hasattr(value, "isoformat"):
+            return value.isoformat()
+        if isinstance(value, str) and value.strip():
+            return value
+        return datetime.now().isoformat()
+
+    def _as_list(self, value: Any) -> list:
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return value
+        if isinstance(value, tuple):
+            return list(value)
+        return [value]
+
+    def _unique_list(self, values: list) -> list:
+        unique = []
+        for value in values:
+            if value in (None, ""):
+                continue
+            if value not in unique:
+                unique.append(value)
+        return unique
 
 
 class AnalystWorker(BaseAgent):

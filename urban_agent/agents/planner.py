@@ -126,15 +126,35 @@ class PlannerAgent(BaseAgent):
 
         # 复杂度启发式
         complexity = "basic"
-        if any(kw in description.lower() for kw in ["compare", "multi", "across", "temporal"]):
+        description_lower = description.lower()
+        if any(kw in description_lower for kw in ["compare", "multi", "across", "temporal", "对比", "多", "跨", "时间", "趋势", "综合"]):
             complexity = "intermediate"
-        if any(kw in description.lower() for kw in ["optimize", "plan", "design", "simulate"]):
+        if any(kw in description_lower for kw in ["optimize", "plan", "design", "simulate", "优化", "规划", "设计", "模拟", "建议", "方案"]):
             complexity = "advanced"
 
         # 默认子任务模板
-        subtasks = ["data_acquisition", "analysis", "visualization", "report"]
+        subtasks = [
+            "Collect task-relevant city data and spatial context",
+            "Analyze spatial patterns, constraints, and task-specific indicators",
+            "Prepare cartographic layers and visual outputs",
+            "Synthesize findings, caveats, and actionable recommendations",
+        ]
         if complexity == "basic":
-            subtasks = ["data_acquisition", "analysis"]
+            subtasks = [
+                "Collect task-relevant city data and spatial context",
+                "Analyze the question with spatial reasoning and available evidence",
+            ]
+            if any(kw in description_lower for kw in ["visual", "map", "carto", "plot", "可视化", "地图", "图"]):
+                subtasks.append("Prepare cartographic layers and visual outputs")
+            if any(kw in description_lower for kw in ["report", "summary", "narrative", "报告", "总结"]):
+                subtasks.append("Synthesize findings, caveats, and actionable recommendations")
+        else:
+            subtasks = [
+                "Collect task-relevant city data and spatial context",
+                "Analyze spatial patterns, constraints, and task-specific indicators",
+                "Prepare cartographic layers and visual outputs",
+                "Synthesize findings, caveats, and actionable recommendations",
+            ]
 
         return {
             "complexity": complexity,
@@ -168,7 +188,7 @@ class PlannerAgent(BaseAgent):
                     subtask_id=st_id,
                     objective=desc,
                     assigned_role=role,
-                    input_data=task if i == 0 else {},
+                    input_data=dict(task),
                     dependencies=[prev_id] if prev_id else [],
                     expected_output=f"Result of {desc}",
                 )
@@ -188,12 +208,27 @@ class PlannerAgent(BaseAgent):
     def _assign_role(description: str) -> AgentRole:
         """根据子任务描述分配 Worker 角色"""
         desc_lower = description.lower()
-        if any(kw in desc_lower for kw in ["data", "acquisition", "perception", "fetch", "collect"]):
+        perception_phrases = [
+            "data acquisition",
+            "acquire data",
+            "collect data",
+            "collect task-relevant city data",
+            "fetch data",
+            "ingest data",
+            "perception",
+            "openstreetmap",
+            "osm",
+            "remote sensing",
+            "street view",
+            "trajectory",
+            "survey",
+        ]
+        if any(kw in desc_lower for kw in perception_phrases):
             return AgentRole.PERCEPTION
+        if any(kw in desc_lower for kw in ["report", "summary", "narrative", "document", "synthesize", "finding", "recommendation", "报告", "总结"]):
+            return AgentRole.REPORTER
         if any(kw in desc_lower for kw in ["visual", "svg", "map", "carto", "chart", "plot"]):
             return AgentRole.CARTOGRAPHER
-        if any(kw in desc_lower for kw in ["report", "summary", "narrative", "document"]):
-            return AgentRole.REPORTER
         return AgentRole.ANALYST
 
     @staticmethod
@@ -208,6 +243,7 @@ class PlannerAgent(BaseAgent):
                     "subtask_id": st.subtask_id,
                     "objective": st.objective,
                     "assigned_role": st.assigned_role.value,
+                    "input_data": dict(st.input_data),
                     "dependencies": st.dependencies,
                     "expected_output": st.expected_output,
                 }

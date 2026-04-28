@@ -25,6 +25,14 @@ class TopologicalNode:
         self.connections: List[str] = []  # 连接的节点ID
         self.properties: Dict[str, Any] = {}
         self.vector_anchor: Optional[Tuple[float, float]] = None  # 对应的矢量坐标
+        self.trace: List[Dict[str, Any]] = []
+
+    def add_trace(self, step: str, explanation: str, evidence: Optional[Dict[str, Any]] = None):
+        self.trace.append({
+            'step': step,
+            'explanation': explanation,
+            'evidence': evidence or {}
+        })
         
     def to_dict(self) -> Dict:
         return {
@@ -33,7 +41,8 @@ class TopologicalNode:
             'label': self.label,
             'connections': self.connections,
             'properties': self.properties,
-            'vector_anchor': self.vector_anchor
+            'vector_anchor': self.vector_anchor,
+            'trace': self.trace,
         }
 
 
@@ -45,6 +54,14 @@ class TopologicalRelation:
         self.type = relation_type  # 'adjacent', 'connected', 'contains', 'aligned', 'separated'
         self.properties: Dict[str, Any] = {}
         self.vector_geometry: Optional[Any] = None  # 对应的矢量几何
+        self.trace: List[Dict[str, Any]] = []
+
+    def add_trace(self, step: str, explanation: str, evidence: Optional[Dict[str, Any]] = None):
+        self.trace.append({
+            'step': step,
+            'explanation': explanation,
+            'evidence': evidence or {}
+        })
         
     def to_dict(self) -> Dict:
         return {
@@ -52,7 +69,8 @@ class TopologicalRelation:
             'target': self.target,
             'type': self.type,
             'properties': self.properties,
-            'has_vector_mapping': self.vector_geometry is not None
+            'has_vector_mapping': self.vector_geometry is not None,
+            'trace': self.trace,
         }
 
 
@@ -118,13 +136,25 @@ class SpatialCognition:
         
         print("  → Mapping to vector space...")
         vector_mapping = self._map_to_vector(topo_graph, context)
+
+        spatial_patterns = self._identify_patterns(topo_graph, context)
+        alignment_diagnostics = self._build_alignment_diagnostics(topo_graph, features, context, task)
+        distribution_preview = self._build_distribution_preview(features)
         
         return {
             'topological_graph': topo_graph.to_dict(),
             'semantic_understanding': semantics,
             'vector_mapping': vector_mapping,
-            'spatial_patterns': self._identify_patterns(topo_graph, context),
-            'key_findings': self._generate_findings(topo_graph, semantics, task)
+            'spatial_patterns': spatial_patterns,
+            'key_findings': self._generate_findings(topo_graph, semantics, task),
+            'alignment_diagnostics': alignment_diagnostics,
+            'distribution_preview': distribution_preview,
+            'inspection_payload': self._build_inspection_payload(
+                topo_graph,
+                alignment_diagnostics,
+                distribution_preview,
+                vector_mapping,
+            ),
         }
     
     def _extract_features(self, context) -> Dict:
@@ -165,6 +195,14 @@ class SpatialCognition:
                 'coordinates': junction.get('coordinates')
             }
             node.vector_anchor = junction.get('coordinates')
+            node.add_trace(
+                'feature_extraction',
+                'Node created from a high-degree road intersection.',
+                {
+                    'degree': junction.get('degree', 0),
+                    'coordinates': junction.get('coordinates'),
+                }
+            )
             graph.add_node(node)
         
         # 建筑聚类节点
@@ -177,9 +215,19 @@ class SpatialCognition:
             node.properties = {
                 'building_count': cluster.get('count', 0),
                 'density': cluster.get('density', 0),
-                'centroid': cluster.get('centroid')
+                'centroid': cluster.get('centroid'),
+                'radius': cluster.get('radius', 80.0),
             }
             node.vector_anchor = cluster.get('centroid')
+            node.add_trace(
+                'feature_extraction',
+                'Node created from a building cluster detected in perceived urban fabric.',
+                {
+                    'building_count': cluster.get('count', 0),
+                    'density': cluster.get('density', 0),
+                    'radius': cluster.get('radius', 80.0),
+                }
+            )
             graph.add_node(node)
         
         # 开放空间节点
@@ -195,6 +243,14 @@ class SpatialCognition:
                 'centroid': space.get('centroid')
             }
             node.vector_anchor = space.get('centroid')
+            node.add_trace(
+                'feature_extraction',
+                'Node created from an open-space feature that may support gathering or visibility.',
+                {
+                    'area': space.get('area', 0),
+                    'shape_type': space.get('shape_type', 'unknown'),
+                }
+            )
             graph.add_node(node)
 
         # 地标节点
@@ -211,6 +267,14 @@ class SpatialCognition:
                 'coordinates': coordinates
             }
             node.vector_anchor = coordinates
+            node.add_trace(
+                'feature_extraction',
+                'Node created from a salient landmark or named urban anchor.',
+                {
+                    'category': landmark.get('type', 'landmark'),
+                    'importance': landmark.get('importance', 1.0),
+                }
+            )
             graph.add_node(node)
 
         # 屏障节点
@@ -227,6 +291,14 @@ class SpatialCognition:
                 'coordinates': coordinates
             }
             node.vector_anchor = coordinates
+            node.add_trace(
+                'feature_extraction',
+                'Node created from a barrier-like feature that may interrupt movement or visibility.',
+                {
+                    'barrier_type': barrier.get('type', 'barrier'),
+                    'strength': barrier.get('strength', 1.0),
+                }
+            )
             graph.add_node(node)
         
         # 2. 建立关系
@@ -250,6 +322,17 @@ class SpatialCognition:
                             relation_type=relation_type
                         )
                         relation.properties['distance'] = dist
+                        relation.add_trace(
+                            'relation_inference',
+                            f"Relation inferred from node type combination and metric separation as {relation_type}.",
+                            {
+                                'distance': dist,
+                                'source_type': node1.type,
+                                'target_type': node2.type,
+                                'source_anchor': node1.vector_anchor,
+                                'target_anchor': node2.vector_anchor,
+                            }
+                        )
                         graph.add_relation(relation)
         
         return graph
@@ -403,6 +486,118 @@ class SpatialCognition:
             findings.append("该区域街道连通性较低，可能存在可达性问题")
         
         return findings
+
+    def _build_alignment_diagnostics(self,
+                                     graph: TopologicalGraph,
+                                     features: Dict,
+                                     context,
+                                     task: str) -> Dict:
+        anchors = [node.vector_anchor for node in graph.nodes.values() if node.vector_anchor]
+        relation_distances = [
+            float(relation.properties.get('distance', 0.0))
+            for relation in graph.relations
+            if isinstance(relation.properties.get('distance'), (int, float))
+        ]
+
+        extent = self._estimate_extent(anchors)
+        node_type_counts: Dict[str, int] = {}
+        for node in graph.nodes.values():
+            node_type_counts[node.type] = node_type_counts.get(node.type, 0) + 1
+
+        dominant_type = max(node_type_counts, key=node_type_counts.get) if node_type_counts else 'unknown'
+        total_nodes = max(len(graph.nodes), 1)
+        dominant_ratio = node_type_counts.get(dominant_type, 0) / total_nodes
+        missing_layers = [
+            name for name in ('junctions', 'clusters', 'open_spaces', 'barriers', 'landmarks')
+            if not features.get(name)
+        ]
+
+        if extent['max_span_m'] > 1200 and len(graph.nodes) <= 5:
+            maup_like_risk = 'high'
+        elif dominant_ratio > 0.65 or len(missing_layers) >= 2:
+            maup_like_risk = 'medium'
+        else:
+            maup_like_risk = 'low'
+
+        return {
+            'task': task,
+            'preferred_scale': self._infer_scale_band(extent['max_span_m']),
+            'scale_span_m': extent['max_span_m'],
+            'extent': extent,
+            'relation_distance_stats': {
+                'min_m': min(relation_distances) if relation_distances else 0.0,
+                'median_m': float(np.median(relation_distances)) if relation_distances else 0.0,
+                'max_m': max(relation_distances) if relation_distances else 0.0,
+            },
+            'dominant_node_type': dominant_type,
+            'maup_like_risk': maup_like_risk,
+            'human_review_prompts': [
+                'Inspect the raw spatial distribution before accepting any topological summary.',
+                'Confirm whether the current scale is appropriate for the planning question and note any scale shift.',
+                'Check whether a stakeholder-specific fairness concern should override the default spatial reading.',
+                'Decide whether previous memory from nearby places should be promoted, suppressed, or annotated.',
+            ],
+        }
+
+    def _build_distribution_preview(self, features: Dict) -> Dict:
+        feature_counts = {
+            'junctions': len(features.get('junctions', [])),
+            'clusters': len(features.get('clusters', [])),
+            'corridors': len(features.get('corridors', [])),
+            'open_spaces': len(features.get('open_spaces', [])),
+            'barriers': len(features.get('barriers', [])),
+            'landmarks': len(features.get('landmarks', [])),
+        }
+        missing_layers = [name for name, count in feature_counts.items() if count == 0]
+        dominant_layer = max(feature_counts, key=feature_counts.get) if feature_counts else 'unknown'
+        return {
+            'feature_counts': feature_counts,
+            'missing_layers': missing_layers,
+            'dominant_layer': dominant_layer,
+            'needs_visual_check': bool(missing_layers) or feature_counts.get(dominant_layer, 0) > 0,
+            'review_questions': [
+                'Which raw layers should be visually inspected before reasoning begins?',
+                'Do observed distributions suggest a neighbourhood-scale pattern or a site-scale exception?',
+            ],
+        }
+
+    def _build_inspection_payload(self,
+                                  graph: TopologicalGraph,
+                                  alignment_diagnostics: Dict,
+                                  distribution_preview: Dict,
+                                  vector_mapping: Dict) -> Dict:
+        nodes = []
+        for node in graph.nodes.values():
+            x, y = node.vector_anchor if node.vector_anchor else (None, None)
+            nodes.append({
+                'id': node.id,
+                'type': node.type,
+                'label': node.label,
+                'x': x,
+                'y': y,
+                'lat': y,
+                'lng': x,
+                'trace': node.trace,
+                'properties': node.properties,
+            })
+
+        edges = []
+        for relation in graph.relations:
+            edges.append({
+                'from': relation.source,
+                'to': relation.target,
+                'type': relation.type,
+                'distance_m': relation.properties.get('distance'),
+                'trace': relation.trace,
+            })
+
+        return {
+            'nodes': nodes,
+            'edges': edges,
+            'alignment_diagnostics': alignment_diagnostics,
+            'distribution_preview': distribution_preview,
+            'vector_mapping': vector_mapping,
+        }
     
     # ===== 辅助方法 =====
     
@@ -530,6 +725,28 @@ class SpatialCognition:
     def _calculate_distance(self, p1: Tuple, p2: Tuple) -> float:
         """计算两点距离"""
         return np.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)
+
+    def _estimate_extent(self, anchors: List[Tuple[float, float]]) -> Dict:
+        if not anchors:
+            return {'minx': 0.0, 'miny': 0.0, 'maxx': 0.0, 'maxy': 0.0, 'max_span_m': 0.0}
+        xs = [float(anchor[0]) for anchor in anchors]
+        ys = [float(anchor[1]) for anchor in anchors]
+        return {
+            'minx': min(xs),
+            'miny': min(ys),
+            'maxx': max(xs),
+            'maxy': max(ys),
+            'max_span_m': max(max(xs) - min(xs), max(ys) - min(ys)),
+        }
+
+    def _infer_scale_band(self, max_span_m: float) -> str:
+        if max_span_m <= 250:
+            return 'site'
+        if max_span_m <= 1200:
+            return 'street_block'
+        if max_span_m <= 5000:
+            return 'neighbourhood'
+        return 'district_or_city'
     
     def _determine_relation_type(self, node1: TopologicalNode, 
                                   node2: TopologicalNode, 

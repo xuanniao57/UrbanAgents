@@ -31,6 +31,7 @@ class AgentRole(Enum):
     REPORTER = "reporter"
     SPATIAL_REVIEWER = "spatial_reviewer"
     HUMAN_CHECKPOINT = "human_checkpoint"
+    QUALITY_CONTROLLER = "quality_controller"
 
 
 @dataclass
@@ -128,13 +129,16 @@ class BaseAgent(ABC):
             f"{msg.msg_type}: {list(msg.payload.keys())}"
         )
 
-    async def call_llm(self, prompt: str, **kwargs) -> str:
+    async def call_llm(self, prompt: Any, **kwargs) -> str:
         """调用 LLM 的统一接口"""
         if self.llm_client is None:
             raise RuntimeError(f"{self.role.value} agent: llm_client not configured")
         # 适配不同 LLM 客户端
         if hasattr(self.llm_client, "chat"):
-            return await self.llm_client.chat(prompt, **kwargs)
+            messages = prompt
+            if isinstance(prompt, str):
+                messages = [{"role": "user", "content": prompt}]
+            return await self.llm_client.chat(messages, **kwargs)
         if hasattr(self.llm_client, "generate"):
             return await self.llm_client.generate(prompt, **kwargs)
         raise RuntimeError(f"Unsupported LLM client type: {type(self.llm_client)}")

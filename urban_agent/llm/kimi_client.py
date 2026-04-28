@@ -162,7 +162,7 @@ class KimiClient:
     async def chat(
         self,
         messages: List[Dict[str, str]],
-        temperature: float = 0.7,
+        temperature: float = 1.0,
         max_tokens: int = 2000
     ) -> str:
         """
@@ -177,6 +177,9 @@ class KimiClient:
             回复文本
         """
         try:
+            if self.model == "kimi-k2.5":
+                temperature = 1.0
+
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,

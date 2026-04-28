@@ -22,6 +22,8 @@ from datetime import datetime
 from collections import deque
 from dataclasses import dataclass, field
 
+from .cube_retriever import CubeGraphMemoryBackend, normalize_temporal_context
+
 logger = logging.getLogger(__name__)
 
 
@@ -443,6 +445,7 @@ class MemoryModule:
     - enable_temporal_match   (C3): multi-granularity temporal matching (vs always-True)
     - enable_reflector        (C4): LLM-driven reflection compression
     - enable_pattern_detector (C5): statistical temporal pattern detection
+    - enable_cube_retrieval   (C6): CubeGraph-inspired hierarchical cube retrieval
     """
 
     def __init__(
@@ -454,6 +457,7 @@ class MemoryModule:
         enable_temporal_match: bool = True,
         enable_reflector: bool = True,
         enable_pattern_detector: bool = True,
+        enable_cube_retrieval: bool = False,
     ):
         self.config = config or {}
         self.llm_client = llm_client
@@ -464,6 +468,7 @@ class MemoryModule:
         self.enable_temporal_match = enable_temporal_match
         self.enable_reflector = enable_reflector
         self.enable_pattern_detector = enable_pattern_detector
+        self.enable_cube_retrieval = enable_cube_retrieval
 
         # 记忆存储
         self.working_memory: Dict[str, Any] = {}
@@ -477,7 +482,9 @@ class MemoryModule:
             },
             "semantic": {},
             "reflections": [],
+            "procedural": [],
         }
+        self.feedback_log: List[Dict[str, Any]] = []
 
         # Core memory (persistent, self-edited)
         self.core_memory: Dict[str, str] = {
@@ -492,6 +499,10 @@ class MemoryModule:
         # Components
         self.reflector = MemoryReflector(llm_client=llm_client) if enable_reflector else None
         self.pattern_detector = TemporalPatternDetector() if enable_pattern_detector else None
+        self.cube_retriever = (
+            CubeGraphMemoryBackend(self.config.get("cube_retrieval_config"))
+            if enable_cube_retrieval else None
+        )
 
     async def retrieve(self, query: Dict, query_time: Optional[datetime] = None) -> Dict[str, Any]:
         """检索相关记忆。query_time 可指定查询的虚拟时间（用于测试）。"""
@@ -504,6 +515,7 @@ class MemoryModule:
             "relevant_long_term": {},
             "best_match": None,
             "query_summary": self._summarize_query(query),
+            "retrieval_trace": {"short_term": [], "long_term": []},
         }
         if self.enable_pattern_detector:
             context["temporal_patterns"] = self._get_temporal_patterns_for_query(query)
@@ -517,6 +529,12 @@ class MemoryModule:
                 score = self._relevance_score(memory, query)
             if score > 0.3:
                 scored_short_term.append((score, memory))
+                context["retrieval_trace"]["short_term"].append({
+                    "memory_id": memory.get("id"),
+                    "score": round(score, 4),
+                    "task_type": self._extract_task_type(memory),
+                    "locations": self._extract_location_keys(memory),
+                })
                 # Retrieval strengthening for ACT-R
                 if self.enable_actr_activation:
                     access_list = memory.get("access_timestamps")
@@ -528,6 +546,10 @@ class MemoryModule:
 
         # 从长期记忆中检索
         context["relevant_long_term"] = self._retrieve_from_long_term(query, query_tc, task_type)
+        context["retrieval_trace"]["long_term"] = {
+            key: len(value) for key, value in context["relevant_long_term"].items()
+            if isinstance(value, list)
+        }
         all_matches = context["relevant_short_term"] + self._flatten_long_term_matches(context["relevant_long_term"])
         if all_matches:
             if self.enable_actr_activation:
@@ -546,6 +568,7 @@ class MemoryModule:
     async def store(self, experience: Dict):
         """存储经验到记忆"""
         now = datetime.now()
+        experience.setdefault("id", str(uuid.uuid4()))
 
         # Attach temporal context (C1) — respect pre-existing from seed data
         if self.enable_temporal_context:
@@ -578,10 +601,11 @@ class MemoryModule:
             if await self.reflector.should_reflect(self.short_term_memory):
                 reflections = await self.reflector.reflect(self.short_term_memory)
                 for ref in reflections:
-                    self.long_term_memory["reflections"].append(
-                        ref.__dict__ if hasattr(ref, "__dict__") else ref
-                    )
+                    reflection = ref.__dict__ if hasattr(ref, "__dict__") else ref
+                    self.long_term_memory["reflections"].append(reflection)
+                    self.long_term_memory["procedural"].append(self._reflection_to_procedural_strategy(reflection))
                 self.long_term_memory["reflections"] = self.long_term_memory["reflections"][-50:]
+                self.long_term_memory["procedural"] = self.long_term_memory["procedural"][-50:]
 
         logger.info("Experience stored in memory")
 
@@ -702,6 +726,8 @@ class MemoryModule:
             "temporal": [],
             "semantic": [],
             "reflections": [],
+            "procedural": [],
+            "cube_rag": [],
         }
 
         # 空间检索
@@ -740,7 +766,59 @@ class MemoryModule:
                     if set(query_locations) & set(ref_locations):
                         results["reflections"].append(ref)
 
+        for strategy in self.long_term_memory.get("procedural", [])[-5:]:
+            if not isinstance(strategy, dict):
+                continue
+            strategy_locations = set(strategy.get("trigger_locations", []))
+            strategy_tasks = set(strategy.get("trigger_task_types", []))
+            if (query_locations and set(query_locations) & strategy_locations) or (task_type and task_type in strategy_tasks):
+                results["procedural"].append(strategy)
+
+        if self.enable_cube_retrieval and self.cube_retriever:
+            results["cube_rag"] = self.cube_retriever.search(
+                query,
+                query_tc=query_tc.to_dict() if isinstance(query_tc, TemporalContext) else normalize_temporal_context(query_tc),
+                task_type=task_type,
+            )
+
         return results
+
+    def _reflection_to_procedural_strategy(self, reflection: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "id": f"strategy:{reflection.get('id', str(uuid.uuid4()))}",
+            "source_reflection_id": reflection.get("id"),
+            "summary": reflection.get("summary", ""),
+            "trigger_locations": reflection.get("source_locations", []),
+            "trigger_task_types": reflection.get("source_task_types", []),
+            "reusable_steps": reflection.get("reusable_insights", []),
+            "importance": reflection.get("importance", 0.7),
+            "timestamp": reflection.get("timestamp", datetime.now().isoformat()),
+        }
+
+    def apply_feedback(self, feedback: Dict[str, Any]) -> bool:
+        memory_id = feedback.get("memory_id")
+        if not memory_id:
+            return False
+
+        applied = False
+        for memory in self.short_term_memory:
+            if isinstance(memory, dict) and memory.get("id") == memory_id:
+                memory["importance"] = max(0.0, min(1.0, float(memory.get("importance", 0.5)) + float(feedback.get("importance_delta", 0.0))))
+                memory.setdefault("feedback", []).append(feedback)
+                applied = True
+
+        if applied:
+            record = {**feedback, "timestamp": datetime.now().isoformat()}
+            self.feedback_log.append(record)
+        return applied
+
+    def inspect_state(self) -> Dict[str, Any]:
+        return {
+            "working_memory_size": len(self.working_memory),
+            "short_term_size": len(self.short_term_memory),
+            "feedback_count": len(self.feedback_log),
+            "procedural_strategy_count": len(self.long_term_memory.get("procedural", [])),
+        }
 
     async def _update_long_term(self, experience: Dict):
         """更新长期记忆"""
@@ -809,6 +887,13 @@ class MemoryModule:
 
         if len(self.temporal_index) > 1000:
             self.temporal_index = self.temporal_index[-1000:]
+
+        if self.enable_cube_retrieval and self.cube_retriever:
+            self.cube_retriever.index_entry({
+                "experience": experience,
+                "timestamp": timestamp,
+                "temporal_context": normalize_temporal_context(tc),
+            })
 
         # Pattern detection (C5)
         if self.enable_pattern_detector and self.pattern_detector:
@@ -927,12 +1012,15 @@ class MemoryModule:
             "long_term_temporal": temporal_count,
             "long_term_semantic": len(self.long_term_memory["semantic"]),
             "reflections_count": len(self.long_term_memory.get("reflections", [])),
+            "procedural_strategy_count": len(self.long_term_memory.get("procedural", [])),
             "pattern_count": pattern_count,
+            "cube_retrieval": self.cube_retriever.get_stats() if self.cube_retriever else {},
             "ablation_flags": {
                 "temporal_context": self.enable_temporal_context,
                 "actr_activation": self.enable_actr_activation,
                 "temporal_match": self.enable_temporal_match,
                 "reflector": self.enable_reflector,
                 "pattern_detector": self.enable_pattern_detector,
+                "cube_retrieval": self.enable_cube_retrieval,
             },
         }
