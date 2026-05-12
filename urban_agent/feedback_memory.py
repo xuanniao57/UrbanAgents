@@ -69,7 +69,7 @@ class FeedbackMemory:
         if lessons is not None:
             self.lessons = lessons
         else:
-            self.lessons = self._load_lessons(("policy", "workflow")) or _default_lessons()
+            self.lessons = self._load_lessons(("policy", "workflow"))
 
     def _load_lessons(self, memory_types: tuple[str, ...]) -> list[FeedbackLesson]:
         lessons: list[FeedbackLesson] = []
@@ -84,6 +84,7 @@ class FeedbackMemory:
         return {
             "source": "urbanagent_feedback_memory",
             "memory_root": str(self.memory_store.root),
+            "memory_roots": [str(root) for root in getattr(self.memory_store, "roots", [self.memory_store.root])],
             "selected_count": len(selected_lessons),
             "lessons": [lesson.to_dict() for lesson in selected_lessons],
             "memory_pack": memory_pack,
@@ -146,31 +147,10 @@ def select_feedback_lessons(task: dict[str, Any] | str, *, limit: int = 8) -> di
 def _experience_triggers(task: dict[str, Any], review: dict[str, Any]) -> list[str]:
     text = json.dumps({"task": task, "review": review}, ensure_ascii=False, default=str).lower()
     triggers = []
-    for token in ("aoi", "buffer", "context", "osm", "gis", "qgis", "pre-clipped", "预裁剪"):
+    for token in ("aoi", "buffer", "context", "osm", "gis", "pre-clipped", "预裁剪"):
         if token.lower() in text:
             triggers.append(token)
     return triggers or ["review", "correction"]
 
 
-def _default_lessons() -> list[FeedbackLesson]:
-    """Fallback only used if the file-backed default memory tree is unavailable."""
-    return [
-        FeedbackLesson(
-            lesson_id="aoi_centered_context_buffer",
-            summary=(
-                "For spatial analysis, distinguish the authoritative AOI from its context buffer. "
-                "Use an AOI-centered rectangular context buffer with width and height 3x the AOI bounding box, "
-                "giving about 9x AOI bounding-box area."
-            ),
-            triggers=("aoi", "boundary", "buffer", "context", "缓冲区", "研究区", "9倍", "3倍", "道路", "建筑", "poi"),
-            validation_checks=(
-                "Derive the context buffer from the AOI center; width_factor=3 and height_factor=3 unless specified otherwise.",
-                "Keep the AOI centered in the context buffer and report the buffer/AOI bounding-box area ratio.",
-            ),
-            expected_outputs=("context_buffer_layer", "context_layer_stack", "aoi_analysis_layers", "buffer_alignment_diagnostics"),
-            checks=(
-                {"check_id": "context_buffer_centered", "target": "context_buffer", "metric_path": "context_buffer.centered_on_aoi", "operator": "is_true", "score_penalty": 0.12},
-            ),
-        )
-    ]
 

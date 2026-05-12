@@ -1,0 +1,66 @@
+{
+  "location": "宁波老外滩",
+  "case_study": "宁波老外滩历史街区步行可达性与保护压力诊断",
+  "model": "Heritage Walkability Pressure Assessment",
+  "operators": [
+    {
+      "operator": "connectivity",
+      "metric": "road_density_km_per_km2",
+      "value": 32.9226,
+      "unit": "km/km2",
+      "method": "road length normalized by AOI area",
+      "confidence": 0.84,
+      "applicability": "computed"
+    },
+    {
+      "operator": "accessibility",
+      "metric": "road_length_m",
+      "value": 2138.5219,
+      "unit": "m",
+      "method": "OSM roads clipped to AOI",
+      "confidence": 0.82,
+      "applicability": "computed"
+    },
+    {
+      "operator": "density",
+      "metric": "building_coverage_ratio",
+      "value": 0.4721,
+      "unit": "ratio",
+      "method": "building footprint area / AOI area",
+      "confidence": 0.8,
+      "applicability": "computed"
+    },
+    {
+      "operator": "density",
+      "metric": "building_count_per_ha",
+      "value": 9.237,
+      "unit": "count/ha",
+      "method": "building count normalized by AOI hectares",
+      "confidence": 0.8,
+      "applicability": "computed"
+    },
+    {
+      "operator": "walkability",
+      "metric": "heritage_candidate_count",
+      "value": 11,
+      "unit": "count",
+      "method": "candidate evidence table",
+      "confidence": 0.58,
+      "applicability": "needs verification"
+    },
+    {
+      "operator": "activity",
+      "metric": "nightlight_mean_signal",
+      "value": 255.0,
+      "unit": "0-255",
+      "method": "VIIRS context raster sample",
+      "confidence": 0.6,
+      "applicability": "coarse context"
+    }
+  ],
+  "key_findings": [
+    "The AOI is compact (about 6.50 ha) but contains 60 building footprints and 2.14 km of road centerlines.",
+    "Road density is high, which supports walkability diagnosis but requires field verification for pedestrian permeability.",
+    "Protected-building candidates are useful evidence but remain below policy-grade confidence until matched with official registries."
+  ]
+}

@@ -21,9 +21,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from urban_agent.core import CorrectionModuleRegistry
 from urban_agent.mcp_tools import get_mcp_tools
-from urban_agent.qgis_bridge import QgisBridgeClient, qgis_bridge_plugin_stub
-from urban_agent.runtime_observatory import ObservableUrbanRunner, RunArtifactStore, ningbo_old_bund_case, probe_qgis, sync_case_to_qgis
-from urban_agent.visualization import SpatialVisualizer
+from plugins.qgis import QgisBridgeClient, qgis_bridge_plugin_stub
+from case_studies.runtime_observatory import ObservableUrbanRunner, RunArtifactStore, ningbo_old_bund_case, probe_qgis, sync_case_to_qgis
+from legacy.urban_agent_legacy.visualization import SpatialVisualizer
 
 app = FastAPI(title="UrbanAgent Interactive Interface", version="0.1.0")
 correction_registry = CorrectionModuleRegistry()

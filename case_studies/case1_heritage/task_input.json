@@ -1,0 +1,42 @@
+{
+  "case_id": "case1_heritage_x_indicators",
+  "title": "Case Study 1: Heritage District Built-Environment X-Indicator Construction",
+  "stage": "single_district_multi_indicator",
+  "workflow_profile": "adaptive_urban_analysis",
+  "problem_context": "Paper9 studies how built-environment indicators X of historical districts influence tourists' perceived historical-style intensity Y. This case builds multiple X indicators for 宁波老外滩 (Ningbo Old Bund) after verifying data feasibility.",
+  "data_resources": {
+    "aoi_boundaries": {
+      "name": "Historical district AOI boundaries",
+      "type": "GeoJSON Polygon",
+      "status": "available",
+      "path": "paper9_heritageIntelligence/data/district_boundaries_v2/district_boundaries/009_宁波_宁波老外滩_boundary.geojson",
+      "description": "AOI polygon for Ningbo Old Bund heritage district",
+      "crs": "WGS84 (EPSG:4326)",
+      "uncertainty": "Boundary verified against official heritage protection zoning"
+    },
+    "sinobf1_building_functions": {
+      "name": "SinoBF-1 building function predictions",
+      "type": "CSV table",
+      "status": "available",
+      "path": "paper9_heritageIntelligence/data/sinobf1/",
+      "description": "ML-predicted building-level function labels (commercial, residential, heritage, ...)",
+      "uncertainty": "ML prediction accuracy; may miss small-scale heritage structures"
+    },
+    "osm_road_building_cache": {
+      "name": "OSM road network and building footprint cache",
+      "type": "GPKG / GeoJSON",
+      "status": "available",
+      "path": "paper9_heritageIntelligence/heritage_district_batch/",
+      "description": "Pre-fetched OSM roads, buildings, POIs within AOI buffer",
+      "uncertainty": "OSM freshness may vary; cache may predate recent OSM edits"
+    }
+  },
+  "evaluation_focus": [
+    "data feasibility classification (which data are actually usable)",
+    "method design without pre-specified formulas",
+    "indicator computability triage: directly computable / proxy only / not computable",
+    "reviewable intermediate outputs and correction hooks",
+    "evidence manifest completeness (spatial / temporal / population / governance)"
+  ],
+  "prompt_file": "prompts/case1_task.md"
+}

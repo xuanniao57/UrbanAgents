@@ -69,11 +69,19 @@ class FileMemoryStore:
         "policy": "policy_memory",
         "workflow": "workflow_memory",
         "experience": "experience_memory",
+        "knowledge": "knowledge_memory",
     }
 
     def __init__(self, root: str | Path | None = None):
         env_root = os.getenv("URBAN_AGENT_MEMORY_ROOT")
         self.root = Path(root or env_root or DEFAULT_MEMORY_ROOT)
+        self.roots = [self.root]
+        for raw_root in os.getenv("URBAN_AGENT_EXTRA_MEMORY_ROOTS", "").split(os.pathsep):
+            if not raw_root.strip():
+                continue
+            extra_root = Path(raw_root.strip())
+            if extra_root not in self.roots:
+                self.roots.append(extra_root)
 
     @classmethod
     def default(cls) -> "FileMemoryStore":
@@ -84,13 +92,14 @@ class FileMemoryStore:
         loaded: list[MemoryRecord] = []
         for item_type in types:
             rel = self.MEMORY_DIRS.get(str(item_type), str(item_type))
-            folder = self.root / rel
-            if not folder.exists():
-                continue
-            for path in sorted(folder.rglob("*.json")):
-                loaded.extend(self._read_records(path, memory_type=str(item_type)))
-            for path in sorted(folder.rglob("*.jsonl")):
-                loaded.extend(self._read_jsonl_records(path, memory_type=str(item_type)))
+            for root in self.roots:
+                folder = root / rel
+                if not folder.exists():
+                    continue
+                for path in sorted(folder.rglob("*.json")):
+                    loaded.extend(self._read_records(path, memory_type=str(item_type)))
+                for path in sorted(folder.rglob("*.jsonl")):
+                    loaded.extend(self._read_jsonl_records(path, memory_type=str(item_type)))
         return loaded
 
     def select(self, task: dict[str, Any] | str, *, memory_types: Iterable[str] | None = None, limit: int = 8) -> dict[str, Any]:
@@ -114,6 +123,7 @@ class FileMemoryStore:
         return {
             "source": "urbanagent_file_memory",
             "memory_root": str(self.root),
+            "memory_roots": [str(root) for root in self.roots],
             "selected_count": len(selected),
             "records": [record.to_dict() for record in selected],
         }

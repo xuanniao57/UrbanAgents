@@ -1,0 +1,56 @@
+{
+  "workflow_id": "case1_heritage_prompt_to_data_workflow",
+  "summary": "Case1 heritage-district X-indicator workflow memory: load AOI, function-source, OSM/cache, and street-view resources from case memory before computing indicators.",
+  "scope": "case_study.case1_heritage",
+  "triggers": [
+    "case1",
+    "Case Study 1",
+    "heritage district",
+    "historical district",
+    "宁波",
+    "老外滩",
+    "Ningbo Old Bund",
+    "Paper9",
+    "SinoBF"
+  ],
+  "data_resources": {
+    "aoi_boundary": {
+      "role": "boundary",
+      "path": "paper9_heritageIntelligence/data/district_boundaries_v2/district_boundaries/009_宁波_宁波老外滩_boundary.geojson",
+      "format": "GeoJSON Polygon",
+      "required": true
+    },
+    "function_root": {
+      "role": "function_root",
+      "path": "paper9_heritageIntelligence/data/sinobf1/",
+      "format": "building/function prediction resources",
+      "required": true,
+      "use_as_proxy": true
+    },
+    "osm_cache_root": {
+      "role": "osm_cache",
+      "path": "paper9_heritageIntelligence/heritage_district_batch/",
+      "format": "cached roads/buildings/POI layers",
+      "required": true
+    },
+    "streetview_root": {
+      "role": "streetview_dir",
+      "path": "D:/街景/streetview_images_batch/宁波/009_宁波老外滩",
+      "format": "local street-view image batch",
+      "required": false
+    }
+  },
+  "workflow_steps": [
+    "Build dataset cards and grounding policy from declared resources.",
+    "Discover AOI, OSM/cache, function-source, and street-view paths from memory and prompt payload.",
+    "Run source extent diagnostics before indicator computation.",
+    "Classify indicators as direct, proxy-only, or unsupported.",
+    "Export metric CSV/GPKG/chart artifacts and include correction hooks.",
+    "Store reviewer feedback as experience memory for the next run."
+  ],
+  "guardrails": [
+    "Do not jump to Y modeling in this case; only construct and audit X indicators.",
+    "Report proxy-only status for function-source and street-view-derived indicators.",
+    "If road/building layers are AOI-clipped or mismatched, queue an OSM/context refetch rather than silently accepting them."
+  ]
+}

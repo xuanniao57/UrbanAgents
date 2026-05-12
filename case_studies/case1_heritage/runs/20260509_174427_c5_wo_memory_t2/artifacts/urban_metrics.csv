@@ -1,0 +1,45 @@
+﻿group,metric,value,unit,method
+built_form,source_building_count,661.0,count,source OSM building footprints before AOI clipping
+built_form,aoi_intersecting_building_count,145.0,count,OSM buildings intersecting AOI boundary
+built_form,building_footprint_area_m2,47319.790765617596,m2,projected footprint area clipped to AOI boundary
+built_form,building_coverage_ratio,0.28994497175241146,ratio,footprint area / AOI area
+built_form,mean_footprint_area_m2,326.3433845904662,m2/building,projected footprint area clipped to AOI boundary
+built_form,height_proxy_coverage_ratio,0.041379310344827586,ratio,height or building:levels * floor_height
+built_form,mean_height_proxy_m,30.400000000000002,m,height when present; otherwise building:levels * floor_height
+built_form,median_height_proxy_m,25.6,m,height when present; otherwise building:levels * floor_height
+built_form,street_width_proxy_m,4.259821985164217,m,2 * median positive road-centerline to nearest building distance
+built_form,dh_ratio_proxy,0.14012572319619135,ratio,street_width_proxy_m / mean_height_proxy_m
+network,road_length_m,5427.4800798390625,m,projected road centerline length
+network,road_density_km_per_km2,33.2560760090921,km/km2,road length / AOI area
+function_mix,function_category_count,6.0,count,count of distinct function labels
+function_mix,function_entropy,0.7535037331212702,nat,Shannon entropy over function categories
+function_mix,function_entropy_normalized,0.4205384406010159,0-1,entropy / log(category_count)
+function_mix,dominant_function_share,0.7388059701492538,ratio,dominant function: Commercial
+function_mix,commercial_share,0.7388059701492538,ratio,share of commercial/retail function labels
+streetview,streetview_sampled_image_count,60.0,count,sampled decoded street-view images
+streetview,streetview_style_consistency,0.8692429661750793,0-1,mean pairwise cosine similarity of RGB histograms
+streetview,traditional_palette_match_score,0.9640781951840982,0-1,nearest palette color: blue_gray
+streetview,traditional_palette_delta_e,3.5921804815901743,deltaE,CIELAB distance to nearest traditional palette color
+streetview,mean_rgb_std,18.669797897338867,RGB std,dispersion of image-level mean RGB values
+built_form,source_building_count,661.0,count,source OSM building footprints before AOI clipping
+built_form,aoi_intersecting_building_count,145.0,count,OSM buildings intersecting AOI boundary
+built_form,building_footprint_area_m2,47319.790765617596,m2,projected footprint area clipped to AOI boundary
+built_form,building_coverage_ratio,0.28994497175241146,ratio,footprint area / AOI area
+built_form,mean_footprint_area_m2,326.3433845904662,m2/building,projected footprint area clipped to AOI boundary
+built_form,height_proxy_coverage_ratio,0.041379310344827586,ratio,height or building:levels * floor_height
+built_form,mean_height_proxy_m,30.400000000000002,m,height when present; otherwise building:levels * floor_height
+built_form,median_height_proxy_m,25.6,m,height when present; otherwise building:levels * floor_height
+built_form,street_width_proxy_m,4.259821985164217,m,2 * median positive road-centerline to nearest building distance
+built_form,dh_ratio_proxy,0.14012572319619135,ratio,street_width_proxy_m / mean_height_proxy_m
+network,road_length_m,5427.4800798390625,m,projected road centerline length
+network,road_density_km_per_km2,33.2560760090921,km/km2,road length / AOI area
+function_mix,function_category_count,6.0,count,count of distinct function labels
+function_mix,function_entropy,0.7535037331212702,nat,Shannon entropy over function categories
+function_mix,function_entropy_normalized,0.4205384406010159,0-1,entropy / log(category_count)
+function_mix,dominant_function_share,0.7388059701492538,ratio,dominant function: Commercial
+function_mix,commercial_share,0.7388059701492538,ratio,share of commercial/retail function labels
+streetview,streetview_sampled_image_count,60.0,count,sampled decoded street-view images
+streetview,streetview_style_consistency,0.8692429661750793,0-1,mean pairwise cosine similarity of RGB histograms
+streetview,traditional_palette_match_score,0.9640781951840982,0-1,nearest palette color: blue_gray
+streetview,traditional_palette_delta_e,3.5921804815901743,deltaE,CIELAB distance to nearest traditional palette color
+streetview,mean_rgb_std,18.669797897338867,RGB std,dispersion of image-level mean RGB values

@@ -7,10 +7,10 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from urban_agent import CorrectionModuleRegistry
-from urban_agent.cognition import SpatialCognition
-from urban_agent.connectors import BaseConnector, ConnectorRegistry
 from urban_agent.core import MemoryModule
-from urban_agent.visualization import SpatialVisualizer
+from legacy.urban_agent_legacy.cognition import SpatialCognition
+from legacy.urban_agent_legacy.visualization import SpatialVisualizer
+from plugins.rhino.connectors import BaseConnector, ConnectorRegistry
 
 
 class _Context:

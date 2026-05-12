@@ -14,7 +14,7 @@ from pathlib import Path
 class StreetViewProcessor:
     """Processor for street view images"""
     
-    # Urban perception attributes from CityBench
+    # Generic urban perception attributes
     PERCEPTION_ATTRIBUTES = [
         "beautiful", "safe", "wealthy", "lively", "boring", "depressing"
     ]

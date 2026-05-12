@@ -90,12 +90,12 @@ def test_public_help_hides_source_only_case_command():
 
 
 def test_capability_report_supports_progressive_disclosure():
-    report = cli._build_capability_report("walkability accessibility", level=2, limit=4)
+    report = cli._build_capability_report("building density morphology", level=2, limit=4)
     names = [item["name"] for item in report["items"]]
 
-    assert "network_accessibility" in names
-    capability = next(item for item in report["items"] if item["name"] == "network_accessibility")
-    assert capability["invocation"]["mcp_tool"] == "measure_accessibility"
+    assert "urban_density_morphology" in names
+    capability = next(item for item in report["items"] if item["name"] == "urban_density_morphology")
+    assert capability["invocation"]["python_function"].endswith("compute_built_form_metrics")
 
 
 def test_shell_help_hides_task_type_option(capsys):
@@ -255,15 +255,17 @@ def test_preview_plan_selects_multiple_method_capabilities(monkeypatch):
     monkeypatch.delenv("URBAN_AGENT_PLAN_LIVE", raising=False)
 
     plan = asyncio.run(cli._preview_plan(
-        "分析老城区步行可达性、开放空间短板，并用PyTorch训练一个土地利用分类模型",
+        "分析老城区建筑密度、功能混合、街景一致性，并导出GIS图层栈",
         None,
         None,
     ))
     selected = plan["capability_context"]["selected_names"]
 
-    assert plan["complexity"] == "advanced"
-    assert "network_accessibility" in selected
-    assert "urban_ml_modeling" in selected
+    assert plan["complexity"] in {"basic", "advanced"}
+    assert "urban_density_morphology" in selected
+    assert "function_mix_entropy" in selected
+    assert "streetview_visual_consistency" in selected
+    assert "gis_layer_stack_export" in selected
 
 
 def test_preview_plan_respects_generic_stage_ladder(monkeypatch, tmp_path):

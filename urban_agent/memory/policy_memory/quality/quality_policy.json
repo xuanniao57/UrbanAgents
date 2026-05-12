@@ -1,0 +1,20 @@
+{
+  "policy_id": "quality_confidence_policy",
+  "summary": "QualityController confidence scoring policy loaded by the kernel at runtime.",
+  "triggers": [
+    "quality",
+    "confidence",
+    "qc",
+    "quality controller"
+  ],
+  "scope": "quality_controller",
+  "weights": {
+    "semantic_relevance": 0.35,
+    "historical_reliability": 0.25,
+    "metadata_completeness": 0.25,
+    "context_alignment": 0.15
+  },
+  "confidence_threshold": 0.75,
+  "cli_issue_penalty": 0.15,
+  "max_retry": 2
+}

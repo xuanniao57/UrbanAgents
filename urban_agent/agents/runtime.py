@@ -1,9 +1,9 @@
-"""Hermes-inspired runtime ledger for UrbanAgent execution.
+"""Runtime ledger for UrbanAgent execution.
 
 The ledger is intentionally lightweight: it does not replace the existing
 Planner/Manager/Worker architecture. It adds the operational substrate that
-made Hermes useful in long-running real tasks: an explicit todo list,
-checkpoint decisions, tool-surface snapshots, and auditable runtime events.
+keeps long-running work auditable: an explicit todo list, checkpoint decisions,
+tool-surface snapshots, and runtime events.
 """
 
 from __future__ import annotations
@@ -69,11 +69,7 @@ class RuntimeEventRecord:
 
 
 class RuntimeLedger:
-    """Per-run operational ledger for ManagerAgent.
-
-    Mirrors Hermes's practical execution substrate without importing Hermes or
-    changing UrbanAgent's public planning model.
-    """
+    """Per-run operational ledger for ManagerAgent."""
 
     def __init__(
         self,

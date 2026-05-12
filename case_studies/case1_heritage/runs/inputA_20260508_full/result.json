@@ -1,0 +1,1553 @@
+{
+  "trace_id": "trace_urban_analysis_20260508_141152_339606",
+  "status": "success",
+  "plan": {
+    "plan_id": "plan_20260508_141257",
+    "complexity": "basic",
+    "workflow_profile": "adaptive_urban_analysis",
+    "capability_context": {
+      "disclosure_policy": "progressive",
+      "level0_index_size": 9,
+      "selected_names": [
+        "osm_context_acquisition",
+        "spatial_overlay_export",
+        "network_accessibility",
+        "network_connectivity_analysis",
+        "urban_density_morphology"
+      ],
+      "selected_level0": [
+        {
+          "name": "osm_context_acquisition",
+          "title": "OSM Context Acquisition",
+          "family": "data",
+          "type": "geospatial_data_method",
+          "summary": "Acquire roads, buildings, POIs, and land-use context for a study area.",
+          "tags": [
+            "osm",
+            "openstreetmap",
+            "roads",
+            "buildings",
+            "poi",
+            "data",
+            "context",
+            "perception"
+          ]
+        },
+        {
+          "name": "spatial_overlay_export",
+          "title": "Spatial Overlay and GeoJSON Export",
+          "family": "action",
+          "type": "gis_interchange_method",
+          "summary": "Package spatial features into interoperable GeoJSON outputs for GIS and web tools.",
+          "tags": [
+            "geojson",
+            "overlay",
+            "export",
+            "interoperability",
+            "gis",
+            "qgis",
+            "arcgis"
+          ]
+        },
+        {
+          "name": "network_accessibility",
+          "title": "Network Accessibility",
+          "family": "method",
+          "type": "accessibility_method",
+          "summary": "Compute distance or travel-time accessibility from origins to destinations.",
+          "tags": [
+            "accessibility",
+            "walkability",
+            "amenity",
+            "service",
+            "distance",
+            "equity",
+            "network"
+          ]
+        },
+        {
+          "name": "network_connectivity_analysis",
+          "title": "Network Connectivity Analysis",
+          "family": "method",
+          "type": "spatial_network_method",
+          "summary": "Measure graph connectivity, node degree, network density, and routing readiness.",
+          "tags": [
+            "connectivity",
+            "network",
+            "graph",
+            "streets",
+            "walkability",
+            "routing",
+            "accessibility"
+          ]
+        },
+        {
+          "name": "urban_density_morphology",
+          "title": "Urban Density and Morphology Metrics",
+          "family": "method",
+          "type": "urban_morphology_method",
+          "summary": "Compute grid density and simple built-form metrics from building geometries.",
+          "tags": [
+            "density",
+            "morphology",
+            "building",
+            "grid",
+            "urban fabric",
+            "form"
+          ]
+        }
+      ],
+      "level1_cards": [
+        {
+          "name": "osm_context_acquisition",
+          "title": "OSM Context Acquisition",
+          "family": "data",
+          "type": "geospatial_data_method",
+          "summary": "Acquire roads, buildings, POIs, and land-use context for a study area.",
+          "tags": [
+            "osm",
+            "openstreetmap",
+            "roads",
+            "buildings",
+            "poi",
+            "data",
+            "context",
+            "perception"
+          ],
+          "inputs": [
+            "location",
+            "radius",
+            "data_types"
+          ],
+          "outputs": [
+            "road_graph",
+            "buildings",
+            "pois",
+            "landuse"
+          ],
+          "backend_names": [
+            "osmnx",
+            "mcp_fetch_osm_data",
+            "qgis_processing"
+          ],
+          "constraints": [
+            "Requires a resolvable place name or bounding geometry.",
+            "Large regions should be tiled."
+          ],
+          "disclosure_hint": "level_1_card"
+        },
+        {
+          "name": "spatial_overlay_export",
+          "title": "Spatial Overlay and GeoJSON Export",
+          "family": "action",
+          "type": "gis_interchange_method",
+          "summary": "Package spatial features into interoperable GeoJSON outputs for GIS and web tools.",
+          "tags": [
+            "geojson",
+            "overlay",
+            "export",
+            "interoperability",
+            "gis",
+            "qgis",
+            "arcgis"
+          ],
+          "inputs": [
+            "features",
+            "crs"
+          ],
+          "outputs": [
+            "geojson",
+            "feature_count"
+          ],
+          "backend_names": [
+            "mcp_export_geojson",
+            "geopandas",
+            "arcgis_feature_layer"
+          ],
+          "constraints": [],
+          "disclosure_hint": "level_1_card"
+        },
+        {
+          "name": "network_accessibility",
+          "title": "Network Accessibility",
+          "family": "method",
+          "type": "accessibility_method",
+          "summary": "Compute distance or travel-time accessibility from origins to destinations.",
+          "tags": [
+            "accessibility",
+            "walkability",
+            "amenity",
+            "service",
+            "distance",
+            "equity",
+            "network"
+          ],
+          "inputs": [
+            "origins/buildings",
+            "target_points",
+            "network_or_distance_model"
+          ],
+          "outputs": [
+            "average_distance",
+            "median_distance",
+            "coverage_ratio",
+            "isochrone_like_summary"
+          ],
+          "backend_names": [
+            "geopandas_shapely",
+            "mcp_measure_accessibility",
+            "qgis_service_area"
+          ],
+          "constraints": [
+            "Euclidean fallback should be labeled separately from network accessibility."
+          ],
+          "disclosure_hint": "level_1_card"
+        },
+        {
+          "name": "network_connectivity_analysis",
+          "title": "Network Connectivity Analysis",
+          "family": "method",
+          "type": "spatial_network_method",
+          "summary": "Measure graph connectivity, node degree, network density, and routing readiness.",
+          "tags": [
+            "connectivity",
+            "network",
+            "graph",
+            "streets",
+            "walkability",
+            "routing",
+            "accessibility"
+          ],
+          "inputs": [
+            "road_graph"
+          ],
+          "outputs": [
+            "average_degree",
+            "node_count",
+            "edge_count",
+            "density"
+          ],
+          "backend_names": [
+            "networkx",
+            "mcp_analyze_connectivity",
+            "arcgis_network_analyst"
+          ],
+          "constraints": [
+            "Input graph must be routable and projected where metric distances are used."
+          ],
+          "disclosure_hint": "level_1_card"
+        },
+        {
+          "name": "urban_density_morphology",
+          "title": "Urban Density and Morphology Metrics",
+          "family": "method",
+          "type": "urban_morphology_method",
+          "summary": "Compute grid density and simple built-form metrics from building geometries.",
+          "tags": [
+            "density",
+            "morphology",
+            "building",
+            "grid",
+            "urban fabric",
+            "form"
+          ],
+          "inputs": [
+            "buildings",
+            "grid_size"
+          ],
+          "outputs": [
+            "density_grid",
+            "mean_density",
+            "max_density",
+            "uniformity"
+          ],
+          "backend_names": [
+            "geopandas_numpy",
+            "mcp_calculate_density",
+            "grasshopper_metrics"
+          ],
+          "constraints": [
+            "Requires projected CRS for area and grid-size metrics."
+          ],
+          "disclosure_hint": "level_1_card"
+        }
+      ]
+    },
+    "feedback_context": {
+      "source": "urbanagent_feedback_memory",
+      "selected_count": 1,
+      "lessons": [
+        {
+          "lesson_id": "source_authority_before_cache",
+          "summary": "When a task provides authoritative spatial data and derived/cache data, identify the authority first, treat cache layers as secondary evidence, and do not let cache AOIs silently define the analysis scope.",
+          "triggers": [
+            "aoi",
+            "boundary",
+            "boundaries",
+            "geojson",
+            "cache",
+            "缓存",
+            "边界",
+            "图层",
+            "数据源"
+          ],
+          "validation_checks": [
+            "Record which source is authoritative for the analysis geometry.",
+            "Compare cache geometry with the authoritative geometry before using cache-derived metrics.",
+            "Flag missing, mismatched, or low-overlap cache layers instead of treating them as valid evidence."
+          ],
+          "expected_outputs": [
+            "data_authority_note",
+            "source_alignment_checks",
+            "mismatch_warnings"
+          ]
+        }
+      ]
+    },
+    "subtasks": [
+      {
+        "subtask_id": "plan_20260508_141257_st0",
+        "objective": "Collect task-relevant city data and spatial context",
+        "assigned_role": "perception",
+        "input_data": {
+          "question": "分析上海南京路步行街历史文化街区的\"风貌要素协调度\"。可用数据：街景 D:\\街景\\streetview_images_batch\\上海\\002_南京路步行街\\（154点100%完整），AOI paper9_heritageIntelligence/data/district_boundaries_v2/district_boundaries/002_上海_南京路步行街_boundary.geojson（0.52km2），OSM路网 paper9_heritageIntelligence/heritage_district_batch/districts/002_上海_南京路步行街/osm_roads_aoi.geojson（612段），OSM建筑 paper9_heritageIntelligence/heritage_district_batch/districts/002_上海_南京路步行街/osm_buildings_aoi.geojson（661栋），SinoBF-1 paper9_heritageIntelligence/data/sinobf1/。请：1.验收数据 2.自主提出2-4个X指标含定义/数据/方法 3.分类可直接计算/仅可代理/暂不可计算 4.标记缺失数据和需人工校验点。",
+          "memory_context": {},
+          "capability_context": {
+            "disclosure_policy": "progressive",
+            "level0_index_size": 9,
+            "selected_names": [
+              "osm_context_acquisition",
+              "spatial_overlay_export",
+              "network_accessibility",
+              "network_connectivity_analysis",
+              "urban_density_morphology"
+            ],
+            "selected_level0": [
+              {
+                "name": "osm_context_acquisition",
+                "title": "OSM Context Acquisition",
+                "family": "data",
+                "type": "geospatial_data_method",
+                "summary": "Acquire roads, buildings, POIs, and land-use context for a study area.",
+                "tags": [
+                  "osm",
+                  "openstreetmap",
+                  "roads",
+                  "buildings",
+                  "poi",
+                  "data",
+                  "context",
+                  "perception"
+                ]
+              },
+              {
+                "name": "spatial_overlay_export",
+                "title": "Spatial Overlay and GeoJSON Export",
+                "family": "action",
+                "type": "gis_interchange_method",
+                "summary": "Package spatial features into interoperable GeoJSON outputs for GIS and web tools.",
+                "tags": [
+                  "geojson",
+                  "overlay",
+                  "export",
+                  "interoperability",
+                  "gis",
+                  "qgis",
+                  "arcgis"
+                ]
+              },
+              {
+                "name": "network_accessibility",
+                "title": "Network Accessibility",
+                "family": "method",
+                "type": "accessibility_method",
+                "summary": "Compute distance or travel-time accessibility from origins to destinations.",
+                "tags": [
+                  "accessibility",
+                  "walkability",
+                  "amenity",
+                  "service",
+                  "distance",
+                  "equity",
+                  "network"
+                ]
+              },
+              {
+                "name": "network_connectivity_analysis",
+                "title": "Network Connectivity Analysis",
+                "family": "method",
+                "type": "spatial_network_method",
+                "summary": "Measure graph connectivity, node degree, network density, and routing readiness.",
+                "tags": [
+                  "connectivity",
+                  "network",
+                  "graph",
+                  "streets",
+                  "walkability",
+                  "routing",
+                  "accessibility"
+                ]
+              },
+              {
+                "name": "urban_density_morphology",
+                "title": "Urban Density and Morphology Metrics",
+                "family": "method",
+                "type": "urban_morphology_method",
+                "summary": "Compute grid density and simple built-form metrics from building geometries.",
+                "tags": [
+                  "density",
+                  "morphology",
+                  "building",
+                  "grid",
+                  "urban fabric",
+                  "form"
+                ]
+              }
+            ],
+            "level1_cards": [
+              {
+                "name": "osm_context_acquisition",
+                "title": "OSM Context Acquisition",
+                "family": "data",
+                "type": "geospatial_data_method",
+                "summary": "Acquire roads, buildings, POIs, and land-use context for a study area.",
+                "tags": [
+                  "osm",
+                  "openstreetmap",
+                  "roads",
+                  "buildings",
+                  "poi",
+                  "data",
+                  "context",
+                  "perception"
+                ],
+                "inputs": [
+                  "location",
+                  "radius",
+                  "data_types"
+                ],
+                "outputs": [
+                  "road_graph",
+                  "buildings",
+                  "pois",
+                  "landuse"
+                ],
+                "backend_names": [
+                  "osmnx",
+                  "mcp_fetch_osm_data",
+                  "qgis_processing"
+                ],
+                "constraints": [
+                  "Requires a resolvable place name or bounding geometry.",
+                  "Large regions should be tiled."
+                ],
+                "disclosure_hint": "level_1_card"
+              },
+              {
+                "name": "spatial_overlay_export",
+                "title": "Spatial Overlay and GeoJSON Export",
+                "family": "action",
+                "type": "gis_interchange_method",
+                "summary": "Package spatial features into interoperable GeoJSON outputs for GIS and web tools.",
+                "tags": [
+                  "geojson",
+                  "overlay",
+                  "export",
+                  "interoperability",
+                  "gis",
+                  "qgis",
+                  "arcgis"
+                ],
+                "inputs": [
+                  "features",
+                  "crs"
+                ],
+                "outputs": [
+                  "geojson",
+                  "feature_count"
+                ],
+                "backend_names": [
+                  "mcp_export_geojson",
+                  "geopandas",
+                  "arcgis_feature_layer"
+                ],
+                "constraints": [],
+                "disclosure_hint": "level_1_card"
+              },
+              {
+                "name": "network_accessibility",
+                "title": "Network Accessibility",
+                "family": "method",
+                "type": "accessibility_method",
+                "summary": "Compute distance or travel-time accessibility from origins to destinations.",
+                "tags": [
+                  "accessibility",
+                  "walkability",
+                  "amenity",
+                  "service",
+                  "distance",
+                  "equity",
+                  "network"
+                ],
+                "inputs": [
+                  "origins/buildings",
+                  "target_points",
+                  "network_or_distance_model"
+                ],
+                "outputs": [
+                  "average_distance",
+                  "median_distance",
+                  "coverage_ratio",
+                  "isochrone_like_summary"
+                ],
+                "backend_names": [
+                  "geopandas_shapely",
+                  "mcp_measure_accessibility",
+                  "qgis_service_area"
+                ],
+                "constraints": [
+                  "Euclidean fallback should be labeled separately from network accessibility."
+                ],
+                "disclosure_hint": "level_1_card"
+              },
+              {
+                "name": "network_connectivity_analysis",
+                "title": "Network Connectivity Analysis",
+                "family": "method",
+                "type": "spatial_network_method",
+                "summary": "Measure graph connectivity, node degree, network density, and routing readiness.",
+                "tags": [
+                  "connectivity",
+                  "network",
+                  "graph",
+                  "streets",
+                  "walkability",
+                  "routing",
+                  "accessibility"
+                ],
+                "inputs": [
+                  "road_graph"
+                ],
+                "outputs": [
+                  "average_degree",
+                  "node_count",
+                  "edge_count",
+                  "density"
+                ],
+                "backend_names": [
+                  "networkx",
+                  "mcp_analyze_connectivity",
+                  "arcgis_network_analyst"
+                ],
+                "constraints": [
+                  "Input graph must be routable and projected where metric distances are used."
+                ],
+                "disclosure_hint": "level_1_card"
+              },
+              {
+                "name": "urban_density_morphology",
+                "title": "Urban Density and Morphology Metrics",
+                "family": "method",
+                "type": "urban_morphology_method",
+                "summary": "Compute grid density and simple built-form metrics from building geometries.",
+                "tags": [
+                  "density",
+                  "morphology",
+                  "building",
+                  "grid",
+                  "urban fabric",
+                  "form"
+                ],
+                "inputs": [
+                  "buildings",
+                  "grid_size"
+                ],
+                "outputs": [
+                  "density_grid",
+                  "mean_density",
+                  "max_density",
+                  "uniformity"
+                ],
+                "backend_names": [
+                  "geopandas_numpy",
+                  "mcp_calculate_density",
+                  "grasshopper_metrics"
+                ],
+                "constraints": [
+                  "Requires projected CRS for area and grid-size metrics."
+                ],
+                "disclosure_hint": "level_1_card"
+              }
+            ]
+          },
+          "feedback_context": {
+            "source": "urbanagent_feedback_memory",
+            "selected_count": 1,
+            "lessons": [
+              {
+                "lesson_id": "source_authority_before_cache",
+                "summary": "When a task provides authoritative spatial data and derived/cache data, identify the authority first, treat cache layers as secondary evidence, and do not let cache AOIs silently define the analysis scope.",
+                "triggers": [
+                  "aoi",
+                  "boundary",
+                  "boundaries",
+                  "geojson",
+                  "cache",
+                  "缓存",
+                  "边界",
+                  "图层",
+                  "数据源"
+                ],
+                "validation_checks": [
+                  "Record which source is authoritative for the analysis geometry.",
+                  "Compare cache geometry with the authoritative geometry before using cache-derived metrics.",
+                  "Flag missing, mismatched, or low-overlap cache layers instead of treating them as valid evidence."
+                ],
+                "expected_outputs": [
+                  "data_authority_note",
+                  "source_alignment_checks",
+                  "mismatch_warnings"
+                ]
+              }
+            ]
+          }
+        },
+        "dependencies": [],
+        "expected_output": "Result of Collect task-relevant city data and spatial context"
+      },
+      {
+        "subtask_id": "plan_20260508_141257_st1",
+        "objective": "Analyze the question with spatial reasoning and available evidence",
+        "assigned_role": "analyst",
+        "input_data": {
+          "question": "分析上海南京路步行街历史文化街区的\"风貌要素协调度\"。可用数据：街景 D:\\街景\\streetview_images_batch\\上海\\002_南京路步行街\\（154点100%完整），AOI paper9_heritageIntelligence/data/district_boundaries_v2/district_boundaries/002_上海_南京路步行街_boundary.geojson（0.52km2），OSM路网 paper9_heritageIntelligence/heritage_district_batch/districts/002_上海_南京路步行街/osm_roads_aoi.geojson（612段），OSM建筑 paper9_heritageIntelligence/heritage_district_batch/districts/002_上海_南京路步行街/osm_buildings_aoi.geojson（661栋），SinoBF-1 paper9_heritageIntelligence/data/sinobf1/。请：1.验收数据 2.自主提出2-4个X指标含定义/数据/方法 3.分类可直接计算/仅可代理/暂不可计算 4.标记缺失数据和需人工校验点。",
+          "memory_context": {},
+          "capability_context": {
+            "disclosure_policy": "progressive",
+            "level0_index_size": 9,
+            "selected_names": [
+              "osm_context_acquisition",
+              "spatial_overlay_export",
+              "network_accessibility",
+              "network_connectivity_analysis",
+              "urban_density_morphology"
+            ],
+            "selected_level0": [
+              {
+                "name": "osm_context_acquisition",
+                "title": "OSM Context Acquisition",
+                "family": "data",
+                "type": "geospatial_data_method",
+                "summary": "Acquire roads, buildings, POIs, and land-use context for a study area.",
+                "tags": [
+                  "osm",
+                  "openstreetmap",
+                  "roads",
+                  "buildings",
+                  "poi",
+                  "data",
+                  "context",
+                  "perception"
+                ]
+              },
+              {
+                "name": "spatial_overlay_export",
+                "title": "Spatial Overlay and GeoJSON Export",
+                "family": "action",
+                "type": "gis_interchange_method",
+                "summary": "Package spatial features into interoperable GeoJSON outputs for GIS and web tools.",
+                "tags": [
+                  "geojson",
+                  "overlay",
+                  "export",
+                  "interoperability",
+                  "gis",
+                  "qgis",
+                  "arcgis"
+                ]
+              },
+              {
+                "name": "network_accessibility",
+                "title": "Network Accessibility",
+                "family": "method",
+                "type": "accessibility_method",
+                "summary": "Compute distance or travel-time accessibility from origins to destinations.",
+                "tags": [
+                  "accessibility",
+                  "walkability",
+                  "amenity",
+                  "service",
+                  "distance",
+                  "equity",
+                  "network"
+                ]
+              },
+              {
+                "name": "network_connectivity_analysis",
+                "title": "Network Connectivity Analysis",
+                "family": "method",
+                "type": "spatial_network_method",
+                "summary": "Measure graph connectivity, node degree, network density, and routing readiness.",
+                "tags": [
+                  "connectivity",
+                  "network",
+                  "graph",
+                  "streets",
+                  "walkability",
+                  "routing",
+                  "accessibility"
+                ]
+              },
+              {
+                "name": "urban_density_morphology",
+                "title": "Urban Density and Morphology Metrics",
+                "family": "method",
+                "type": "urban_morphology_method",
+                "summary": "Compute grid density and simple built-form metrics from building geometries.",
+                "tags": [
+                  "density",
+                  "morphology",
+                  "building",
+                  "grid",
+                  "urban fabric",
+                  "form"
+                ]
+              }
+            ],
+            "level1_cards": [
+              {
+                "name": "osm_context_acquisition",
+                "title": "OSM Context Acquisition",
+                "family": "data",
+                "type": "geospatial_data_method",
+                "summary": "Acquire roads, buildings, POIs, and land-use context for a study area.",
+                "tags": [
+                  "osm",
+                  "openstreetmap",
+                  "roads",
+                  "buildings",
+                  "poi",
+                  "data",
+                  "context",
+                  "perception"
+                ],
+                "inputs": [
+                  "location",
+                  "radius",
+                  "data_types"
+                ],
+                "outputs": [
+                  "road_graph",
+                  "buildings",
+                  "pois",
+                  "landuse"
+                ],
+                "backend_names": [
+                  "osmnx",
+                  "mcp_fetch_osm_data",
+                  "qgis_processing"
+                ],
+                "constraints": [
+                  "Requires a resolvable place name or bounding geometry.",
+                  "Large regions should be tiled."
+                ],
+                "disclosure_hint": "level_1_card"
+              },
+              {
+                "name": "spatial_overlay_export",
+                "title": "Spatial Overlay and GeoJSON Export",
+                "family": "action",
+                "type": "gis_interchange_method",
+                "summary": "Package spatial features into interoperable GeoJSON outputs for GIS and web tools.",
+                "tags": [
+                  "geojson",
+                  "overlay",
+                  "export",
+                  "interoperability",
+                  "gis",
+                  "qgis",
+                  "arcgis"
+                ],
+                "inputs": [
+                  "features",
+                  "crs"
+                ],
+                "outputs": [
+                  "geojson",
+                  "feature_count"
+                ],
+                "backend_names": [
+                  "mcp_export_geojson",
+                  "geopandas",
+                  "arcgis_feature_layer"
+                ],
+                "constraints": [],
+                "disclosure_hint": "level_1_card"
+              },
+              {
+                "name": "network_accessibility",
+                "title": "Network Accessibility",
+                "family": "method",
+                "type": "accessibility_method",
+                "summary": "Compute distance or travel-time accessibility from origins to destinations.",
+                "tags": [
+                  "accessibility",
+                  "walkability",
+                  "amenity",
+                  "service",
+                  "distance",
+                  "equity",
+                  "network"
+                ],
+                "inputs": [
+                  "origins/buildings",
+                  "target_points",
+                  "network_or_distance_model"
+                ],
+                "outputs": [
+                  "average_distance",
+                  "median_distance",
+                  "coverage_ratio",
+                  "isochrone_like_summary"
+                ],
+                "backend_names": [
+                  "geopandas_shapely",
+                  "mcp_measure_accessibility",
+                  "qgis_service_area"
+                ],
+                "constraints": [
+                  "Euclidean fallback should be labeled separately from network accessibility."
+                ],
+                "disclosure_hint": "level_1_card"
+              },
+              {
+                "name": "network_connectivity_analysis",
+                "title": "Network Connectivity Analysis",
+                "family": "method",
+                "type": "spatial_network_method",
+                "summary": "Measure graph connectivity, node degree, network density, and routing readiness.",
+                "tags": [
+                  "connectivity",
+                  "network",
+                  "graph",
+                  "streets",
+                  "walkability",
+                  "routing",
+                  "accessibility"
+                ],
+                "inputs": [
+                  "road_graph"
+                ],
+                "outputs": [
+                  "average_degree",
+                  "node_count",
+                  "edge_count",
+                  "density"
+                ],
+                "backend_names": [
+                  "networkx",
+                  "mcp_analyze_connectivity",
+                  "arcgis_network_analyst"
+                ],
+                "constraints": [
+                  "Input graph must be routable and projected where metric distances are used."
+                ],
+                "disclosure_hint": "level_1_card"
+              },
+              {
+                "name": "urban_density_morphology",
+                "title": "Urban Density and Morphology Metrics",
+                "family": "method",
+                "type": "urban_morphology_method",
+                "summary": "Compute grid density and simple built-form metrics from building geometries.",
+                "tags": [
+                  "density",
+                  "morphology",
+                  "building",
+                  "grid",
+                  "urban fabric",
+                  "form"
+                ],
+                "inputs": [
+                  "buildings",
+                  "grid_size"
+                ],
+                "outputs": [
+                  "density_grid",
+                  "mean_density",
+                  "max_density",
+                  "uniformity"
+                ],
+                "backend_names": [
+                  "geopandas_numpy",
+                  "mcp_calculate_density",
+                  "grasshopper_metrics"
+                ],
+                "constraints": [
+                  "Requires projected CRS for area and grid-size metrics."
+                ],
+                "disclosure_hint": "level_1_card"
+              }
+            ]
+          },
+          "feedback_context": {
+            "source": "urbanagent_feedback_memory",
+            "selected_count": 1,
+            "lessons": [
+              {
+                "lesson_id": "source_authority_before_cache",
+                "summary": "When a task provides authoritative spatial data and derived/cache data, identify the authority first, treat cache layers as secondary evidence, and do not let cache AOIs silently define the analysis scope.",
+                "triggers": [
+                  "aoi",
+                  "boundary",
+                  "boundaries",
+                  "geojson",
+                  "cache",
+                  "缓存",
+                  "边界",
+                  "图层",
+                  "数据源"
+                ],
+                "validation_checks": [
+                  "Record which source is authoritative for the analysis geometry.",
+                  "Compare cache geometry with the authoritative geometry before using cache-derived metrics.",
+                  "Flag missing, mismatched, or low-overlap cache layers instead of treating them as valid evidence."
+                ],
+                "expected_outputs": [
+                  "data_authority_note",
+                  "source_alignment_checks",
+                  "mismatch_warnings"
+                ]
+              }
+            ]
+          }
+        },
+        "dependencies": [
+          "plan_20260508_141257_st0"
+        ],
+        "expected_output": "Result of Analyze the question with spatial reasoning and available evidence"
+      }
+    ],
+    "execution_order": [
+      "plan_20260508_141257_st0",
+      "plan_20260508_141257_st1"
+    ]
+  },
+  "results": {
+    "subtask_results": {
+      "plan_20260508_141257_st0": {
+        "objective": "Collect task-relevant city data and spatial context",
+        "role": "perception",
+        "status": "completed",
+        "result": {
+          "type": "unknown",
+          "content": {},
+          "data_sources": [],
+          "evidence_manifest": {
+            "spatial": {
+              "bbox": null,
+              "crs": null,
+              "admin_level": null,
+              "scale_band": null,
+              "spatial_relation_frame": null
+            },
+            "temporal": {
+              "timestamp": "2026-05-08T14:12:57.429119",
+              "time_window": null,
+              "granularity": null,
+              "forecast_horizon": null,
+              "freshness": null
+            },
+            "population": {
+              "target_group": null,
+              "observed_group": null,
+              "affected_group": null,
+              "sampling_bias": null,
+              "stakeholder_source": null
+            },
+            "governance": {
+              "provenance": "",
+              "license": null,
+              "collection_method": null,
+              "uncertainty": null,
+              "missing_layers": []
+            },
+            "tags": [
+              "unknown"
+            ],
+            "data_sources": []
+          }
+        }
+      },
+      "plan_20260508_141257_st1": {
+        "objective": "Analyze the question with spatial reasoning and available evidence",
+        "role": "analyst",
+        "status": "completed",
+        "result": {
+          "workflow_profile": "adaptive_urban_analysis",
+          "reasoning_chain": [
+            "Processing perception data...",
+            "Applying general spatial reasoning...",
+            "Generating response..."
+          ],
+          "conclusion": "General reasoning completed",
+          "confidence": 0.5
+        }
+      }
+    },
+    "completed": 2,
+    "total": 2,
+    "runtime": {
+      "runtime_profile": {
+        "name": "urban_runtime_kernel",
+        "inspired_by": "NousResearch/hermes-agent",
+        "adapted_patterns": [
+          "session_scoped_todo_ledger",
+          "checkpointed_execution",
+          "isolated_subtask_context",
+          "progressive_tool_surface",
+          "auditable_runtime_events"
+        ]
+      },
+      "plan_id": "plan_20260508_141257",
+      "workflow_profile": "adaptive_urban_analysis",
+      "complexity": "basic",
+      "interaction_mode": "supervisory",
+      "created_at": "2026-05-08T14:12:57.428119",
+      "tool_surface": {
+        "selected_capabilities": [
+          "osm_context_acquisition",
+          "spatial_overlay_export",
+          "network_accessibility",
+          "network_connectivity_analysis",
+          "urban_density_morphology"
+        ],
+        "disclosure_policy": "progressive",
+        "level0_index_size": 9,
+        "runtime_policy": "isolated_subtasks_with_checkpointed_review"
+      },
+      "todos": [
+        {
+          "id": "plan_20260508_141257_st0",
+          "title": "Collect task-relevant city data and spatial context",
+          "agent": "perception",
+          "status": "completed",
+          "dependencies": [],
+          "artifacts": [],
+          "error": null,
+          "started_at": "2026-05-08T14:12:57.429119",
+          "completed_at": "2026-05-08T14:12:57.429119"
+        },
+        {
+          "id": "plan_20260508_141257_st1",
+          "title": "Analyze the question with spatial reasoning and available evidence",
+          "agent": "analyst",
+          "status": "completed",
+          "dependencies": [
+            "plan_20260508_141257_st0"
+          ],
+          "artifacts": [],
+          "error": null,
+          "started_at": "2026-05-08T14:12:57.429119",
+          "completed_at": "2026-05-08T14:12:57.430119"
+        }
+      ],
+      "checkpoints": [
+        {
+          "checkpoint_id": "DP-1",
+          "stage": "task_interpretation_and_scoping",
+          "mode": "supervisory",
+          "action": "approve",
+          "reason": "supervisory auto-approve",
+          "subtask_id": null,
+          "agent": null,
+          "payload_keys": [
+            "plan",
+            "subtask_count"
+          ],
+          "timestamp": "2026-05-08T14:12:57.429119",
+          "approved": true
+        },
+        {
+          "checkpoint_id": "DP-2",
+          "stage": "data_source_validation",
+          "mode": "supervisory",
+          "action": "approve",
+          "reason": "supervisory auto-approve",
+          "subtask_id": "plan_20260508_141257_st0",
+          "agent": "perception",
+          "payload_keys": [
+            "agent",
+            "objective",
+            "result",
+            "subtask_id"
+          ],
+          "timestamp": "2026-05-08T14:12:57.429119",
+          "approved": true
+        },
+        {
+          "checkpoint_id": "DP-3",
+          "stage": "spatial_representation_review",
+          "mode": "supervisory",
+          "action": "approve",
+          "reason": "supervisory auto-approve",
+          "subtask_id": "plan_20260508_141257_st1",
+          "agent": "analyst",
+          "payload_keys": [
+            "agent",
+            "objective",
+            "result",
+            "subtask_id"
+          ],
+          "timestamp": "2026-05-08T14:12:57.430119",
+          "approved": true
+        }
+      ],
+      "events": [
+        {
+          "type": "runtime_initialized",
+          "payload": {
+            "todo_count": 2
+          },
+          "timestamp": "2026-05-08T14:12:57.428119"
+        },
+        {
+          "type": "checkpoint_recorded",
+          "payload": {
+            "checkpoint_id": "DP-1",
+            "stage": "task_interpretation_and_scoping",
+            "action": "approve",
+            "approved": true,
+            "subtask_id": null
+          },
+          "timestamp": "2026-05-08T14:12:57.429119"
+        },
+        {
+          "type": "subtask_started",
+          "payload": {
+            "subtask_id": "plan_20260508_141257_st0",
+            "agent": "perception"
+          },
+          "timestamp": "2026-05-08T14:12:57.429119"
+        },
+        {
+          "type": "checkpoint_recorded",
+          "payload": {
+            "checkpoint_id": "DP-2",
+            "stage": "data_source_validation",
+            "action": "approve",
+            "approved": true,
+            "subtask_id": "plan_20260508_141257_st0"
+          },
+          "timestamp": "2026-05-08T14:12:57.429119"
+        },
+        {
+          "type": "subtask_completed",
+          "payload": {
+            "subtask_id": "plan_20260508_141257_st0",
+            "artifact_count": 0
+          },
+          "timestamp": "2026-05-08T14:12:57.429119"
+        },
+        {
+          "type": "subtask_started",
+          "payload": {
+            "subtask_id": "plan_20260508_141257_st1",
+            "agent": "analyst"
+          },
+          "timestamp": "2026-05-08T14:12:57.429119"
+        },
+        {
+          "type": "checkpoint_recorded",
+          "payload": {
+            "checkpoint_id": "DP-3",
+            "stage": "spatial_representation_review",
+            "action": "approve",
+            "approved": true,
+            "subtask_id": "plan_20260508_141257_st1"
+          },
+          "timestamp": "2026-05-08T14:12:57.430119"
+        },
+        {
+          "type": "subtask_completed",
+          "payload": {
+            "subtask_id": "plan_20260508_141257_st1",
+            "artifact_count": 0
+          },
+          "timestamp": "2026-05-08T14:12:57.430119"
+        }
+      ]
+    },
+    "review": {
+      "quality_score": 0.11250000000000004,
+      "urban_validity_score": 0.11250000000000004,
+      "alignment_score": 0.40000000000000013,
+      "passed": false,
+      "issues": [
+        "plan_20260508_141257_st0: missing bbox in evidence manifest",
+        "plan_20260508_141257_st0: missing CRS in evidence manifest",
+        "plan_20260508_141257_st0: missing preferred scale diagnostics",
+        "plan_20260508_141257_st1: missing bbox in evidence manifest",
+        "plan_20260508_141257_st1: missing CRS in evidence manifest",
+        "plan_20260508_141257_st1: missing preferred scale diagnostics",
+        "plan_20260508_141257_st0: missing time_window",
+        "plan_20260508_141257_st0: missing temporal granularity",
+        "plan_20260508_141257_st0: missing freshness declaration",
+        "plan_20260508_141257_st1: missing temporal evidence",
+        "plan_20260508_141257_st0: missing target_group",
+        "plan_20260508_141257_st0: missing observed_group",
+        "plan_20260508_141257_st0: missing affected_group",
+        "plan_20260508_141257_st0: no stakeholder source or review feedback attached",
+        "plan_20260508_141257_st1: missing population or stakeholder schema",
+        "plan_20260508_141257_st0: missing governance field provenance",
+        "plan_20260508_141257_st0: missing governance field license",
+        "plan_20260508_141257_st0: missing governance field collection_method",
+        "plan_20260508_141257_st0: missing governance field uncertainty",
+        "plan_20260508_141257_st1: missing governance metadata"
+      ],
+      "policy_scores": {
+        "spatial_structural_review": {
+          "score": 0.40000000000000013,
+          "issues": [
+            "plan_20260508_141257_st0: missing bbox in evidence manifest",
+            "plan_20260508_141257_st0: missing CRS in evidence manifest",
+            "plan_20260508_141257_st0: missing preferred scale diagnostics",
+            "plan_20260508_141257_st1: missing bbox in evidence manifest",
+            "plan_20260508_141257_st1: missing CRS in evidence manifest",
+            "plan_20260508_141257_st1: missing preferred scale diagnostics"
+          ],
+          "applicable": true
+        },
+        "temporal_consistency_review": {
+          "score": 0.04999999999999993,
+          "issues": [
+            "plan_20260508_141257_st0: missing time_window",
+            "plan_20260508_141257_st0: missing temporal granularity",
+            "plan_20260508_141257_st0: missing freshness declaration",
+            "plan_20260508_141257_st1: missing temporal evidence"
+          ],
+          "applicable": true
+        },
+        "population_and_stakeholder_review": {
+          "score": 0.0,
+          "issues": [
+            "plan_20260508_141257_st0: missing target_group",
+            "plan_20260508_141257_st0: missing observed_group",
+            "plan_20260508_141257_st0: missing affected_group",
+            "plan_20260508_141257_st0: no stakeholder source or review feedback attached",
+            "plan_20260508_141257_st1: missing population or stakeholder schema"
+          ],
+          "applicable": true
+        },
+        "evidence_and_governance_review": {
+          "score": 1.1102230246251565e-16,
+          "issues": [
+            "plan_20260508_141257_st0: missing governance field provenance",
+            "plan_20260508_141257_st0: missing governance field license",
+            "plan_20260508_141257_st0: missing governance field collection_method",
+            "plan_20260508_141257_st0: missing governance field uncertainty",
+            "plan_20260508_141257_st1: missing governance metadata"
+          ],
+          "applicable": true
+        }
+      },
+      "artifact_scores": {
+        "cartography_review": {
+          "score": 1.0,
+          "issues": [],
+          "applicable": false
+        },
+        "report_review": {
+          "score": 1.0,
+          "issues": [],
+          "applicable": false
+        }
+      },
+      "hard_failures": [
+        "spatial_structural_review",
+        "temporal_consistency_review",
+        "population_and_stakeholder_review",
+        "evidence_and_governance_review"
+      ],
+      "recommendation": "revise"
+    },
+    "_meta": {
+      "review": {
+        "latency_s": 0.0002,
+        "input_tokens_est": 1252,
+        "output_tokens_est": 835
+      }
+    }
+  },
+  "final_answer": "",
+  "review": {
+    "quality_score": 0.11250000000000004,
+    "urban_validity_score": 0.11250000000000004,
+    "alignment_score": 0.40000000000000013,
+    "passed": false,
+    "issues": [
+      "plan_20260508_141257_st0: missing bbox in evidence manifest",
+      "plan_20260508_141257_st0: missing CRS in evidence manifest",
+      "plan_20260508_141257_st0: missing preferred scale diagnostics",
+      "plan_20260508_141257_st1: missing bbox in evidence manifest",
+      "plan_20260508_141257_st1: missing CRS in evidence manifest",
+      "plan_20260508_141257_st1: missing preferred scale diagnostics",
+      "plan_20260508_141257_st0: missing time_window",
+      "plan_20260508_141257_st0: missing temporal granularity",
+      "plan_20260508_141257_st0: missing freshness declaration",
+      "plan_20260508_141257_st1: missing temporal evidence",
+      "plan_20260508_141257_st0: missing target_group",
+      "plan_20260508_141257_st0: missing observed_group",
+      "plan_20260508_141257_st0: missing affected_group",
+      "plan_20260508_141257_st0: no stakeholder source or review feedback attached",
+      "plan_20260508_141257_st1: missing population or stakeholder schema",
+      "plan_20260508_141257_st0: missing governance field provenance",
+      "plan_20260508_141257_st0: missing governance field license",
+      "plan_20260508_141257_st0: missing governance field collection_method",
+      "plan_20260508_141257_st0: missing governance field uncertainty",
+      "plan_20260508_141257_st1: missing governance metadata"
+    ],
+    "policy_scores": {
+      "spatial_structural_review": {
+        "score": 0.40000000000000013,
+        "issues": [
+          "plan_20260508_141257_st0: missing bbox in evidence manifest",
+          "plan_20260508_141257_st0: missing CRS in evidence manifest",
+          "plan_20260508_141257_st0: missing preferred scale diagnostics",
+          "plan_20260508_141257_st1: missing bbox in evidence manifest",
+          "plan_20260508_141257_st1: missing CRS in evidence manifest",
+          "plan_20260508_141257_st1: missing preferred scale diagnostics"
+        ],
+        "applicable": true
+      },
+      "temporal_consistency_review": {
+        "score": 0.04999999999999993,
+        "issues": [
+          "plan_20260508_141257_st0: missing time_window",
+          "plan_20260508_141257_st0: missing temporal granularity",
+          "plan_20260508_141257_st0: missing freshness declaration",
+          "plan_20260508_141257_st1: missing temporal evidence"
+        ],
+        "applicable": true
+      },
+      "population_and_stakeholder_review": {
+        "score": 0.0,
+        "issues": [
+          "plan_20260508_141257_st0: missing target_group",
+          "plan_20260508_141257_st0: missing observed_group",
+          "plan_20260508_141257_st0: missing affected_group",
+          "plan_20260508_141257_st0: no stakeholder source or review feedback attached",
+          "plan_20260508_141257_st1: missing population or stakeholder schema"
+        ],
+        "applicable": true
+      },
+      "evidence_and_governance_review": {
+        "score": 1.1102230246251565e-16,
+        "issues": [
+          "plan_20260508_141257_st0: missing governance field provenance",
+          "plan_20260508_141257_st0: missing governance field license",
+          "plan_20260508_141257_st0: missing governance field collection_method",
+          "plan_20260508_141257_st0: missing governance field uncertainty",
+          "plan_20260508_141257_st1: missing governance metadata"
+        ],
+        "applicable": true
+      }
+    },
+    "artifact_scores": {
+      "cartography_review": {
+        "score": 1.0,
+        "issues": [],
+        "applicable": false
+      },
+      "report_review": {
+        "score": 1.0,
+        "issues": [],
+        "applicable": false
+      }
+    },
+    "hard_failures": [
+      "spatial_structural_review",
+      "temporal_consistency_review",
+      "population_and_stakeholder_review",
+      "evidence_and_governance_review"
+    ],
+    "recommendation": "revise"
+  },
+  "quality_control": {
+    "plan_qc": {
+      "confidence_score": 1.0,
+      "passed": true,
+      "issues": [],
+      "recommendation": "accept",
+      "dimension_scores": {
+        "syntax": 1.0,
+        "resources": 1.0,
+        "constraints": 1.0
+      }
+    },
+    "exec_qc": {
+      "confidence_score": 0.615,
+      "passed": false,
+      "issues": [
+        "Missing required output fields"
+      ],
+      "recommendation": "retry",
+      "dimension_scores": {
+        "semantic_relevance": 0.8285714285714285,
+        "historical_reliability": 0.7,
+        "metadata_completeness": 0.0,
+        "context_alignment": 1.0
+      }
+    },
+    "plan_passed": true,
+    "exec_passed": false
+  },
+  "alignment_support": {
+    "correction_modules": {
+      "scale_alignment": {
+        "name": "scale_alignment",
+        "description": "Record scale shifts, MAUP-like risks, and analyst-preferred reading scales.",
+        "focus": "scale_and_maup",
+        "input_fields": [
+          "scale"
+        ],
+        "output_fields": [
+          "alignment_diagnostics",
+          "human_alignment"
+        ]
+      },
+      "distribution_review": {
+        "name": "distribution_review",
+        "description": "Persist pre-analysis distribution checks and visibility requirements.",
+        "focus": "distribution_preview",
+        "input_fields": [
+          "distribution"
+        ],
+        "output_fields": [
+          "distribution_preview",
+          "human_alignment"
+        ]
+      },
+      "stakeholder_equity": {
+        "name": "stakeholder_equity",
+        "description": "Attach stakeholder-specific concerns, survey feedback, and spatial justice warnings.",
+        "focus": "fairness_and_contestation",
+        "input_fields": [
+          "stakeholder_feedback"
+        ],
+        "output_fields": [
+          "alignment_diagnostics",
+          "human_alignment"
+        ]
+      },
+      "memory_priority": {
+        "name": "memory_priority",
+        "description": "Capture which previous cases or overrides should be promoted or suppressed in later retrieval.",
+        "focus": "memory_guidance",
+        "input_fields": [
+          "memory_directives"
+        ],
+        "output_fields": [
+          "human_alignment",
+          "memory_directives"
+        ]
+      }
+    },
+    "memory_snapshot": {}
+  },
+  "efficiency": {
+    "plan_latency_s": 65.0861520000035,
+    "exec_latency_s": 0.0037841999823693185,
+    "review_latency_s": 0.0002,
+    "quality_control_latency_s": 22.4672,
+    "total_latency_s": 87.5608394999872,
+    "detail": [
+      {
+        "layer": "planning",
+        "latency_s": 65.0862,
+        "input_tokens_est": 151,
+        "output_tokens_est": 4863,
+        "est_cost_usd": 0.0737
+      },
+      {
+        "layer": "quality_control_plan",
+        "latency_s": 0.0001,
+        "input_tokens_est": 5034,
+        "output_tokens_est": 40,
+        "est_cost_usd": 0.02577
+      },
+      {
+        "layer": "execution",
+        "latency_s": 0.0038,
+        "input_tokens_est": 4863,
+        "output_tokens_est": 2125,
+        "est_cost_usd": 0.05619
+      },
+      {
+        "layer": "review",
+        "latency_s": 0.0002,
+        "input_tokens_est": 1252,
+        "output_tokens_est": 835,
+        "est_cost_usd": 0.018785
+      },
+      {
+        "layer": "quality_control_exec",
+        "latency_s": 22.4671,
+        "input_tokens_est": 2296,
+        "output_tokens_est": 67,
+        "est_cost_usd": 0.012485
+      },
+      {
+        "layer": "total",
+        "latency_s": 87.5608,
+        "input_tokens_est": 151,
+        "output_tokens_est": 2125,
+        "est_cost_usd": 0.03263
+      }
+    ],
+    "summary": {
+      "planning": {
+        "count": 1,
+        "input_tokens_est": 151,
+        "output_tokens_est": 4863,
+        "latency_s": 65.0862,
+        "est_cost_usd": 0.0737
+      },
+      "quality_control": {
+        "count": 2,
+        "input_tokens_est": 7330,
+        "output_tokens_est": 107,
+        "latency_s": 22.4672,
+        "est_cost_usd": 0.038255
+      },
+      "execution": {
+        "count": 1,
+        "input_tokens_est": 4863,
+        "output_tokens_est": 2125,
+        "latency_s": 0.0038,
+        "est_cost_usd": 0.05619
+      },
+      "review": {
+        "count": 1,
+        "input_tokens_est": 1252,
+        "output_tokens_est": 835,
+        "latency_s": 0.0002,
+        "est_cost_usd": 0.018785
+      },
+      "total": {
+        "count": 1,
+        "input_tokens_est": 151,
+        "output_tokens_est": 2125,
+        "latency_s": 87.5608,
+        "est_cost_usd": 0.03263
+      }
+    }
+  },
+  "ablation_config": {
+    "planning": true,
+    "review": true,
+    "quality_control": true,
+    "dual_space": true,
+    "memory": true
+  }
+}

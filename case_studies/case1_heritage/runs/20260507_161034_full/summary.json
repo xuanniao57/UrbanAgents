@@ -1,0 +1,657 @@
+{
+  "run_dir": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\outputs\\cli_runs\\20260507_161034_ningbo-old-bund-observable",
+  "status": "completed",
+  "workflow_profile": "adaptive_urban_analysis",
+  "trace_id": "20260507_161034_ningbo-old-bund-observable",
+  "agent_plan": [
+    {
+      "step": "1",
+      "agent": "PlannerAgent",
+      "raw_agent": "planner",
+      "objective": "PlannerAgent decomposes the heritage-district decision task",
+      "status": "completed",
+      "artifacts": "0"
+    },
+    {
+      "step": "2",
+      "agent": "ManagerAgent",
+      "raw_agent": "manager",
+      "objective": "ManagerAgent schedules resource governance, measurement, mapping, and review",
+      "status": "completed",
+      "artifacts": "0"
+    },
+    {
+      "step": "3",
+      "agent": "PerceptionWorker",
+      "raw_agent": "perception_worker",
+      "objective": "PerceptionWorker validates AOI, OSM roads, buildings, rasters, and evidence tables",
+      "status": "completed",
+      "artifacts": "0"
+    },
+    {
+      "step": "4",
+      "agent": "CognitionWorker",
+      "raw_agent": "cognition_worker",
+      "objective": "CognitionWorker builds dual-space representations for topology and vector layers",
+      "status": "completed",
+      "artifacts": "0"
+    },
+    {
+      "step": "5",
+      "agent": "AnalystWorker",
+      "raw_agent": "analyst",
+      "objective": "AnalystWorker runs connectivity, accessibility, density, and activity operators",
+      "status": "completed",
+      "artifacts": "5"
+    },
+    {
+      "step": "6",
+      "agent": "CartographerWorker",
+      "raw_agent": "cartographer",
+      "objective": "CartographerWorker publishes Web GIS layers and sends commands to live QGIS",
+      "status": "completed",
+      "artifacts": "6"
+    },
+    {
+      "step": "7",
+      "agent": "ReviewHub",
+      "raw_agent": "reviewer",
+      "objective": "ReviewHub checks spatial evidence, uncertainty, and policy caveats",
+      "status": "completed",
+      "artifacts": "0"
+    },
+    {
+      "step": "8",
+      "agent": "QualityController",
+      "raw_agent": "quality_controller",
+      "objective": "QualityController verifies schema completeness, executable artifacts, and confidence",
+      "status": "completed",
+      "artifacts": "1"
+    },
+    {
+      "step": "9",
+      "agent": "ReporterWorker",
+      "raw_agent": "reporter",
+      "objective": "ReporterWorker synthesizes maps, charts, tables, and decision conclusions",
+      "status": "completed",
+      "artifacts": "1"
+    }
+  ],
+  "total_latency_s": null,
+  "quality_control": {
+    "plan_passed": true,
+    "exec_passed": true
+  },
+  "artifact_count": 13,
+  "artifacts": [
+    {
+      "id": "measurement_report",
+      "type": "measurement_report",
+      "title": "Ningbo Old Bund Measurement Report",
+      "path": "artifacts/measurement_report.json",
+      "mime_type": "application/json",
+      "preview": {
+        "operators": [
+          "accessibility",
+          "activity",
+          "connectivity",
+          "density",
+          "walkability"
+        ],
+        "row_count": 6,
+        "case": "ningbo_old_bund_heritage_walkability"
+      },
+      "metadata": {}
+    },
+    {
+      "id": "measurement_table",
+      "type": "table",
+      "title": "Four-Operator Metric Table",
+      "path": "artifacts/measurement_table.csv",
+      "mime_type": "text/csv",
+      "preview": {
+        "columns": [
+          "operator",
+          "metric",
+          "value",
+          "unit",
+          "method",
+          "confidence",
+          "applicability"
+        ],
+        "rows": [
+          {
+            "operator": "connectivity",
+            "metric": "road_density_km_per_km2",
+            "value": 32.9226,
+            "unit": "km/km2",
+            "method": "road length normalized by AOI area",
+            "confidence": 0.84,
+            "applicability": "computed"
+          },
+          {
+            "operator": "accessibility",
+            "metric": "road_length_m",
+            "value": 2138.5219,
+            "unit": "m",
+            "method": "OSM roads clipped to AOI",
+            "confidence": 0.82,
+            "applicability": "computed"
+          },
+          {
+            "operator": "density",
+            "metric": "building_coverage_ratio",
+            "value": 0.4721,
+            "unit": "ratio",
+            "method": "building footprint area / AOI area",
+            "confidence": 0.8,
+            "applicability": "computed"
+          },
+          {
+            "operator": "density",
+            "metric": "building_count_per_ha",
+            "value": 9.237,
+            "unit": "count/ha",
+            "method": "building count normalized by AOI hectares",
+            "confidence": 0.8,
+            "applicability": "computed"
+          },
+          {
+            "operator": "walkability",
+            "metric": "heritage_candidate_count",
+            "value": 11,
+            "unit": "count",
+            "method": "candidate evidence table",
+            "confidence": 0.58,
+            "applicability": "needs verification"
+          },
+          {
+            "operator": "activity",
+            "metric": "nightlight_mean_signal",
+            "value": 255.0,
+            "unit": "0-255",
+            "method": "VIIRS context raster sample",
+            "confidence": 0.6,
+            "applicability": "coarse context"
+          }
+        ],
+        "row_count": 6
+      },
+      "metadata": {}
+    },
+    {
+      "id": "measurement_chart_html",
+      "type": "chart_html",
+      "title": "Operator Metric Chart HTML",
+      "path": "artifacts/measurement_chart.html",
+      "mime_type": "text/html",
+      "preview": {
+        "chart_type": "bar",
+        "source": "measurement_table"
+      },
+      "metadata": {}
+    },
+    {
+      "id": "measurement_chart_png",
+      "type": "chart_png",
+      "title": "Operator Metric Chart PNG",
+      "path": "artifacts/measurement_chart.png",
+      "mime_type": "image/png",
+      "preview": {
+        "chart_type": "bar",
+        "source": "measurement_table"
+      },
+      "metadata": {}
+    },
+    {
+      "id": "protected_buildings_table",
+      "type": "table",
+      "title": "Protected Building Candidate Table",
+      "path": "artifacts/protected_buildings_index.csv",
+      "mime_type": "text/csv",
+      "preview": {
+        "columns": [
+          "category",
+          "name",
+          "source_level",
+          "status",
+          "source_url",
+          "notes"
+        ],
+        "rows": [
+          {
+            "category": "protected_building_candidate",
+            "name": "英国领事馆",
+            "source_level": "secondary_snippet",
+            "status": "candidate_needs_official_verification",
+            "source_url": "https://www.bing.com/search?q=%E5%AE%81%E6%B3%A2+%E8%80%81%E5%A4%96%E6%BB%A9+%E4%BF%9D%E6%8A%A4%E5%BB%BA%E7%AD%91+%E5%90%8D%E5%BD%95",
+            "notes": "来自老外滩建筑介绍检索摘要，可作为对象清单候选，尚需对接宁波保护名录或文保点名录核验。"
+          },
+          {
+            "category": "protected_building_candidate",
+            "name": "巡捕房",
+            "source_level": "secondary_snippet",
+            "status": "candidate_needs_official_verification",
+            "source_url": "https://www.bing.com/search?q=%E5%AE%81%E6%B3%A2+%E8%80%81%E5%A4%96%E6%BB%A9+%E4%BF%9D%E6%8A%A4%E5%BB%BA%E7%AD%91+%E5%90%8D%E5%BD%95",
+            "notes": "来自老外滩建筑介绍检索摘要，可作为对象清单候选，尚需对接宁波保护名录或文保点名录核验。"
+          },
+          {
+            "category": "protected_building_candidate",
+            "name": "侵华日军水上司令部",
+            "source_level": "secondary_snippet",
+            "status": "candidate_needs_official_verification",
+            "source_url": "https://www.bing.com/search?q=%E5%AE%81%E6%B3%A2+%E8%80%81%E5%A4%96%E6%BB%A9+%E4%BF%9D%E6%8A%A4%E5%BB%BA%E7%AD%91+%E5%90%8D%E5%BD%95",
+            "notes": "来自老外滩建筑介绍检索摘要，可作为对象清单候选，尚需对接宁波保护名录或文保点名录核验。"
+          },
+          {
+            "category": "protected_building_candidate",
+            "name": "浙海关",
+            "source_level": "secondary_snippet",
+            "status": "candidate_needs_official_verification",
+            "source_url": "https://www.bing.com/search?q=%E5%AE%81%E6%B3%A2+%E8%80%81%E5%A4%96%E6%BB%A9+%E4%BF%9D%E6%8A%A4%E5%BB%BA%E7%AD%91+%E5%90%8D%E5%BD%95",
+            "notes": "来自老外滩建筑介绍检索摘要，可作为对象清单候选，尚需对接宁波保护名录或文保点名录核验。"
+          },
+          {
+            "category": "protected_building_candidate",
+            "name": "江北天主教堂",
+            "source_level": "secondary_snippet",
+            "status": "candidate_needs_official_verification",
+            "source_url": "https://www.bing.com/search?q=%E5%AE%81%E6%B3%A2+%E8%80%81%E5%A4%96%E6%BB%A9+%E4%BF%9D%E6%8A%A4%E5%BB%BA%E7%AD%91+%E5%90%8D%E5%BD%95",
+            "notes": "来自老外滩建筑介绍检索摘要，可作为对象清单候选，尚需对接宁波保护名录或文保点名录核验。"
+          },
+          {
+            "category": "protected_building_candidate",
+            "name": "江北耶稣圣教堂",
+            "source_level": "secondary_snippet",
+            "status": "candidate_needs_official_verification",
+            "source_url": "https://www.bing.com/search?q=%E5%AE%81%E6%B3%A2+%E8%80%81%E5%A4%96%E6%BB%A9+%E4%BF%9D%E6%8A%A4%E5%BB%BA%E7%AD%91+%E5%90%8D%E5%BD%95",
+            "notes": "来自老外滩建筑介绍检索摘要，可作为对象清单候选，尚需对接宁波保护名录或文保点名录核验。"
+          },
+          {
+            "category": "protected_building_candidate",
+            "name": "宁波邮政局",
+            "source_level": "secondary_snippet",
+            "status": "candidate_needs_official_verification",
+            "source_url": "https://www.bing.com/search?q=%E5%AE%81%E6%B3%A2+%E8%80%81%E5%A4%96%E6%BB%A9+%E4%BF%9D%E6%8A%A4%E5%BB%BA%E7%AD%91+%E5%90%8D%E5%BD%95",
+            "notes": "来自老外滩建筑介绍检索摘要，可作为对象清单候选，尚需对接宁波保护名录或文保点名录核验。"
+          },
+          {
+            "category": "protected_building_candidate",
+            "name": "通商银行旧址",
+            "source_level": "secondary_snippet",
+            "status": "candidate_needs_official_verification",
+            "source_url": "https://www.bing.com/search?q=%E5%AE%81%E6%B3%A2+%E8%80%81%E5%A4%96%E6%BB%A9+%E4%BF%9D%E6%8A%A4%E5%BB%BA%E7%AD%91+%E5%90%8D%E5%BD%95",
+            "notes": "来自老外滩建筑介绍检索摘要，可作为对象清单候选，尚需对接宁波保护名录或文保点名录核验。"
+          }
+        ],
+        "row_count": 11
+      },
+      "metadata": {}
+    },
+    {
+      "id": "urban_layers_geojson",
+      "type": "geojson_layer",
+      "title": "Ningbo Old Bund GIS Layer Stack",
+      "path": "artifacts/urban_layers.geojson",
+      "mime_type": "application/geo+json",
+      "preview": {
+        "feature_count": 81,
+        "layers": [
+          "aoi",
+          "roads",
+          "buildings"
+        ]
+      },
+      "metadata": {
+        "crs": "EPSG:4326",
+        "popup_fields": [
+          "layer",
+          "title",
+          "metric",
+          "value"
+        ]
+      }
+    },
+    {
+      "id": "layer_stack",
+      "type": "layer_stack",
+      "title": "Layer Stack Metadata",
+      "path": "artifacts/layer_stack.json",
+      "mime_type": "application/json",
+      "preview": {
+        "layers": [
+          {
+            "id": "aoi",
+            "name": "Old Bund AOI",
+            "geometry": "Polygon",
+            "style": {
+              "color": "#4f8cff"
+            }
+          },
+          {
+            "id": "roads",
+            "name": "Road Network",
+            "geometry": "LineString",
+            "style": {
+              "color": "#29c7ac"
+            }
+          },
+          {
+            "id": "buildings",
+            "name": "Buildings",
+            "geometry": "Polygon",
+            "style": {
+              "color": "#d8b15f"
+            }
+          }
+        ],
+        "qgis_bridge_connected": false
+      },
+      "metadata": {}
+    },
+    {
+      "id": "feature_fields",
+      "type": "table",
+      "title": "GIS Feature Field Table",
+      "path": "artifacts/feature_fields.csv",
+      "mime_type": "text/csv",
+      "preview": {
+        "columns": [
+          "feature_id",
+          "layer",
+          "title",
+          "geometry_type",
+          "longitude",
+          "latitude",
+          "metric",
+          "value"
+        ],
+        "rows": [
+          {
+            "feature_id": "aoi_1",
+            "layer": "aoi",
+            "title": "Ningbo Old Bund",
+            "geometry_type": "Polygon",
+            "longitude": 121.556299,
+            "latitude": 29.879069,
+            "metric": "study_area",
+            "value": 398679384
+          },
+          {
+            "feature_id": "roads_1",
+            "layer": "roads",
+            "title": "Road network 1",
+            "geometry_type": "LineString",
+            "longitude": 121.556182,
+            "latitude": 29.877899,
+            "metric": "connectivity",
+            "value": "local"
+          },
+          {
+            "feature_id": "roads_2",
+            "layer": "roads",
+            "title": "Road network 2",
+            "geometry_type": "LineString",
+            "longitude": 121.555722,
+            "latitude": 29.878059,
+            "metric": "connectivity",
+            "value": "local"
+          },
+          {
+            "feature_id": "roads_3",
+            "layer": "roads",
+            "title": "Road network 3",
+            "geometry_type": "LineString",
+            "longitude": 121.556991,
+            "latitude": 29.877856,
+            "metric": "connectivity",
+            "value": "local"
+          },
+          {
+            "feature_id": "roads_4",
+            "layer": "roads",
+            "title": "Road network 4",
+            "geometry_type": "LineString",
+            "longitude": 121.556038,
+            "latitude": 29.878206,
+            "metric": "connectivity",
+            "value": "local"
+          },
+          {
+            "feature_id": "roads_5",
+            "layer": "roads",
+            "title": "Road network 5",
+            "geometry_type": "LineString",
+            "longitude": 121.556038,
+            "latitude": 29.878206,
+            "metric": "connectivity",
+            "value": "local"
+          },
+          {
+            "feature_id": "roads_6",
+            "layer": "roads",
+            "title": "Road network 6",
+            "geometry_type": "LineString",
+            "longitude": 121.55554,
+            "latitude": 29.878995,
+            "metric": "connectivity",
+            "value": "local"
+          },
+          {
+            "feature_id": "roads_7",
+            "layer": "roads",
+            "title": "Road network 7",
+            "geometry_type": "LineString",
+            "longitude": 121.555993,
+            "latitude": 29.878608,
+            "metric": "connectivity",
+            "value": "local"
+          },
+          {
+            "feature_id": "roads_8",
+            "layer": "roads",
+            "title": "Road network 8",
+            "geometry_type": "LineString",
+            "longitude": 121.556044,
+            "latitude": 29.878964,
+            "metric": "connectivity",
+            "value": "local"
+          },
+          {
+            "feature_id": "roads_9",
+            "layer": "roads",
+            "title": "Road network 9",
+            "geometry_type": "LineString",
+            "longitude": 121.555567,
+            "latitude": 29.879057,
+            "metric": "connectivity",
+            "value": "local"
+          }
+        ],
+        "row_count": 81
+      },
+      "metadata": {}
+    },
+    {
+      "id": "qgis_live_commands",
+      "type": "qgis_live_commands",
+      "title": "QGIS Live Control Dispatch",
+      "path": "artifacts/qgis_live_commands.json",
+      "mime_type": "application/json",
+      "preview": {
+        "sent": false,
+        "queued": 7,
+        "message": "QGIS bridge is offline; commands are queued for live replay."
+      },
+      "metadata": {}
+    },
+    {
+      "id": "case_overview_map",
+      "type": "map_png",
+      "title": "Existing GIS Overview Map",
+      "path": "artifacts/old_bund_gis_overview.png",
+      "mime_type": "image/png",
+      "preview": {
+        "source": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\artifacts\\ningbo_old_bund\\maps\\old_bund_gis_overview.png"
+      },
+      "metadata": {}
+    },
+    {
+      "id": "case_detail_map",
+      "type": "map_png",
+      "title": "Old Bund AOI Detail Map",
+      "path": "artifacts/old_bund_aoi_detail.png",
+      "mime_type": "image/png",
+      "preview": {
+        "source": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\artifacts\\ningbo_old_bund\\maps\\old_bund_aoi_detail.png"
+      },
+      "metadata": {}
+    },
+    {
+      "id": "urbanagent_case_configuration",
+      "type": "configuration_json",
+      "title": "UrbanAgent Case Workflow Configuration",
+      "path": "artifacts/urbanagent_case_configuration.json",
+      "mime_type": "application/json",
+      "preview": {
+        "model": "Heritage Walkability Pressure Assessment",
+        "resource_count": 5,
+        "qc": {
+          "syntax_valid": true,
+          "resources_available": true,
+          "policy_caveat": "candidate heritage list needs official verification"
+        }
+      },
+      "metadata": {}
+    },
+    {
+      "id": "runtime_report",
+      "type": "report_markdown",
+      "title": "Runtime Report",
+      "path": "artifacts/runtime_report.md",
+      "mime_type": "text/markdown",
+      "preview": {
+        "lines": 10,
+        "summary": "UrbanAgent decomposed the heritage-district task into PlannerAgent, ManagerAgent, PerceptionWorker, CognitionWorker, AnalystWorker, CartographerWorker, ReviewHub, QualityController, and ReporterWorker steps. It validated local AOI/road/building/raster/table resources, configured four operator metrics, generated inspectable GIS/chart/table artifacts, and synchronized map layers to the live QGIS bridge. The result demonstrates workflow orchestration and reviewable reasoning; protected-building candidates still require official verification."
+      },
+      "metadata": {}
+    }
+  ],
+  "reasoning_steps": [
+    {
+      "step_id": "reason_1",
+      "todo_id": "planner_intent",
+      "agent": "planner",
+      "step_type": "task_decomposition",
+      "input_evidence": [
+        "Old Bund AOI",
+        "OSM roads in AOI",
+        "OSM buildings with height proxies",
+        "Protected building candidates"
+      ],
+      "method": "Decompose the open-ended urban decision request into executable subtasks.",
+      "summary": "PlannerAgent advances the 宁波老外滩历史街区步行可达性与保护压力诊断 workflow using UrbanAgent planning, dual-space cognition, tool orchestration, and explicit QC gates.",
+      "confidence": 0.76,
+      "caveats": [
+        "Protected-building candidates require official registry verification before policy use."
+      ],
+      "task_excerpt": "分析宁波老外滩历史文化街区的建成环境，构建多个 X 指标。可用数据：AOI边界 paper9_heritageIntelligence/data/district_boundaries_v2/district_boundaries/009_宁波_宁波老外滩_boundary.geojson，SinoBF-1建筑功能 paper9_heritageIntell"
+    },
+    {
+      "step_id": "reason_2",
+      "todo_id": "manager_schedule",
+      "agent": "manager",
+      "step_type": "worker_scheduling",
+      "input_evidence": [
+        "Old Bund AOI",
+        "OSM roads in AOI",
+        "OSM buildings with height proxies",
+        "Protected building candidates"
+      ],
+      "method": "Schedule workers, dependencies, tool calls, and review gates.",
+      "summary": "ManagerAgent advances the 宁波老外滩历史街区步行可达性与保护压力诊断 workflow using UrbanAgent planning, dual-space cognition, tool orchestration, and explicit QC gates.",
+      "confidence": 0.8,
+      "caveats": [
+        "Protected-building candidates require official registry verification before policy use."
+      ],
+      "task_excerpt": "分析宁波老外滩历史文化街区的建成环境，构建多个 X 指标。可用数据：AOI边界 paper9_heritageIntelligence/data/district_boundaries_v2/district_boundaries/009_宁波_宁波老外滩_boundary.geojson，SinoBF-1建筑功能 paper9_heritageIntell"
+    },
+    {
+      "step_id": "reason_3",
+      "todo_id": "perception_resources",
+      "agent": "perception_worker",
+      "step_type": "evidence_manifest",
+      "input_evidence": [
+        "Old Bund AOI",
+        "OSM roads in AOI",
+        "OSM buildings with height proxies",
+        "Protected building candidates"
+      ],
+      "method": "Validate local spatial data, tables, rasters, and metadata coverage.",
+      "summary": "PerceptionWorker advances the 宁波老外滩历史街区步行可达性与保护压力诊断 workflow using UrbanAgent planning, dual-space cognition, tool orchestration, and explicit QC gates.",
+      "confidence": 0.83,
+      "caveats": [
+        "Protected-building candidates require official registry verification before policy use."
+      ],
+      "task_excerpt": "分析宁波老外滩历史文化街区的建成环境，构建多个 X 指标。可用数据：AOI边界 paper9_heritageIntelligence/data/district_boundaries_v2/district_boundaries/009_宁波_宁波老外滩_boundary.geojson，SinoBF-1建筑功能 paper9_heritageIntell"
+    },
+    {
+      "step_id": "reason_4",
+      "todo_id": "cognition_model",
+      "agent": "cognition_worker",
+      "step_type": "dual_space_cognition",
+      "input_evidence": [
+        "Old Bund AOI",
+        "OSM roads in AOI",
+        "OSM buildings with height proxies",
+        "Protected building candidates"
+      ],
+      "method": "Build dual-space cognition: topological relations plus vector-layer evidence.",
+      "summary": "CognitionWorker advances the 宁波老外滩历史街区步行可达性与保护压力诊断 workflow using UrbanAgent planning, dual-space cognition, tool orchestration, and explicit QC gates.",
+      "confidence": 0.86,
+      "caveats": [
+        "Protected-building candidates require official registry verification before policy use."
+      ],
+      "task_excerpt": "分析宁波老外滩历史文化街区的建成环境，构建多个 X 指标。可用数据：AOI边界 paper9_heritageIntelligence/data/district_boundaries_v2/district_boundaries/009_宁波_宁波老外滩_boundary.geojson，SinoBF-1建筑功能 paper9_heritageIntell"
+    },
+    {
+      "step_id": "reason_5",
+      "todo_id": "analysis_operators",
+      "agent": "analyst",
+      "step_type": "operator_execution",
+      "input_evidence": [
+        "Old Bund AOI",
+        "OSM roads in AOI",
+        "OSM buildings with height proxies",
+        "Protected building candidates"
+      ],
+      "method": "Run stage-relevant measurements and inspect spatial assumptions.",
+      "summary": "AnalystWorker advances the 宁波老外滩历史街区步行可达性与保护压力诊断 workflow using UrbanAgent planning, dual-space cognition, tool orchestration, and explicit QC gates.",
+      "confidence": 0.9,
+      "caveats": [
+        "Protected-building candidates require official registry verification before policy use."
+      ],
+      "task_excerpt": "分析宁波老外滩历史文化街区的建成环境，构建多个 X 指标。可用数据：AOI边界 paper9_heritageIntelligence/data/district_boundaries_v2/district_boundaries/009_宁波_宁波老外滩_boundary.geojson，SinoBF-1建筑功能 paper9_heritageIntell"
+    },
+    {
+      "step_id": "reason_6",
+      "todo_id": "cartography_qgis",
+      "agent": "cartographer",
+      "step_type": "cartographic_publication",
+      "input_evidence": [
+        "Old Bund AOI",
+        "OSM roads in AOI",
+        "OSM buildings with height proxies",
+        "Protected building candidates"
+      ],
+      "method": "Create GIS layer stack, chart artifacts, table schema, and optional live-GIS commands.",
+      "summary": "CartographerWorker advances the 宁波老外滩历史街区步行可达性与保护压力诊断 workflow using UrbanAgent planning, dual-space cognition, tool orchestration, and explicit QC gates.",
+      "confidence": 0.9,
+      "caveats": [
+        "Protected-building candidates require official registry verification before policy use."
+      ],
+      "task_excerpt": "分析宁波老外滩历史文化街区的建成环境，构建多个 X 指标。可用数据：AOI边界 paper9_heritageIntelligence/data/district_boundaries_v2/district_boundaries/009_宁波_宁波老外滩_boundary.geojson，SinoBF-1建筑功能 paper9_heritageIntell"
+    }
+  ],
+  "final_answer_preview": "Observable UrbanAgent run completed with subagent status, reasoning breadcrumbs, GIS layers, charts, tables, and report artifacts."
+}

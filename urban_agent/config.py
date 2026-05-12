@@ -54,7 +54,6 @@ class MCPConfig:
 @dataclass
 class DataConfig:
     """Data paths configuration"""
-    citybench_path: str = "./third_party/CityBench-main"
     remote_sensing_path: str = "./data/remote_sensing"
     street_view_path: str = "./data/street_view"
     osm_path: str = "./data/osm"

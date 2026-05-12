@@ -22,7 +22,7 @@ except ImportError:
 # 地理空间库
 try:
     import geopandas as gpd
-    from shapely.geometry import Point, Polygon, LineString, box
+    from shapely.geometry import Point, Polygon, LineString, box, shape
     from shapely.ops import unary_union
     HAS_GEOPANDAS = True
 except ImportError:
@@ -49,6 +49,50 @@ from .spatial_diagnostics import align_loaded_layers_to_aoi as _governed_align_l
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]
 WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
+
+
+def read_geo_layer(path: Any) -> Any:
+    """Read a vector layer, with a lightweight GeoJSON fallback for Fiona issues."""
+    if not HAS_GEOPANDAS:
+        raise RuntimeError("geopandas is not installed")
+    resolved = Path(path)
+    try:
+        return gpd.read_file(resolved)
+    except Exception:
+        if resolved.suffix.lower() not in {".geojson", ".json"}:
+            raise
+        data = json.loads(resolved.read_text(encoding="utf-8"))
+        features = data.get("features") or []
+        rows = []
+        geometries = []
+        for feature in features:
+            if not isinstance(feature, dict):
+                continue
+            rows.append(dict(feature.get("properties") or {}))
+            geometries.append(shape(feature.get("geometry")) if feature.get("geometry") else None)
+        crs = "EPSG:4326"
+        crs_payload = data.get("crs")
+        if isinstance(crs_payload, dict):
+            crs_name = (crs_payload.get("properties") or {}).get("name")
+            if crs_name:
+                crs = str(crs_name)
+        return gpd.GeoDataFrame(rows, geometry=geometries, crs=crs)
+
+
+def write_geo_layer(gdf: Any, path: Any, *, driver: Optional[str] = None, layer: Optional[str] = None) -> None:
+    """Write a vector layer, falling back to direct GeoJSON serialization when needed."""
+    resolved = Path(path)
+    try:
+        kwargs: Dict[str, Any] = {}
+        if driver:
+            kwargs["driver"] = driver
+        if layer:
+            kwargs["layer"] = layer
+        gdf.to_file(resolved, **kwargs)
+    except Exception:
+        if (driver or "").lower() != "geojson" and resolved.suffix.lower() not in {".geojson", ".json"}:
+            raise
+        resolved.write_text(gdf.to_json(), encoding="utf-8")
 
 
 def resolve_urban_path(value: Any) -> Optional[Path]:
@@ -89,11 +133,17 @@ def discover_urban_data_sources(payload: Dict[str, Any]) -> Dict[str, Any]:
             paths_by_role["streetview_points"] = str(points)
 
     if "function_root" in paths_by_role and "function_counts" not in paths_by_role:
-        match = _find_matching_sinobf_dir(Path(paths_by_role["function_root"]), paths_by_role)
+        match = _find_matching_function_dir(Path(paths_by_role["function_root"]), paths_by_role)
         if match:
-            paths_by_role.setdefault("function_counts", str(match / "sinobf_function_counts.csv"))
-            paths_by_role.setdefault("function_buildings", str(match / "sinobf_buildings.geojson"))
-            paths_by_role.setdefault("function_poi", str(match / "sinobf_building_poi.geojson"))
+            counts = _first_existing_match(match, ["*function_counts.csv", "function_counts.csv"])
+            buildings = _first_existing_match(match, ["*function*buildings*.geojson", "*buildings.geojson"])
+            poi = _first_existing_match(match, ["*function*poi*.geojson", "*building_poi.geojson", "*poi.geojson"])
+            if counts:
+                paths_by_role.setdefault("function_counts", str(counts))
+            if buildings:
+                paths_by_role.setdefault("function_buildings", str(buildings))
+            if poi:
+                paths_by_role.setdefault("function_poi", str(poi))
 
     if "roads" not in paths_by_role or "buildings" not in paths_by_role:
         for raw_path in raw_paths:
@@ -117,7 +167,7 @@ def discover_urban_data_sources(payload: Dict[str, Any]) -> Dict[str, Any]:
         if not path_text or not HAS_GEOPANDAS:
             continue
         try:
-            gdf = gpd.read_file(path_text)
+            gdf = read_geo_layer(path_text)
             if bbox is None and len(gdf) > 0:
                 bbox = [float(value) for value in gdf.total_bounds]
             if crs is None and gdf.crs is not None:
@@ -147,7 +197,7 @@ def compute_built_form_metrics(arguments: Dict[str, Any]) -> Dict[str, Any]:
     if not buildings_path:
         return {"status": "unavailable", "reason": "no building footprint layer found", "capability": "urban_density_morphology"}
 
-    buildings = gpd.read_file(buildings_path)
+    buildings = read_geo_layer(buildings_path)
     buildings_m, metric_crs = _to_metric_crs(buildings)
     boundary_m = _boundary_metric_layer(paths, metric_crs)
     analysis_buildings_m = _clip_to_boundary(buildings_m, boundary_m)
@@ -167,7 +217,7 @@ def compute_built_form_metrics(arguments: Dict[str, Any]) -> Dict[str, Any]:
     street_width_proxy_m = None
     dh_ratio_proxy = None
     if roads_path:
-        roads = gpd.read_file(roads_path)
+        roads = read_geo_layer(roads_path)
         roads_m, _ = _to_metric_crs(roads, target_crs=metric_crs)
         roads_m = _clip_to_boundary(roads_m, boundary_m)
         road_length_m = float(roads_m.geometry.length.sum()) if len(roads_m) else 0.0
@@ -241,7 +291,7 @@ def compute_function_mix_entropy(arguments: Dict[str, Any]) -> Dict[str, Any]:
             source_path = counts_path
 
     if not counts and paths.get("function_buildings") and HAS_GEOPANDAS:
-        gdf = gpd.read_file(paths["function_buildings"])
+        gdf = read_geo_layer(paths["function_buildings"])
         function_col = _first_existing_column(gdf.columns, ["Function", "function", "category", "type"])
         if function_col:
             counts = {str(key): int(value) for key, value in gdf[function_col].value_counts(dropna=False).items()}
@@ -371,7 +421,7 @@ def build_gis_artifact_bundle(arguments: Dict[str, Any]) -> Dict[str, Any]:
         if not path_text:
             continue
         try:
-            loaded[role] = gpd.read_file(path_text)
+            loaded[role] = read_geo_layer(path_text)
         except Exception as error:
             logger.warning("Could not load %s layer %s: %s", role, path_text, error)
 
@@ -392,13 +442,16 @@ def build_gis_artifact_bundle(arguments: Dict[str, Any]) -> Dict[str, Any]:
             gpkg_path.unlink()
         for role, gdf in aligned_loaded.items():
             try:
-                gdf.to_file(gpkg_path, layer=role, driver="GPKG")
+                write_geo_layer(gdf, gpkg_path, layer=role, driver="GPKG")
                 layer_paths[role] = f"{gpkg_path}|layername={role}"
             except Exception as error:
                 fallback = artifact_dir / f"{role}.geojson"
-                gdf.to_file(fallback, driver="GeoJSON")
-                layer_paths[role] = str(fallback)
-                logger.warning("GPKG write failed for %s, wrote GeoJSON: %s", role, error)
+                try:
+                    write_geo_layer(gdf, fallback, driver="GeoJSON")
+                    layer_paths[role] = str(fallback)
+                    logger.warning("GPKG write failed for %s, wrote GeoJSON: %s", role, error)
+                except Exception as fallback_error:
+                    logger.warning("Could not write GIS layer %s: %s; fallback failed: %s", role, error, fallback_error)
         artifacts.append(_artifact("gis_layer_package", "Formal GIS Layer Package", gpkg_path, "application/geopackage+sqlite3", {"layers": sorted(aligned_loaded), "alignment_policy": alignment_diagnostics.get("policy")}))
         metric_layer_names = [name for name in aligned_loaded if name.endswith("metric_summary") or name.startswith("metric_")]
         if metric_layer_names:
@@ -440,7 +493,7 @@ def build_gis_artifact_bundle(arguments: Dict[str, Any]) -> Dict[str, Any]:
 def default_gis_legend() -> Dict[str, Any]:
     return {
         "aoi": {"geometry": "polygon boundary", "stroke": "#111827", "fill": "none", "label": "AOI boundary"},
-        "context_buffer": {"geometry": "polygon boundary", "stroke": "#64748b", "fill": "none", "label": "3x by 3x AOI-centered context buffer"},
+        "context_buffer": {"geometry": "polygon boundary", "stroke": "#64748b", "fill": "none", "label": "AOI-centered context buffer"},
         "context_roads": {"geometry": "line", "stroke": "#94a3b8", "label": "Context road centerlines"},
         "context_buildings": {"geometry": "polygon", "fill": "#e5e7eb", "stroke": "#cbd5e1", "label": "Context building footprints"},
         "context_function_poi": {"geometry": "point", "marker": "circle", "label": "Context function POIs"},
@@ -493,15 +546,14 @@ def _classify_urban_path(path: Path) -> Optional[str]:
         return "streetview_dir"
     if name == "points_used.csv":
         return "streetview_points"
-    if "sinobf" in norm:
-        if name == "sinobf_function_counts.csv":
-            return "function_counts"
-        if name == "sinobf_buildings.geojson":
-            return "function_buildings"
-        if name == "sinobf_building_poi.geojson":
-            return "function_poi"
-        if path.is_dir():
-            return "function_root"
+    if path.is_dir() and _looks_like_function_root(path):
+        return "function_root"
+    if "function_counts" in name:
+        return "function_counts"
+    if "function" in norm and "building" in name and name.endswith((".geojson", ".gpkg", ".shp")):
+        return "function_buildings"
+    if "function" in norm and "poi" in name and name.endswith((".geojson", ".gpkg", ".shp")):
+        return "function_poi"
     if name.endswith(('.geojson', '.gpkg', '.shp')):
         if "road" in name or "roads" in name:
             return "roads"
@@ -548,9 +600,9 @@ def _find_matching_osm_cache_dir(root: Path, paths_by_role: Dict[str, str]) -> O
     return best_dir
 
 
-def _find_matching_sinobf_dir(root: Path, paths_by_role: Dict[str, str]) -> Optional[Path]:
+def _find_matching_function_dir(root: Path, paths_by_role: Dict[str, str]) -> Optional[Path]:
     search_root = root / "extracted" if (root / "extracted").exists() else root
-    count_files = list(search_root.rglob("sinobf_function_counts.csv"))
+    count_files = list(search_root.rglob("*function_counts.csv"))
     if not count_files:
         return None
     hints = " ".join(Path(path).as_posix() for key, path in paths_by_role.items() if key != "function_root").lower()
@@ -567,6 +619,27 @@ def _find_matching_sinobf_dir(root: Path, paths_by_role: Dict[str, str]) -> Opti
             best_score = score
             best_dir = folder
     return best_dir
+
+
+def _looks_like_function_root(path: Path) -> bool:
+    norm = path.as_posix().lower()
+    if any(token in norm for token in ("function", "landuse", "land_use", "poi")):
+        return True
+    try:
+        return any(path.rglob("*function_counts.csv"))
+    except Exception:
+        return False
+
+
+def _first_existing_match(root: Path, patterns: list[str]) -> Optional[Path]:
+    for pattern in patterns:
+        direct = root / pattern
+        if "*" not in pattern and direct.exists():
+            return direct
+        matches = sorted(root.glob(pattern))
+        if matches:
+            return matches[0]
+    return None
 
 
 def _describe_resource(role: str, path: Path) -> Dict[str, Any]:
@@ -589,7 +662,7 @@ def _describe_resource(role: str, path: Path) -> Dict[str, Any]:
         resource["item_count"] = len(list(path.iterdir()))
     elif HAS_GEOPANDAS and path.suffix.lower() in {".geojson", ".gpkg", ".shp"}:
         try:
-            gdf = gpd.read_file(path)
+            gdf = read_geo_layer(path)
             resource.update({
                 "feature_count": len(gdf),
                 "crs": str(gdf.crs) if gdf.crs else None,
@@ -618,7 +691,7 @@ def _resource_license(role: str) -> str:
     if role in {"roads", "buildings"}:
         return "OpenStreetMap contributors, ODbL 1.0"
     if role.startswith("function"):
-        return "SinoBF-1 dataset metadata; verify dataset license before redistribution"
+        return "function-source metadata; verify dataset license before redistribution"
     if role.startswith("streetview"):
         return "street-view provider terms; local research cache, redistribution restricted"
     if role == "boundary":
@@ -711,7 +784,7 @@ def _boundary_metric_layer(paths: Dict[str, str], target_crs: Any) -> Optional[A
     if not boundary_path:
         return None
     try:
-        boundary = gpd.read_file(boundary_path)
+        boundary = read_geo_layer(boundary_path)
         boundary_m, _ = _to_metric_crs(boundary, target_crs=target_crs)
         return boundary_m
     except Exception:
@@ -1458,7 +1531,7 @@ class GeoDataLoader:
             return None
         
         try:
-            gdf = gpd.read_file(filepath)
+            gdf = read_geo_layer(filepath)
             logger.info(f"成功加载Shapefile: {filepath}, 记录数: {len(gdf)}")
             return gdf
         except Exception as e:
@@ -1502,15 +1575,6 @@ class GeoDataLoader:
             logger.error(f"加载遥感影像失败: {e}")
             return None
     
-    @staticmethod
-    def load_citybench_remote_sensing(city: str, image_id: str, base_path: str) -> Optional[np.ndarray]:
-        """加载CityBench遥感影像"""
-        filepath = Path(base_path) / "citydata" / "remote_sensing" / city / f"{image_id}.png"
-        if filepath.exists():
-            return GeoDataLoader.load_remote_sensing_image(str(filepath))
-        return None
-
-
 class SpatialAnalyzer:
     """空间分析器"""
     
@@ -1601,51 +1665,6 @@ class SpatialAnalyzer:
             "density": float(density),
             "avg_area": float(total_area / len(gdf)) if len(gdf) > 0 else 0
         }
-
-
-class CityBenchDataLoader:
-    """CityBench数据加载器"""
-    
-    def __init__(self, base_path: str):
-        self.base_path = Path(base_path)
-        self.cities = ["Beijing", "London", "Paris", "Tokyo", "NewYork", "Mumbai", "Sydney", "Moscow", "Shanghai"]
-    
-    def load_city_shapefile(self, city: str) -> Optional[gpd.GeoDataFrame]:
-        """加载城市Shapefile"""
-        filepath = self.base_path / "citydata" / "EXP_ORIG_DATA" / city / f"{city}.shp"
-        return GeoDataLoader.load_shapefile(str(filepath))
-    
-    def load_remote_sensing_dataset(self, city: str = "Paris") -> Dict:
-        """加载遥感影像数据集"""
-        # 加载标签文件
-        label_file = self.base_path / "citydata" / "remote_sensing" / "all_city_img_object_set.json"
-        
-        if not label_file.exists():
-            logger.warning(f"标签文件不存在: {label_file}")
-            return {}
-        
-        try:
-            with open(label_file, 'r') as f:
-                labels = json.load(f)
-            
-            # 获取该城市的影像
-            image_dir = self.base_path / "citydata" / "remote_sensing" / city
-            if not image_dir.exists():
-                logger.warning(f"影像目录不存在: {image_dir}")
-                return {}
-            
-            images = list(image_dir.glob("*.png"))
-            
-            return {
-                "city": city,
-                "image_count": len(images),
-                "labels": labels,
-                "image_dir": str(image_dir)
-            }
-        except Exception as e:
-            logger.error(f"加载遥感数据集失败: {e}")
-            return {}
-    
     def load_exploration_tasks(self, city: str) -> Optional[Any]:
         """加载城市探索任务"""
         if not HAS_PANDAS:

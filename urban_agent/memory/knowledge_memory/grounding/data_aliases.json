@@ -1,0 +1,116 @@
+{
+  "record_id": "grounding_data_aliases",
+  "memory_type": "knowledge",
+  "summary": "Alias map for grounding evidence terms and dataset roles.",
+  "triggers": [
+    "grounding",
+    "alias",
+    "evidence",
+    "indicator"
+  ],
+  "data_aliases": {
+    "aoi": [
+      "aoi_boundary",
+      "boundary",
+      "district_boundary",
+      "study_area"
+    ],
+    "boundary": [
+      "aoi_boundary",
+      "boundary",
+      "district_boundary",
+      "study_area"
+    ],
+    "road": [
+      "current_road_density_km_per_km2",
+      "road_centerline",
+      "road_network",
+      "roads",
+      "street_network"
+    ],
+    "roads": [
+      "current_road_density_km_per_km2",
+      "road_centerline",
+      "road_network",
+      "roads",
+      "street_network"
+    ],
+    "building": [
+      "building_footprint",
+      "building_morphology",
+      "buildings"
+    ],
+    "buildings": [
+      "building_footprint",
+      "building_morphology",
+      "buildings"
+    ],
+    "streetview": [
+      "street_level_image",
+      "street_level_images",
+      "street_level_sample_points",
+      "streetview",
+      "streetview_brightness_mean_proxy",
+      "streetview_color_dispersion_proxy",
+      "streetview_sample_count"
+    ],
+    "street_level_image": [
+      "street_level_image",
+      "street_level_images",
+      "street_level_sample_points",
+      "streetview",
+      "streetview_brightness_mean_proxy",
+      "streetview_color_dispersion_proxy",
+      "streetview_sample_count"
+    ],
+    "poi": [
+      "function_poi",
+      "function_proxy",
+      "poi",
+      "poi_like"
+    ],
+    "function_counts": [
+      "commercial_ratio_proxy",
+      "function_counts",
+      "function_entropy",
+      "function_mix_entropy"
+    ],
+    "function": [
+      "building_function",
+      "commercial_ratio_proxy",
+      "function_buildings",
+      "function_counts",
+      "function_entropy",
+      "function_poi"
+    ],
+    "parcel": [
+      "cadastral",
+      "land_parcel",
+      "parcel",
+      "plot"
+    ],
+    "historical_map": [
+      "historic_map",
+      "historical_map",
+      "historical_parcel",
+      "historical_road",
+      "historical_water"
+    ],
+    "registry": [
+      "protected_building_registry",
+      "protection_list",
+      "registry"
+    ],
+    "material_label": [
+      "material_label",
+      "material_segmentation",
+      "semantic_material"
+    ],
+    "landmark_label": [
+      "landmark_coordinate",
+      "landmark_label",
+      "viewshed_label",
+      "visibility_label"
+    ]
+  }
+}

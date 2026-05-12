@@ -214,7 +214,7 @@ SHELL_COMMAND_REGISTRY: list[ShellCommandDef] = [
     ShellCommandDef("new", "Start a fresh shell session", "Session", aliases=("reset",)),
     ShellCommandDef("clear", "Clear the terminal display", "Session"),
     ShellCommandDef("status", "Show shell, provider, and runtime status", "Session"),
-    ShellCommandDef("runtime", "Show the last run's Hermes-style runtime ledger summary", "Session"),
+    ShellCommandDef("runtime", "Show the last run's runtime ledger summary", "Session"),
     ShellCommandDef("plan", "Preview planner decomposition and worker assignment", "Urban Workflow", args_hint="<task>"),
     ShellCommandDef("capabilities", "List or search method-level capabilities", "Urban Workflow", aliases=("caps", "tools"), args_hint="[query]"),
     ShellCommandDef("doctor", "Run environment and provider checks", "Configuration"),
@@ -323,7 +323,7 @@ def _get_capabilities_summary() -> dict[str, list[str]]:
 def _get_tools_summary() -> dict[str, list[str]]:
     """Return MCP tools grouped by category, for the welcome banner."""
     try:
-        from .mcp_tools import UrbanMCPTools
+        from plugins.mcp import UrbanMCPTools
         tools = UrbanMCPTools()
         grouped: dict[str, list[str]] = {}
         for tool_name in sorted(tools.tools.keys()):
@@ -1241,16 +1241,14 @@ def _print_plan(plan: dict[str, Any]) -> None:
 
 def _build_capability_report(query: Optional[str], level: int = 0, limit: int = 8) -> dict[str, Any]:
     from .capabilities import get_default_capability_registry
-    from .mcp_tools import get_mcp_tools
 
     registry = get_default_capability_registry()
-    mcp_tools = get_mcp_tools()
     if query:
         selected = registry.search(query, limit=limit)
         names = [capability.name for capability in selected]
     else:
         names = registry.names()[:limit]
-    items = registry.disclose(names, level=level, mcp_tools=mcp_tools)
+    items = registry.disclose(names, level=level)
     return {
         "query": query,
         "level": level,
@@ -1337,7 +1335,7 @@ class UrbanAgentShell:
             _print_run_report(report["summary"])
 
     def _print_welcome(self) -> None:
-        """Hermes-style post-banner welcome message, curator status, and tip."""
+        """Post-banner welcome message, curator status, and tip."""
         accent = "#FFD700"
         dim_color = "#B8860B"
         text_color = "#FFF8DC"
@@ -1373,7 +1371,7 @@ class UrbanAgentShell:
     def _print_banner(self) -> None:
         provider = _selected_provider()
         if _rich_ui_enabled():
-            # ── Hermes-style two-column banner ──
+            # Two-column banner
             accent = "#FFD700"
             dim_color = "#B8860B"
             text_color = "#FFF8DC"
@@ -1432,7 +1430,7 @@ class UrbanAgentShell:
             layout_table.add_column("right", justify="left")
             layout_table.add_row(left_content, right_content)
 
-            version_label = f"UrbanAgent v0.1.0 · Hermes-runtime branch"
+            version_label = "UrbanAgent v0.1.0 · runtime-kernel branch"
             outer_panel = Panel(
                 layout_table,
                 title=f"[bold {accent}]{version_label}[/]",
@@ -1746,7 +1744,7 @@ async def _cmd_perceive(args):
 
 def _cmd_cognize(args):
     """执行双空间认知"""
-    from .cognition import SpatialCognition
+    from legacy.urban_agent_legacy.cognition import SpatialCognition
 
     with open(args.input, encoding="utf-8") as f:
         perception_data = json.load(f)
@@ -1783,7 +1781,7 @@ async def _cmd_reason(args):
 
 def _cmd_visualize(args):
     """执行可视化"""
-    from .visualization import SpatialVisualizer
+    from legacy.urban_agent_legacy.visualization import SpatialVisualizer
 
     with open(args.input, encoding="utf-8") as f:
         data = json.load(f)
@@ -1826,7 +1824,7 @@ def _cmd_visualize(args):
 def _cmd_correct(args):
     """应用人工纠偏模块并导出修正结果。"""
     from .core import CorrectionModuleRegistry
-    from .visualization import SpatialVisualizer
+    from legacy.urban_agent_legacy.visualization import SpatialVisualizer
 
     with open(args.input, encoding="utf-8") as f:
         cognition_result = json.load(f)
@@ -1882,15 +1880,31 @@ def _cmd_review(args):
                 _check_recursive(item, f"{path}[{i}]")
 
     _check_recursive(results)
-    quality_score = max(0.0, 1.0 - len(issues) * 0.15)
+    policy = _load_cli_quality_policy()
+    issue_penalty = float(policy.get("cli_issue_penalty", 0.15))
+    confidence_threshold = float(policy.get("confidence_threshold", 0.0))
+    quality_score = max(0.0, 1.0 - len(issues) * issue_penalty)
     report = {
         "quality_score": quality_score,
-        "passed": quality_score >= 0.6,
+        "passed": quality_score >= confidence_threshold,
         "issues": issues,
-        "recommendation": "accept" if quality_score >= 0.6 else "revise",
+        "recommendation": "accept" if quality_score >= confidence_threshold else "revise",
     }
     _write_json(report, args.output)
     print(json.dumps(report, ensure_ascii=False, indent=2))
+
+
+def _load_cli_quality_policy() -> dict[str, Any]:
+    try:
+        from .memory_store import FileMemoryStore
+
+        for record in FileMemoryStore.default().records("policy"):
+            payload = record.to_dict()
+            if payload.get("policy_id") == "quality_confidence_policy":
+                return payload
+    except Exception:
+        return {}
+    return {}
 
 
 async def _cmd_run(args):
@@ -2002,7 +2016,7 @@ def _cmd_shell(args):
 
 async def _cmd_guided(args) -> None:
     """Run multi-turn guided analysis with human-in-the-loop."""
-    from .cli_multiturn import run_multiturn
+    from examples.rdma_style_demo import run_multiturn
 
     task_text = args.task
     if args.input:

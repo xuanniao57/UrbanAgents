@@ -12,4 +12,6 @@ def test_public_api_exports_versioned_symbols():
 
 
 def test_legacy_agent_alias_is_stable():
-    assert urban_agent.LegacyUrbanAgent is urban_agent.UrbanAgent
+    from legacy.urban_agent_legacy import UrbanAgent as LegacyUrbanAgent
+
+    assert LegacyUrbanAgent is not urban_agent.UrbanAgent

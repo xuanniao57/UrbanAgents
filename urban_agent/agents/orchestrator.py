@@ -396,6 +396,8 @@ class MultiAgentOrchestrator:
         if not exec_passed:
             logger.warning(f"[QC] Execution output confidence low: {exec_qc}")
 
+        review_memory_path = None
+
         # ── Step 4: Memory Update ──
         if self.enable_memory and self.memory_module is not None:
             self._tick("memory_store")
@@ -417,13 +419,23 @@ class MultiAgentOrchestrator:
 
         # ── Step 5: Assemble output ──
         results = exec_result.payload.get("results", {})
+        review_payload = results.get("review", {})
+        if self.enable_memory and review_payload:
+            try:
+                review_memory_path = self.feedback_memory.store_review_feedback(
+                    task=task_payload,
+                    review=review_payload,
+                    trace_id=trace_id,
+                )
+            except Exception as e:
+                logger.warning(f"Review feedback memory update failed: {e}")
         return {
             "trace_id": trace_id,
             "status": "success" if results.get("completed", 0) > 0 else "partial",
             "plan": plan_result.payload.get("execution_plan", {}),
             "results": results,
             "final_answer": self._extract_answer(results),
-            "review": results.get("review", {}),
+            "review": review_payload,
             # New: quality & efficiency metadata
             "quality_control": {
                 "plan_qc": plan_qc,

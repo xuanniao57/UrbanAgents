@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-05-08T14:11:48.089885",
+  "task": "分析上海南京路步行街历史文化街区的\"风貌要素协调度\"。可用数据：街景 D:\\街景\\streetview_images_batch\\上海\\002_南京路步行街\\（154点100%完整），AOI paper9_heritageIntelligence/data/district_boundaries_v2/district_boundaries/002_上海_南京路步行街_boundary.geojson（0.52km2），OSM路网 paper9_heritageIntelligence/heritage_district_batch/districts/002_上海_南京路步行街/osm_roads_aoi.geojson（612段），OSM建筑 paper9_heritageIntelligence/heritage_district_batch/districts/002_上海_南京路步行街/osm_buildings_aoi.geojson（661栋），SinoBF-1 paper9_heritageIntelligence/data/sinobf1/。请：1.验收数据 2.自主提出2-4个X指标含定义/数据/方法 3.分类可直接计算/仅可代理/暂不可计算 4.标记缺失数据和需人工校验点。",
+  "bbox": null,
+  "input_path": null,
+  "interaction_mode": "supervisory",
+  "task_payload": {
+    "question": "分析上海南京路步行街历史文化街区的\"风貌要素协调度\"。可用数据：街景 D:\\街景\\streetview_images_batch\\上海\\002_南京路步行街\\（154点100%完整），AOI paper9_heritageIntelligence/data/district_boundaries_v2/district_boundaries/002_上海_南京路步行街_boundary.geojson（0.52km2），OSM路网 paper9_heritageIntelligence/heritage_district_batch/districts/002_上海_南京路步行街/osm_roads_aoi.geojson（612段），OSM建筑 paper9_heritageIntelligence/heritage_district_batch/districts/002_上海_南京路步行街/osm_buildings_aoi.geojson（661栋），SinoBF-1 paper9_heritageIntelligence/data/sinobf1/。请：1.验收数据 2.自主提出2-4个X指标含定义/数据/方法 3.分类可直接计算/仅可代理/暂不可计算 4.标记缺失数据和需人工校验点。"
+  }
+}

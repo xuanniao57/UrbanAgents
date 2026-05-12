@@ -1,0 +1,152 @@
+{
+  "policy_id": "default_governance_policy",
+  "summary": "Default role access matrix and lean core tool inventory for UrbanAgent governance.",
+  "triggers": [
+    "governance",
+    "tool inventory",
+    "access matrix",
+    "permissions"
+  ],
+  "scope": "resource_governance",
+  "access_matrix": {
+    "planner": {
+      "System Interaction": "R",
+      "Data Understanding": "R",
+      "Domain Knowledge": "R"
+    },
+    "perception": {
+      "System Interaction": "R/W",
+      "Data Understanding": "R/W",
+      "Domain Knowledge": "R"
+    },
+    "analyst": {
+      "System Interaction": "R",
+      "Data Understanding": "R/W",
+      "Domain Knowledge": "R/W"
+    },
+    "cartographer": {
+      "System Interaction": "R/W",
+      "Data Understanding": "R",
+      "Domain Knowledge": "R"
+    },
+    "reporter": {
+      "System Interaction": "R",
+      "Data Understanding": "R",
+      "Domain Knowledge": "R"
+    },
+    "spatial_reviewer": {
+      "System Interaction": "R",
+      "Data Understanding": "R",
+      "Domain Knowledge": "R"
+    },
+    "quality_controller": {
+      "System Interaction": "R",
+      "Data Understanding": "R",
+      "Domain Knowledge": "R"
+    },
+    "manager": {
+      "System Interaction": "R/W",
+      "Data Understanding": "R/W",
+      "Domain Knowledge": "R/W"
+    }
+  },
+  "tool_inventory": [
+    {
+      "name": "fetch_osm_data",
+      "description": "Acquire OpenStreetMap context for a study area.",
+      "category": "System Interaction",
+      "read_roles": [
+        "perception",
+        "analyst",
+        "manager"
+      ],
+      "write_roles": [
+        "perception"
+      ]
+    },
+    {
+      "name": "analyze_connectivity",
+      "description": "Analyze road-network connectivity metrics.",
+      "category": "Data Understanding",
+      "read_roles": [
+        "analyst",
+        "perception"
+      ],
+      "write_roles": [
+        "analyst"
+      ]
+    },
+    {
+      "name": "measure_accessibility",
+      "description": "Measure accessibility between origins and destinations.",
+      "category": "Data Understanding",
+      "read_roles": [
+        "analyst",
+        "perception"
+      ],
+      "write_roles": [
+        "analyst"
+      ]
+    },
+    {
+      "name": "calculate_density",
+      "description": "Compute density and morphology metrics.",
+      "category": "Data Understanding",
+      "read_roles": [
+        "analyst",
+        "perception"
+      ],
+      "write_roles": [
+        "analyst"
+      ]
+    },
+    {
+      "name": "build_topology",
+      "description": "Build topology relations from spatial features.",
+      "category": "Data Understanding",
+      "read_roles": [
+        "analyst",
+        "perception"
+      ],
+      "write_roles": [
+        "analyst"
+      ]
+    },
+    {
+      "name": "export_geojson",
+      "description": "Export reviewable GeoJSON features.",
+      "category": "Data Understanding",
+      "read_roles": [
+        "*"
+      ],
+      "write_roles": [
+        "cartographer",
+        "analyst"
+      ]
+    },
+    {
+      "name": "generate_svg_overlay",
+      "description": "Generate geospatially aligned SVG overlays.",
+      "category": "Domain Knowledge",
+      "read_roles": [
+        "cartographer",
+        "reporter"
+      ],
+      "write_roles": [
+        "cartographer"
+      ]
+    },
+    {
+      "name": "generate_measurement_report",
+      "description": "Generate measurement report artifacts.",
+      "category": "Domain Knowledge",
+      "read_roles": [
+        "reporter",
+        "analyst"
+      ],
+      "write_roles": [
+        "reporter"
+      ]
+    }
+  ]
+}

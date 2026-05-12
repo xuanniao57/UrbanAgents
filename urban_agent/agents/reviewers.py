@@ -21,8 +21,21 @@ from typing import Any, Callable, Dict, Optional
 
 from .base import AgentMessage, AgentRole, BaseAgent
 from ..feedback_memory import get_default_feedback_memory
+from ..memory_store import FileMemoryStore
 
 logger = logging.getLogger(__name__)
+
+
+def _load_reviewer_policy() -> Dict[str, Any]:
+    try:
+        store = FileMemoryStore.default()
+        for record in store.records("policy"):
+            payload = record.to_dict()
+            if payload.get("policy_id") == "urban_review_threshold_policy":
+                return payload
+    except Exception:
+        return {}
+    return {}
 
 
 class SpatialReviewerAgent(BaseAgent):
@@ -36,15 +49,6 @@ class SpatialReviewerAgent(BaseAgent):
     - Evidence and Governance Review
     - Optional artifact review for cartography / report outputs
     """
-
-    REQUIRED_POLICY_THRESHOLDS = {
-        "spatial_structural_review": 0.55,
-        "temporal_consistency_review": 0.55,
-        "population_and_stakeholder_review": 0.50,
-        "evidence_and_governance_review": 0.55,
-    }
-
-    URBAN_VALIDITY_THRESHOLD = 0.65
 
     def _policy_criteria(self) -> Dict[str, Any]:
         """Load machine-readable review criteria from policy memory."""
@@ -63,16 +67,16 @@ class SpatialReviewerAgent(BaseAgent):
             }
         return criteria
 
-    RELEVANT_FEEDBACK_LESSON_IDS = frozenset({
-        "aoi_centered_context_buffer",
-        "diagnose_source_extent_vs_context_buffer",
-        "layered_gis_for_spatial_audit",
-    })
-
     def __init__(self, llm_client: Optional[Any] = None, feedback_memory: Optional[Any] = None, **kwargs):
         super().__init__(role=AgentRole.SPATIAL_REVIEWER, llm_client=llm_client, **kwargs)
         self._feedback_memory = feedback_memory or get_default_feedback_memory()
         self._review_corrections: list[Dict[str, Any]] = []
+        policy = _load_reviewer_policy()
+        self.required_policy_thresholds = dict(policy.get("required_policy_thresholds") or {})
+        self.urban_validity_threshold = float(policy.get("urban_validity_threshold", 0.0))
+        self.minor_issue_penalty = float(policy.get("minor_issue_penalty", 0.0))
+        self.major_issue_penalty = float(policy.get("major_issue_penalty", self.minor_issue_penalty))
+        self.relevant_feedback_lesson_ids = frozenset(policy.get("relevant_feedback_lesson_ids") or [])
 
     @property
     def role_prompt(self) -> str:
@@ -103,7 +107,7 @@ class SpatialReviewerAgent(BaseAgent):
         }
         hard_failures = [
             name
-            for name, threshold in self.REQUIRED_POLICY_THRESHOLDS.items()
+            for name, threshold in self.required_policy_thresholds.items()
             if policy_scores.get(name, {}).get("applicable", True)
             and required_scores.get(name, 0.0) < threshold
         ]
@@ -117,7 +121,7 @@ class SpatialReviewerAgent(BaseAgent):
             for name in hard_failures
             for issue in policy_scores.get(name, {}).get("issues", [])
         ]
-        passed = not hard_failures and urban_validity_score >= self.URBAN_VALIDITY_THRESHOLD
+        passed = not hard_failures and urban_validity_score >= self.urban_validity_threshold
         correction_memory = _dedupe_corrections(self._review_corrections)
         rerun_queue = [item for item in correction_memory if item.get("rerun_required")]
 
@@ -208,7 +212,7 @@ class SpatialReviewerAgent(BaseAgent):
                 score -= 0.1
             if alignment.get("maup_like_risk") == "high" and not corrections and not human_alignment:
                 issues.append(f"{st_id}: high MAUP-like risk without correction record")
-                score -= 0.15
+                score -= self.minor_issue_penalty
 
             score = self._apply_gis_alignment_review(st_id, alignment, issues, score, result=result)
 
@@ -242,7 +246,7 @@ class SpatialReviewerAgent(BaseAgent):
                 score -= 0.05
             if temporal.get("forecast_horizon") and not temporal.get("time_window"):
                 issues.append(f"{st_id}: forecast horizon provided without observation window")
-                score -= 0.15
+                score -= self.minor_issue_penalty
 
         return {
             "score": max(0.0, min(1.0, score)),
@@ -277,16 +281,16 @@ class SpatialReviewerAgent(BaseAgent):
 
             if not target_group:
                 issues.append(f"{st_id}: missing target_group")
-                score -= 0.15
+                score -= self.minor_issue_penalty
             if not observed_group:
                 issues.append(f"{st_id}: missing observed_group")
-                score -= 0.15
+                score -= self.minor_issue_penalty
             if not affected_group:
                 issues.append(f"{st_id}: missing affected_group")
                 score -= 0.10
             if target_group and observed_group and target_group != observed_group and not sampling_bias:
                 issues.append(f"{st_id}: target_group and observed_group differ without sampling_bias note")
-                score -= 0.15
+                score -= self.minor_issue_penalty
             if not stakeholder_source and not stakeholder_feedback:
                 issues.append(f"{st_id}: no stakeholder source or review feedback attached")
                 score -= 0.10
@@ -328,6 +332,38 @@ class SpatialReviewerAgent(BaseAgent):
             if not tags:
                 issues.append(f"{st_id}: evidence manifest has no tags")
                 score -= 0.05
+
+            grounding_policy = result.get("grounding_policy", {})
+            dataset_cards = result.get("dataset_cards", [])
+            if isinstance(grounding_policy, dict) and grounding_policy:
+                if grounding_policy.get("dataset_cards_required", False) and not dataset_cards:
+                    issues.append(f"{st_id}: grounding policy requires dataset cards but none are attached")
+                    score -= self.minor_issue_penalty
+                if grounding_policy.get("known_limits_required", False):
+                    incomplete_cards = [
+                        card.get("resource_id") or card.get("name")
+                        for card in dataset_cards
+                        if isinstance(card, dict) and not card.get("known_limits")
+                    ]
+                    if incomplete_cards:
+                        issues.append(f"{st_id}: dataset cards lack known_limits {incomplete_cards[:5]}")
+                        score -= 0.10
+
+            indicator_matrix = result.get("indicator_computability_matrix", [])
+            if isinstance(indicator_matrix, list) and indicator_matrix:
+                applicable = True
+                require_disclosure = not isinstance(grounding_policy, dict) or grounding_policy.get("require_missing_evidence_disclosure", True)
+                if require_disclosure:
+                    for row in indicator_matrix:
+                        if not isinstance(row, dict):
+                            continue
+                        status = row.get("status")
+                        if status not in {"missing", "proxy"}:
+                            continue
+                        indicator = row.get("indicator") or row.get("name")
+                        if indicator and not self._has_indicator_disclosure(result, str(indicator)):
+                            issues.append(f"{st_id}: {indicator} is {status} but not disclosed in limitations")
+                            score -= 0.05
 
         return {
             "score": max(0.0, min(1.0, score)),
@@ -390,10 +426,10 @@ class SpatialReviewerAgent(BaseAgent):
             report_lower = report.lower()
             if "method" not in report_lower and "result" not in report_lower:
                 issues.append(f"{st_id}: report lacks explicit methods/results sections")
-                score -= 0.15
+                score -= self.minor_issue_penalty
             if "because" not in report_lower and "evidence" not in report_lower and "based on" not in report_lower:
                 issues.append(f"{st_id}: report lacks explicit evidence linkage")
-                score -= 0.15
+                score -= self.minor_issue_penalty
 
         return {
             "score": max(0.0, min(1.0, score)),
@@ -428,6 +464,18 @@ class SpatialReviewerAgent(BaseAgent):
                 return True
         return bool(result.get("image_path") or result.get("geojson") or result.get("bounds"))
 
+    @staticmethod
+    def _has_indicator_disclosure(result: Dict[str, Any], indicator: str) -> bool:
+        needle = indicator.lower()
+        values = []
+        for key in ("limitations", "answer", "analysis", "report"):
+            value = result.get(key)
+            if isinstance(value, list):
+                values.extend(str(item) for item in value)
+            elif isinstance(value, str):
+                values.append(value)
+        return any(needle in value.lower() for value in values)
+
     def _apply_gis_alignment_review(self, st_id: str, alignment: Dict[str, Any], issues: list[str], score: float, result: Optional[Dict[str, Any]] = None) -> float:
         if not isinstance(alignment, dict) or not alignment:
             return score
@@ -435,7 +483,7 @@ class SpatialReviewerAgent(BaseAgent):
         status = alignment.get("status")
         if status in {"failed", "invalid_boundary", "no_boundary"}:
             issues.append(f"{st_id}: GIS alignment status is {status}")
-            score -= 0.25
+            score -= self.major_issue_penalty
 
         context = alignment.get("context_buffer", {}) if isinstance(alignment.get("context_buffer"), dict) else {}
         if context:
@@ -457,7 +505,7 @@ class SpatialReviewerAgent(BaseAgent):
             exported_count = int(layer_diag.get("exported_feature_count") or 0)
             if source_count > 0 and exported_count == 0:
                 issues.append(f"{st_id}: {layer_name} has source features but none intersect the AOI")
-                score -= 0.25
+                score -= self.major_issue_penalty
         return score
 
     def _apply_memory_policy_checks(self, st_id: str, alignment: Dict[str, Any], result: Dict[str, Any], issues: list[str], score: float) -> float:
@@ -650,6 +698,9 @@ def _diagnose_buffer_source_coverage(context: Dict[str, Any], layers: Dict[str, 
     ctx_height = float(context.get("context_height_m") or 0)
     if ctx_width <= 0 or ctx_height <= 0:
         return issues
+    minimum_coverage = float(context.get("minimum_source_context_coverage") or 0)
+    if minimum_coverage <= 0:
+        return issues
     for layer_name, layer_diag in layers.items():
         if not isinstance(layer_diag, dict) or layer_name == "boundary":
             continue
@@ -660,17 +711,17 @@ def _diagnose_buffer_source_coverage(context: Dict[str, Any], layers: Dict[str, 
         source_height = max(0.0, float(source_bounds[3] or 0) - float(source_bounds[1] or 0))
         width_coverage = source_width / ctx_width if source_width > 0 and ctx_width > 0 else None
         height_coverage = source_height / ctx_height if source_height > 0 and ctx_height > 0 else None
-        if width_coverage is not None and width_coverage < 0.6:
+        if width_coverage is not None and width_coverage < minimum_coverage:
             issues.append(
                 f"{layer_name}: source data extent covers only {width_coverage:.0%} of context buffer width "
                 f"(source span ~{source_width:.0f}m vs buffer {ctx_width:.0f}m); "
-                f"data appears pre-clipped 鈥?re-fetch from OSM at buffer scale"
+                "source extent is below the policy coverage threshold"
             )
-        if height_coverage is not None and height_coverage < 0.6:
+        if height_coverage is not None and height_coverage < minimum_coverage:
             issues.append(
                 f"{layer_name}: source data extent covers only {height_coverage:.0%} of context buffer height "
                 f"(source span ~{source_height:.0f}m vs buffer {ctx_height:.0f}m); "
-                f"data appears pre-clipped 鈥?re-fetch from OSM at buffer scale"
+                "source extent is below the policy coverage threshold"
             )
     return issues
 

@@ -12,7 +12,7 @@ license = {file = "LICENSE"}
 authors = [
   {name = "UrbanAgent Contributors"}
 ]
-keywords = ["urban-analysis", "geospatial", "llm-agent", "openstreetmap", "citybench"]
+keywords = ["urban-analysis", "geospatial", "llm-agent", "openstreetmap"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Science/Research",
@@ -65,6 +65,7 @@ include-package-data = true
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["urban_agent*", "web*"]
+exclude = ["legacy*", "plugins*", "benchmarks*", "case_studies*", "examples*", "experimental*"]
 
 [tool.setuptools.package-data]
 web = ["README.md", "requirements.txt", "static/index.html", "static/css/*.css", "static/js/*.js"]

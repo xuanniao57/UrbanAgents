@@ -1,6 +1,6 @@
 import asyncio
 
-from urban_agent.runtime_observatory import ObservableUrbanRunner, RunArtifactStore, probe_qgis, qgis_commands_for_layer_stack, resolve_local_case
+from case_studies.runtime_observatory import ObservableUrbanRunner, RunArtifactStore, probe_qgis, qgis_commands_for_layer_stack, resolve_local_case
 
 
 def test_observable_runner_streams_todos_and_artifacts(tmp_path):

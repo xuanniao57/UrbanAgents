@@ -16,6 +16,13 @@ import logging
 from typing import Any, Dict, Optional
 
 from ..capabilities import CapabilityRegistry, ToolBroker, get_default_capability_registry
+from ..grounding import (
+    build_dataset_cards,
+    build_grounding_policy,
+    build_indicator_computability_matrix,
+    build_workflow_memory_event,
+    write_grounding_artifacts,
+)
 from ..governance import (
     EvidenceManifest,
     GovernanceEvidence,
@@ -99,6 +106,21 @@ class PerceptionWorker(BaseAgent):
             result["accessible_paths"] = path_context["paths"]
             result["resource_catalog"] = path_context.get("resources", [])
             result["legend"] = path_context.get("legend", {})
+
+        dataset_cards = build_dataset_cards(task_data, path_context)
+        grounding_policy = build_grounding_policy(task_data, dataset_cards)
+        grounding_artifacts = write_grounding_artifacts(
+            task_data,
+            dataset_cards=dataset_cards,
+            grounding_policy=grounding_policy,
+        )
+        if dataset_cards:
+            result["dataset_cards"] = dataset_cards
+        result["grounding_policy"] = grounding_policy
+        if grounding_artifacts:
+            result.setdefault("artifacts", [])
+            if isinstance(result["artifacts"], list):
+                result["artifacts"].extend(grounding_artifacts)
 
         existing_manifest = result.get("evidence_manifest")
         if not isinstance(existing_manifest, dict):
@@ -313,6 +335,22 @@ class AnalystWorker(BaseAgent):
         if self.disable_capabilities:
             # True vanilla ablation: skip all quantitative capability execution
             quantitative = {}
+        if quantitative:
+            for key in (
+                "dataset_cards",
+                "grounding_policy",
+                "indicator_computability_matrix",
+                "workflow_memory_event",
+                "grounding_artifacts",
+            ):
+                if key in quantitative:
+                    result[key] = quantitative[key]
+            if quantitative.get("grounding_artifacts"):
+                result.setdefault("artifacts", [])
+                if isinstance(result["artifacts"], list):
+                    for artifact in quantitative["grounding_artifacts"]:
+                        if artifact not in result["artifacts"]:
+                            result["artifacts"].append(artifact)
         if quantitative.get("capability_results"):
             result.update({
                 "status": "analysis_complete",
@@ -390,6 +428,27 @@ class AnalystWorker(BaseAgent):
         capability_context: Dict[str, Any],
     ) -> Dict[str, Any]:
         path_context = discover_urban_data_sources({"task_data": task_data, "perception_data": perception_data})
+        dataset_cards = perception_data.get("dataset_cards")
+        if not isinstance(dataset_cards, list):
+            dataset_cards = build_dataset_cards(task_data, path_context)
+        grounding_policy = perception_data.get("grounding_policy")
+        if not isinstance(grounding_policy, dict):
+            grounding_policy = build_grounding_policy(task_data, dataset_cards)
+        indicator_matrix = build_indicator_computability_matrix(task_data, dataset_cards, path_context)
+        workflow_event = build_workflow_memory_event(task_data, indicator_matrix, dataset_cards)
+        grounding_artifacts = write_grounding_artifacts(
+            task_data,
+            indicator_computability=indicator_matrix,
+            workflow_event=workflow_event,
+        )
+        grounding_payload = {
+            "dataset_cards": dataset_cards,
+            "grounding_policy": grounding_policy,
+            "indicator_computability_matrix": indicator_matrix,
+            "workflow_memory_event": workflow_event,
+            "grounding_artifacts": grounding_artifacts,
+        }
+
         capability_names = set(capability_context.get("selected_names", []) or [])
         paths = path_context.get("paths", {})
         task_text = _safe_json(task_data, 4000).lower()
@@ -436,8 +495,9 @@ class AnalystWorker(BaseAgent):
                     findings.append({"capability": capability_name, "summary": summary})
 
         if not capability_results:
-            return {}
+            return grounding_payload if (dataset_cards or indicator_matrix or grounding_artifacts) else {}
 
+        limitations = self._unique_strings(limitations + _limitations_from_computability(indicator_matrix))
         answer = _format_quantitative_answer(capability_results, metric_rows, limitations)
         return {
             "capability_results": capability_results,
@@ -451,6 +511,7 @@ class AnalystWorker(BaseAgent):
             "paths": paths,
             "resources": path_context.get("resources", []),
             "evidence_manifest": _evidence_manifest_from_path_context(path_context),
+            **grounding_payload,
         }
 
     @staticmethod
@@ -545,23 +606,21 @@ class CartographerWorker(BaseAgent):
     def _attach_3d_artifacts(self, result: Dict[str, Any], task_data: Dict[str, Any], analysis_data: Dict[str, Any]) -> Dict[str, Any]:
         if not isinstance(result, dict):
             result = {"status": "visualization_complete", "outputs": [], "artifacts": []}
-        try:
-            scene = self.tool_broker.execute("urban_3d_scene_generation", {
-                "task_data": task_data,
-                "analysis_data": analysis_data,
-                "paths": analysis_data.get("accessible_paths", {}),
-                "resources": analysis_data.get("resource_catalog", []),
-                "artifact_dir": task_data.get("artifact_dir"),
-            })
-        except Exception as error:
-            scene = {"status": "failed", "capability": "urban_3d_scene_generation", "reason": str(error)}
-        try:
-            rhino = self.tool_broker.execute("rhino_grasshopper_bridge", {"launch_rhino": False})
-        except Exception as error:
-            rhino = {"status": "failed", "capability": "rhino_grasshopper_bridge", "reason": str(error)}
+        scene = None
+        if self.tool_broker.registry.get("urban_3d_scene_generation") is not None:
+            try:
+                scene = self.tool_broker.execute("urban_3d_scene_generation", {
+                    "task_data": task_data,
+                    "analysis_data": analysis_data,
+                    "paths": analysis_data.get("accessible_paths", {}),
+                    "resources": analysis_data.get("resource_catalog", []),
+                    "artifact_dir": task_data.get("artifact_dir"),
+                })
+            except Exception as error:
+                scene = {"status": "failed", "capability": "urban_3d_scene_generation", "reason": str(error)}
 
-        result["three_d_scene"] = scene
-        result["rhino_grasshopper"] = rhino
+        if scene is not None:
+            result["three_d_scene"] = scene
         outputs = result.setdefault("outputs", [])
         artifacts = result.setdefault("artifacts", [])
         if isinstance(scene, dict):
@@ -570,7 +629,7 @@ class CartographerWorker(BaseAgent):
                     artifacts.append(artifact)
                 if artifact.get("type") not in outputs:
                     outputs.append(artifact.get("type"))
-        if "urban_3d_scene_generation" not in outputs:
+        if scene is not None and "urban_3d_scene_generation" not in outputs:
             outputs.append("urban_3d_scene_generation")
         return result
 
@@ -650,7 +709,7 @@ def _safe_json(data: Any, max_len: int = 2000) -> str:
 
 def _requests_3d_visualization(task_data: Dict[str, Any], analysis_data: Dict[str, Any]) -> bool:
     text = _safe_json({"task": task_data, "analysis": analysis_data}, 4000).lower()
-    markers = ("3d", "qgis 3d", "三维", "3维", "rhino", "grasshopper", "草蜢", "参数化", "extrusion")
+    markers = ("3d", "three-dimensional", "3-dimensional", "三维", "3维", "extrusion")
     return any(marker in text for marker in markers)
 
 
@@ -681,6 +740,22 @@ def _ensure_evidence_linkage(report_text: str, results: Dict[str, Any]) -> str:
     if not evidence_bits:
         evidence_bits.append("Evidence linkage is recorded in upstream worker manifests and runtime artifacts.")
     return text.rstrip() + "\n\n## Evidence Linkage\n\n" + "\n".join(f"- {bit}" for bit in evidence_bits) + "\n"
+
+
+def _limitations_from_computability(indicator_matrix: list) -> list:
+    limitations = []
+    for row in indicator_matrix or []:
+        if not isinstance(row, dict):
+            continue
+        status = row.get("status")
+        indicator = row.get("indicator") or row.get("name")
+        if status == "missing":
+            missing = row.get("missing_evidence") or row.get("required_data") or "required evidence"
+            limitations.append(f"{indicator}: missing evidence ({missing}); do not report as computed.")
+        elif status == "proxy":
+            supported = row.get("supported_evidence") or row.get("available_proxy") or "proxy evidence"
+            limitations.append(f"{indicator}: proxy-only support ({supported}); disclose proxy status.")
+    return limitations
 
 
 def _format_quantitative_answer(capability_results: Dict[str, Any], metric_rows: list, limitations: list) -> str:

@@ -12,7 +12,7 @@ Quality Controller Agent — 输出可靠性保障
 - 元数据完整性 (w3): 必填字段的填充率
 - 上下文对齐 (w4): 时空约束的匹配度
 
-置信度阈值: C(R) >= 0.75 (recommender), C(O) = t1 ∧ t2 ∧ t3 (configurator)
+置信度阈值和维度权重从 policy memory 加载；controller 只执行评分机制。
 """
 
 from __future__ import annotations
@@ -25,21 +25,16 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 from .base import AgentMessage, AgentRole, BaseAgent
+from ..memory_store import FileMemoryStore
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Confidence scoring weights (RMDA Eq.1)
-# ---------------------------------------------------------------------------
-DEFAULT_WEIGHTS = {
-    "semantic_relevance": 0.35,   # w1: cosine-sim between query & output embeddings
-    "historical_reliability": 0.25,  # w2: past success rate of this agent/tool
-    "metadata_completeness": 0.25,  # w3: required-fields-populated / total-required
-    "context_alignment": 0.15,    # w4: spatiotemporal constraint match (binary)
-}
-
-CONFIDENCE_THRESHOLD = 0.75  # recommender acceptance threshold
-MAX_RETRY = 2  # max retries before rejection
+QUALITY_DIMENSIONS = (
+    "semantic_relevance",
+    "historical_reliability",
+    "metadata_completeness",
+    "context_alignment",
+)
 
 ANSWER_LIKE_FIELDS = (
     "answer",
@@ -60,6 +55,23 @@ GENERIC_PLACEHOLDERS = {
     "rule-based fallback",
     "llm enrichment skipped",
 }
+
+
+def _load_quality_policy() -> Dict[str, Any]:
+    try:
+        store = FileMemoryStore.default()
+        for record in store.records("policy"):
+            payload = record.to_dict()
+            if payload.get("policy_id") == "quality_confidence_policy":
+                return payload
+    except Exception:
+        return {}
+    return {}
+
+
+def _neutral_weights() -> Dict[str, float]:
+    value = 1.0 / len(QUALITY_DIMENSIONS)
+    return {dimension: value for dimension in QUALITY_DIMENSIONS}
 
 
 @dataclass
@@ -89,14 +101,15 @@ class QualityController(BaseAgent):
         self,
         llm_client: Optional[Any] = None,
         weights: Optional[Dict[str, float]] = None,
-        threshold: float = CONFIDENCE_THRESHOLD,
-        max_retry: int = MAX_RETRY,
+        threshold: Optional[float] = None,
+        max_retry: Optional[int] = None,
         **kwargs,
     ):
         super().__init__(role=AgentRole.QUALITY_CONTROLLER, llm_client=llm_client, **kwargs)
-        self.weights = weights or dict(DEFAULT_WEIGHTS)
-        self.threshold = threshold
-        self.max_retry = max_retry
+        policy = _load_quality_policy()
+        self.weights = weights or dict(policy.get("weights") or _neutral_weights())
+        self.threshold = float(threshold if threshold is not None else policy.get("confidence_threshold", 0.0))
+        self.max_retry = int(max_retry if max_retry is not None else policy.get("max_retry", 0))
         # Historical success tracking
         self._success_history: Dict[str, List[bool]] = {}
         self._assessment_log: List[QualityReport] = []

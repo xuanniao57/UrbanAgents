@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from urban_agent.cognition import SpatialCognition
+from legacy.urban_agent_legacy.cognition import SpatialCognition
 from urban_agent.core.memory import MemoryModule
 from urban_agent.core.reasoning import ReasoningModule
 

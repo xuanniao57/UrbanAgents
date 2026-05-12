@@ -1,0 +1,64 @@
+{
+  "case_id": "case1_heritage_x_indicators",
+  "district": {
+    "name": "宁波老外滩历史文化街区",
+    "district_code": "009",
+    "city": "宁波",
+    "approx_area_km2": 0.52
+  },
+  "task_scope": {
+    "stage": "single_district_multi_indicator",
+    "goal": "Construct and audit built-environment X indicators for a heritage district.",
+    "out_of_scope": "Do not model tourist perception Y in this case."
+  },
+  "data_sources": {
+    "aoi_boundary": {
+      "role": "boundary",
+      "path": "paper9_heritageIntelligence/data/district_boundaries_v2/district_boundaries/009_宁波_宁波老外滩_boundary.geojson",
+      "format": "GeoJSON Polygon",
+      "crs": "EPSG:4326",
+      "required": true,
+      "uncertainty": "AOI boundary should be checked against authoritative planning/protection boundary."
+    },
+    "osm_cache_root": {
+      "role": "osm_cache",
+      "path": "paper9_heritageIntelligence/heritage_district_batch/",
+      "format": "GeoJSON/GPKG cache",
+      "required": true,
+      "expected_layers": ["roads", "buildings", "pois"],
+      "uncertainty": "OSM completeness and cache freshness vary; source extent must be checked against AOI/context buffer."
+    },
+    "building_function_root": {
+      "role": "function_root",
+      "path": "paper9_heritageIntelligence/data/sinobf1/",
+      "format": "building/function prediction resources",
+      "required": true,
+      "use_as_proxy": true,
+      "uncertainty": "Function labels are proxy evidence and should not be reported as authoritative POI or registry data."
+    },
+    "streetview_images": {
+      "role": "streetview_dir",
+      "path": "D:/街景/streetview_images_batch/宁波/009_宁波老外滩",
+      "format": "local street-view image batch",
+      "required": false,
+      "metadata_file": "points_used.csv",
+      "uncertainty": "Viewpoint, season, lighting, and capture time affect visual proxies."
+    }
+  },
+  "expected_outputs": [
+    "dataset_cards",
+    "grounding_policy",
+    "indicator_computability_matrix",
+    "metric_rows",
+    "gis_layer_stack_or_equivalent_artifacts",
+    "reviewer_corrections",
+    "runtime_ledger"
+  ],
+  "quality_focus": [
+    "evidence completeness",
+    "artifact validity",
+    "computability classification correctness",
+    "unsupported-claim avoidance",
+    "correction-memory reuse"
+  ]
+}

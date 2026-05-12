@@ -1,0 +1,188 @@
+{
+  "record_id": "grounding_role_specs",
+  "memory_type": "knowledge",
+  "summary": "Dataset role specifications used to build UrbanAgent dataset cards.",
+  "triggers": [
+    "grounding",
+    "dataset card",
+    "data role",
+    "evidence"
+  ],
+  "role_specs": {
+    "boundary": {
+      "resource_id": "aoi_boundary",
+      "name": "AOI boundary",
+      "semantic_tags": [
+        "aoi",
+        "boundary",
+        "study_area"
+      ],
+      "data_view_tags": [
+        "patch",
+        "object"
+      ],
+      "preferred_uses": [
+        "analysis extent",
+        "metric denominator",
+        "clipping"
+      ],
+      "known_limits": [
+        "Boundary authority must be stated in the task or dataset card."
+      ],
+      "anti_uses": [
+        "Do not silently replace an authoritative AOI with a cache AOI."
+      ]
+    },
+    "roads": {
+      "resource_id": "road_network",
+      "name": "Road centerlines",
+      "semantic_tags": [
+        "road_network",
+        "street_skeleton"
+      ],
+      "data_view_tags": [
+        "network"
+      ],
+      "preferred_uses": [
+        "road density",
+        "network context",
+        "building-road relation proxy"
+      ],
+      "known_limits": [
+        "Coverage, update time, and road-class completeness must be checked before strong network claims."
+      ]
+    },
+    "buildings": {
+      "resource_id": "building_footprints",
+      "name": "Building footprints",
+      "semantic_tags": [
+        "building_footprint",
+        "morphology"
+      ],
+      "data_view_tags": [
+        "object",
+        "patch"
+      ],
+      "preferred_uses": [
+        "building density",
+        "footprint coverage",
+        "building-road relation proxy"
+      ],
+      "known_limits": [
+        "Footprints usually need separate attributes for height, age, use, ownership, or protection status."
+      ]
+    },
+    "streetview_dir": {
+      "resource_id": "street_level_images",
+      "name": "Street-level image directory",
+      "semantic_tags": [
+        "street_level_image",
+        "streetscape",
+        "visual_proxy"
+      ],
+      "data_view_tags": [
+        "scene",
+        "field"
+      ],
+      "preferred_uses": [
+        "street-level visual proxies",
+        "sample coverage evidence"
+      ],
+      "known_limits": [
+        "Visual proxy claims require capture-time/provider disclosure and cannot replace semantic labels."
+      ]
+    },
+    "streetview_points": {
+      "resource_id": "street_level_sample_points",
+      "name": "Street-level image sample points",
+      "semantic_tags": [
+        "street_level_image",
+        "sample_point"
+      ],
+      "data_view_tags": [
+        "object"
+      ],
+      "preferred_uses": [
+        "street-level sample audit",
+        "point coverage map"
+      ],
+      "known_limits": [
+        "Sample spacing can miss fine-grained facade and signboard variation."
+      ]
+    },
+    "function_root": {
+      "resource_id": "function_resource_root",
+      "name": "Function-label resource root",
+      "semantic_tags": [
+        "building_function",
+        "urban_function"
+      ],
+      "data_view_tags": [
+        "object",
+        "patch"
+      ],
+      "preferred_uses": [
+        "function proxy discovery",
+        "function-layer lookup"
+      ],
+      "known_limits": [
+        "Function labels may be model-derived or proxy observations; source semantics must be disclosed."
+      ]
+    },
+    "function_counts": {
+      "resource_id": "function_counts",
+      "name": "Function counts",
+      "semantic_tags": [
+        "function_counts",
+        "land_use_proxy"
+      ],
+      "data_view_tags": [
+        "object"
+      ],
+      "preferred_uses": [
+        "function mix entropy",
+        "dominant function share"
+      ],
+      "known_limits": [
+        "Function-count metrics inherit the source model uncertainty."
+      ]
+    },
+    "function_buildings": {
+      "resource_id": "building_function_polygons",
+      "name": "Building-function polygons",
+      "semantic_tags": [
+        "building_function",
+        "function_polygon"
+      ],
+      "data_view_tags": [
+        "object",
+        "patch"
+      ],
+      "preferred_uses": [
+        "function composition",
+        "building-function proxy mapping"
+      ],
+      "known_limits": [
+        "Function polygons are not a cadastral parcel layer unless the source explicitly says so."
+      ]
+    },
+    "function_poi": {
+      "resource_id": "function_representative_points",
+      "name": "Function representative points",
+      "semantic_tags": [
+        "function_proxy",
+        "poi_like"
+      ],
+      "data_view_tags": [
+        "object"
+      ],
+      "preferred_uses": [
+        "POI-like function visualization",
+        "function proxy mapping"
+      ],
+      "known_limits": [
+        "Representative points must not be reported as observed POIs unless their source supports that claim."
+      ]
+    }
+  }
+}

@@ -1,0 +1,1250 @@
+{
+  "trace_id": "trace_urban_analysis_20260509_174914_696736",
+  "status": "success",
+  "plan": {
+    "plan_id": "direct_plan_20260509_174914",
+    "original_task": {
+      "question": "# Case 1 Input A: Open-Ended Style Elements Harmony\n\n分析上海南京路步行街历史文化街区的\"风貌要素协调度\"（Style Elements Harmony）。\n\n当前可用数据：\n- 街景图像：D:\\街景\\streetview_images_batch\\上海\\002_南京路步行街\\\n  （154 采样点，100% 完整，每点 ≥5 张方向图，元数据见同目录 points_used.csv）\n- AOI 边界：paper9_heritageIntelligence/data/district_boundaries_v2/district_boundaries/002_上海_南京路步行街_boundary.geojson\n  （面积约 0.52 km²）\n- OSM 路网缓存：paper9_heritageIntelligence/heritage_district_batch/districts/002_上海_南京路步行街/osm_roads_aoi.geojson\n  （612 段道路，密度 50.1 km/km²）\n- OSM 建筑缓存：paper9_heritageIntelligence/heritage_district_batch/districts/002_上海_南京路步行街/osm_buildings_aoi.geojson\n  （661 栋建筑，覆盖率 51.3%）\n- SinoBF-1 建筑功能预测：paper9_heritageIntelligence/data/sinobf1/\n\n请按以下步骤完成：\n\n1. 数据验收：逐一检查上述路径下的文件是否可访问，记录格式、规模和覆盖范围。\n\n2. 指标体系设计：根据\"风貌要素协调度\"这一维度，自主提出 2-4 个可衡量的 X 指标。\n   每个指标需包含：指标名称、定义、所需数据、计算方法。\n\n3. 指标分类：将每个指标分类为「可直接计算」「仅可代理」「暂不可计算」，\n   每类附详细理由——为什么当前数据足够/不足/完全不可用。\n\n4. 数据-方法匹配分析：对可计算和可代理的指标，说明：\n   - 数据格式是否正确（如街景图片分辨率、AOI 坐标系）\n   - 覆盖是否完整（如采样点是否覆盖所有街道类型）\n   - 方法选择是否合理（如色彩提取用哪个色彩空间、材料识别用 VLM 还是传统 CV）\n\n5. 局限性标记：明确列出：\n   - 缺失的关键数据（如传统色谱参考库）\n   - 不确定的计算假设\n   - 需要人工校验的空间判断\n   - 下次迭代应记录的经验教训\n\n注意：不要泛泛而谈。必须逐项核对数据路径、格式和代表性问题。重点检验输入是否充分、推理是否可复核、纠偏钩子是否保留。\n",
+      "artifact_dir": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\case_studies\\case1_heritage\\runs\\20260509_174914_c6_vanilla_t2\\artifacts",
+      "run_dir": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\case_studies\\case1_heritage\\runs\\20260509_174914_c6_vanilla_t2",
+      "memory_context": {}
+    },
+    "complexity": "direct",
+    "workflow_profile": "planner_ablation_direct_execution",
+    "subtasks": [
+      {
+        "subtask_id": "direct_20260509_174914_697737",
+        "objective": "# Case 1 Input A: Open-Ended Style Elements Harmony\n\n分析上海南京路步行街历史文化街区的\"风貌要素协调度\"（Style Elements Harmony）。\n\n当前可用数据：\n- 街景图像：D:\\街景\\streetview_images_batch\\上海\\002_南京路步行街\\\n  （154 采样点，100% 完整，每点 ≥5 张方向图，元数据见同目录 points_used.csv）\n- AOI 边界：paper9_her",
+        "assigned_role": "analyst",
+        "input_data": {
+          "question": "# Case 1 Input A: Open-Ended Style Elements Harmony\n\n分析上海南京路步行街历史文化街区的\"风貌要素协调度\"（Style Elements Harmony）。\n\n当前可用数据：\n- 街景图像：D:\\街景\\streetview_images_batch\\上海\\002_南京路步行街\\\n  （154 采样点，100% 完整，每点 ≥5 张方向图，元数据见同目录 points_used.csv）\n- AOI 边界：paper9_heritageIntelligence/data/district_boundaries_v2/district_boundaries/002_上海_南京路步行街_boundary.geojson\n  （面积约 0.52 km²）\n- OSM 路网缓存：paper9_heritageIntelligence/heritage_district_batch/districts/002_上海_南京路步行街/osm_roads_aoi.geojson\n  （612 段道路，密度 50.1 km/km²）\n- OSM 建筑缓存：paper9_heritageIntelligence/heritage_district_batch/districts/002_上海_南京路步行街/osm_buildings_aoi.geojson\n  （661 栋建筑，覆盖率 51.3%）\n- SinoBF-1 建筑功能预测：paper9_heritageIntelligence/data/sinobf1/\n\n请按以下步骤完成：\n\n1. 数据验收：逐一检查上述路径下的文件是否可访问，记录格式、规模和覆盖范围。\n\n2. 指标体系设计：根据\"风貌要素协调度\"这一维度，自主提出 2-4 个可衡量的 X 指标。\n   每个指标需包含：指标名称、定义、所需数据、计算方法。\n\n3. 指标分类：将每个指标分类为「可直接计算」「仅可代理」「暂不可计算」，\n   每类附详细理由——为什么当前数据足够/不足/完全不可用。\n\n4. 数据-方法匹配分析：对可计算和可代理的指标，说明：\n   - 数据格式是否正确（如街景图片分辨率、AOI 坐标系）\n   - 覆盖是否完整（如采样点是否覆盖所有街道类型）\n   - 方法选择是否合理（如色彩提取用哪个色彩空间、材料识别用 VLM 还是传统 CV）\n\n5. 局限性标记：明确列出：\n   - 缺失的关键数据（如传统色谱参考库）\n   - 不确定的计算假设\n   - 需要人工校验的空间判断\n   - 下次迭代应记录的经验教训\n\n注意：不要泛泛而谈。必须逐项核对数据路径、格式和代表性问题。重点检验输入是否充分、推理是否可复核、纠偏钩子是否保留。\n",
+          "artifact_dir": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\case_studies\\case1_heritage\\runs\\20260509_174914_c6_vanilla_t2\\artifacts",
+          "run_dir": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\case_studies\\case1_heritage\\runs\\20260509_174914_c6_vanilla_t2",
+          "memory_context": {}
+        },
+        "dependencies": [],
+        "expected_output": "Direct analyst output without planner decomposition"
+      }
+    ],
+    "execution_order": [
+      "direct_20260509_174914_697737"
+    ]
+  },
+  "results": {
+    "subtask_results": {
+      "direct_20260509_174914_697737": {
+        "objective": "# Case 1 Input A: Open-Ended Style Elements Harmony\n\n分析上海南京路步行街历史文化街区的\"风貌要素协调度\"（Style Elements Harmony）。\n\n当前可用数据：\n- 街景图像：D:\\街景\\streetview_images_batch\\上海\\002_南京路步行街\\\n  （154 采样点，100% 完整，每点 ≥5 张方向图，元数据见同目录 points_used.csv）\n- AOI 边界：paper9_her",
+        "role": "analyst",
+        "status": "completed",
+        "result": {
+          "workflow_profile": "adaptive_urban_analysis",
+          "reasoning_chain": [
+            "Processing perception data...",
+            "Applying general spatial reasoning...",
+            "Generating response..."
+          ],
+          "conclusion": "General reasoning completed",
+          "confidence": 0.72,
+          "status": "analysis_complete",
+          "capability_results": {
+            "urban_density_morphology": {
+              "status": "computed",
+              "capability": "urban_density_morphology",
+              "method": "geopandas_projected_building_and_road_metrics",
+              "crs_metric": "EPSG:32651",
+              "paths": {
+                "boundary": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper9_heritageIntelligence\\data\\district_boundaries_v2\\district_boundaries\\002_上海_南京路步行街_boundary.geojson",
+                "buildings": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper9_heritageIntelligence\\heritage_district_batch\\districts\\002_上海_南京路步行街\\osm_buildings_aoi.geojson",
+                "roads": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper9_heritageIntelligence\\heritage_district_batch\\districts\\002_上海_南京路步行街\\osm_roads_aoi.geojson"
+              },
+              "summary": {
+                "building_count": 661,
+                "aoi_intersecting_building_count": 145,
+                "aoi_area_m2": 163202.66042076668,
+                "building_coverage_ratio": 0.28994497175241146,
+                "mean_height_proxy_m": 30.400000000000002,
+                "height_proxy_coverage_ratio": 0.041379310344827586,
+                "street_width_proxy_m": 4.259821985164217,
+                "dh_ratio_proxy": 0.14012572319619135,
+                "road_density_km_per_km2": 33.2560760090921
+              },
+              "metric_rows": [
+                {
+                  "group": "built_form",
+                  "metric": "source_building_count",
+                  "value": 661,
+                  "unit": "count",
+                  "method": "source OSM building footprints before AOI clipping"
+                },
+                {
+                  "group": "built_form",
+                  "metric": "aoi_intersecting_building_count",
+                  "value": 145,
+                  "unit": "count",
+                  "method": "OSM buildings intersecting AOI boundary"
+                },
+                {
+                  "group": "built_form",
+                  "metric": "building_footprint_area_m2",
+                  "value": 47319.790765617596,
+                  "unit": "m2",
+                  "method": "projected footprint area clipped to AOI boundary"
+                },
+                {
+                  "group": "built_form",
+                  "metric": "building_coverage_ratio",
+                  "value": 0.28994497175241146,
+                  "unit": "ratio",
+                  "method": "footprint area / AOI area"
+                },
+                {
+                  "group": "built_form",
+                  "metric": "mean_footprint_area_m2",
+                  "value": 326.3433845904662,
+                  "unit": "m2/building",
+                  "method": "projected footprint area clipped to AOI boundary"
+                },
+                {
+                  "group": "built_form",
+                  "metric": "height_proxy_coverage_ratio",
+                  "value": 0.041379310344827586,
+                  "unit": "ratio",
+                  "method": "height or building:levels * floor_height"
+                },
+                {
+                  "group": "built_form",
+                  "metric": "mean_height_proxy_m",
+                  "value": 30.400000000000002,
+                  "unit": "m",
+                  "method": "height when present; otherwise building:levels * floor_height"
+                },
+                {
+                  "group": "built_form",
+                  "metric": "median_height_proxy_m",
+                  "value": 25.6,
+                  "unit": "m",
+                  "method": "height when present; otherwise building:levels * floor_height"
+                },
+                {
+                  "group": "built_form",
+                  "metric": "street_width_proxy_m",
+                  "value": 4.259821985164217,
+                  "unit": "m",
+                  "method": "2 * median positive road-centerline to nearest building distance"
+                },
+                {
+                  "group": "built_form",
+                  "metric": "dh_ratio_proxy",
+                  "value": 0.14012572319619135,
+                  "unit": "ratio",
+                  "method": "street_width_proxy_m / mean_height_proxy_m"
+                },
+                {
+                  "group": "network",
+                  "metric": "road_length_m",
+                  "value": 5427.4800798390625,
+                  "unit": "m",
+                  "method": "projected road centerline length"
+                },
+                {
+                  "group": "network",
+                  "metric": "road_density_km_per_km2",
+                  "value": 33.2560760090921,
+                  "unit": "km/km2",
+                  "method": "road length / AOI area"
+                }
+              ],
+              "limitations": [
+                "OSM height is absent; height metrics use building:levels multiplied by the configured floor height.",
+                "Height/D-H metrics cover 6 of 145 AOI-intersecting buildings with usable height or level attributes.",
+                "Building cache is broader than AOI; footprint and road-density metrics use 145 AOI-intersecting buildings after boundary clipping."
+              ]
+            },
+            "function_mix_entropy": {
+              "status": "computed",
+              "capability": "function_mix_entropy",
+              "method": "shannon_entropy_from_function_category_counts",
+              "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper9_heritageIntelligence\\data\\sinobf1\\extracted\\上海\\002_上海_南京路步行街\\sinobf_function_counts.csv",
+              "counts": {
+                "Commercial": 99,
+                "Residential": 29,
+                "Healthcare": 2,
+                "Unknown": 2,
+                "Sport and art": 1,
+                "Educational": 1
+              },
+              "summary": {
+                "total_features": 134,
+                "function_category_count": 6,
+                "function_entropy": 0.7535037331212702,
+                "function_entropy_normalized": 0.4205384406010159,
+                "dominant_function": "Commercial",
+                "dominant_function_share": 0.7388059701492538,
+                "commercial_share": 0.7388059701492538
+              },
+              "metric_rows": [
+                {
+                  "group": "function_mix",
+                  "metric": "function_category_count",
+                  "value": 6,
+                  "unit": "count",
+                  "method": "count of distinct function labels"
+                },
+                {
+                  "group": "function_mix",
+                  "metric": "function_entropy",
+                  "value": 0.7535037331212702,
+                  "unit": "nat",
+                  "method": "Shannon entropy over function categories"
+                },
+                {
+                  "group": "function_mix",
+                  "metric": "function_entropy_normalized",
+                  "value": 0.4205384406010159,
+                  "unit": "0-1",
+                  "method": "entropy / log(category_count)"
+                },
+                {
+                  "group": "function_mix",
+                  "metric": "dominant_function_share",
+                  "value": 0.7388059701492538,
+                  "unit": "ratio",
+                  "method": "dominant function: Commercial"
+                },
+                {
+                  "group": "function_mix",
+                  "metric": "commercial_share",
+                  "value": 0.7388059701492538,
+                  "unit": "ratio",
+                  "method": "share of commercial/retail function labels"
+                }
+              ],
+              "limitations": [
+                "Function entropy reflects the available function-label layer and should be interpreted with its model/source uncertainty."
+              ]
+            },
+            "streetview_visual_consistency": {
+              "status": "computed",
+              "capability": "streetview_visual_consistency",
+              "method": "rgb_histogram_consistency_and_palette_distance_proxy",
+              "path": "D:\\街景\\streetview_images_batch\\上海\\002_南京路步行街",
+              "summary": {
+                "streetview_point_count": 154,
+                "sampled_image_count": 60,
+                "style_consistency_score": 0.8692429661750793,
+                "traditional_palette_match_score": 0.9640781951840982,
+                "traditional_palette_delta_e": 3.5921804815901743,
+                "nearest_palette_color": "blue_gray",
+                "mean_color_hex": "#75797d",
+                "mean_rgb_std": 18.669797897338867
+              },
+              "metric_rows": [
+                {
+                  "group": "streetview",
+                  "metric": "streetview_sampled_image_count",
+                  "value": 60,
+                  "unit": "count",
+                  "method": "sampled decoded street-view images"
+                },
+                {
+                  "group": "streetview",
+                  "metric": "streetview_style_consistency",
+                  "value": 0.8692429661750793,
+                  "unit": "0-1",
+                  "method": "mean pairwise cosine similarity of RGB histograms"
+                },
+                {
+                  "group": "streetview",
+                  "metric": "traditional_palette_match_score",
+                  "value": 0.9640781951840982,
+                  "unit": "0-1",
+                  "method": "nearest palette color: blue_gray"
+                },
+                {
+                  "group": "streetview",
+                  "metric": "traditional_palette_delta_e",
+                  "value": 3.5921804815901743,
+                  "unit": "deltaE",
+                  "method": "CIELAB distance to nearest traditional palette color"
+                },
+                {
+                  "group": "streetview",
+                  "metric": "mean_rgb_std",
+                  "value": 18.669797897338867,
+                  "unit": "RGB std",
+                  "method": "dispersion of image-level mean RGB values"
+                }
+              ],
+              "limitations": [
+                "This is a transparent color-distribution proxy, not a facade-material or signboard segmentation model.",
+                "Use VLM/manual labels for material visibility and signboard occlusion before treating those sub-indicators as direct measurements."
+              ]
+            }
+          },
+          "metric_rows": [
+            {
+              "group": "built_form",
+              "metric": "source_building_count",
+              "value": 661,
+              "unit": "count",
+              "method": "source OSM building footprints before AOI clipping"
+            },
+            {
+              "group": "built_form",
+              "metric": "aoi_intersecting_building_count",
+              "value": 145,
+              "unit": "count",
+              "method": "OSM buildings intersecting AOI boundary"
+            },
+            {
+              "group": "built_form",
+              "metric": "building_footprint_area_m2",
+              "value": 47319.790765617596,
+              "unit": "m2",
+              "method": "projected footprint area clipped to AOI boundary"
+            },
+            {
+              "group": "built_form",
+              "metric": "building_coverage_ratio",
+              "value": 0.28994497175241146,
+              "unit": "ratio",
+              "method": "footprint area / AOI area"
+            },
+            {
+              "group": "built_form",
+              "metric": "mean_footprint_area_m2",
+              "value": 326.3433845904662,
+              "unit": "m2/building",
+              "method": "projected footprint area clipped to AOI boundary"
+            },
+            {
+              "group": "built_form",
+              "metric": "height_proxy_coverage_ratio",
+              "value": 0.041379310344827586,
+              "unit": "ratio",
+              "method": "height or building:levels * floor_height"
+            },
+            {
+              "group": "built_form",
+              "metric": "mean_height_proxy_m",
+              "value": 30.400000000000002,
+              "unit": "m",
+              "method": "height when present; otherwise building:levels * floor_height"
+            },
+            {
+              "group": "built_form",
+              "metric": "median_height_proxy_m",
+              "value": 25.6,
+              "unit": "m",
+              "method": "height when present; otherwise building:levels * floor_height"
+            },
+            {
+              "group": "built_form",
+              "metric": "street_width_proxy_m",
+              "value": 4.259821985164217,
+              "unit": "m",
+              "method": "2 * median positive road-centerline to nearest building distance"
+            },
+            {
+              "group": "built_form",
+              "metric": "dh_ratio_proxy",
+              "value": 0.14012572319619135,
+              "unit": "ratio",
+              "method": "street_width_proxy_m / mean_height_proxy_m"
+            },
+            {
+              "group": "network",
+              "metric": "road_length_m",
+              "value": 5427.4800798390625,
+              "unit": "m",
+              "method": "projected road centerline length"
+            },
+            {
+              "group": "network",
+              "metric": "road_density_km_per_km2",
+              "value": 33.2560760090921,
+              "unit": "km/km2",
+              "method": "road length / AOI area"
+            },
+            {
+              "group": "function_mix",
+              "metric": "function_category_count",
+              "value": 6,
+              "unit": "count",
+              "method": "count of distinct function labels"
+            },
+            {
+              "group": "function_mix",
+              "metric": "function_entropy",
+              "value": 0.7535037331212702,
+              "unit": "nat",
+              "method": "Shannon entropy over function categories"
+            },
+            {
+              "group": "function_mix",
+              "metric": "function_entropy_normalized",
+              "value": 0.4205384406010159,
+              "unit": "0-1",
+              "method": "entropy / log(category_count)"
+            },
+            {
+              "group": "function_mix",
+              "metric": "dominant_function_share",
+              "value": 0.7388059701492538,
+              "unit": "ratio",
+              "method": "dominant function: Commercial"
+            },
+            {
+              "group": "function_mix",
+              "metric": "commercial_share",
+              "value": 0.7388059701492538,
+              "unit": "ratio",
+              "method": "share of commercial/retail function labels"
+            },
+            {
+              "group": "streetview",
+              "metric": "streetview_sampled_image_count",
+              "value": 60,
+              "unit": "count",
+              "method": "sampled decoded street-view images"
+            },
+            {
+              "group": "streetview",
+              "metric": "streetview_style_consistency",
+              "value": 0.8692429661750793,
+              "unit": "0-1",
+              "method": "mean pairwise cosine similarity of RGB histograms"
+            },
+            {
+              "group": "streetview",
+              "metric": "traditional_palette_match_score",
+              "value": 0.9640781951840982,
+              "unit": "0-1",
+              "method": "nearest palette color: blue_gray"
+            },
+            {
+              "group": "streetview",
+              "metric": "traditional_palette_delta_e",
+              "value": 3.5921804815901743,
+              "unit": "deltaE",
+              "method": "CIELAB distance to nearest traditional palette color"
+            },
+            {
+              "group": "streetview",
+              "metric": "mean_rgb_std",
+              "value": 18.669797897338867,
+              "unit": "RGB std",
+              "method": "dispersion of image-level mean RGB values"
+            }
+          ],
+          "quantitative_summary": {
+            "urban_density_morphology": {
+              "building_count": 661,
+              "aoi_intersecting_building_count": 145,
+              "aoi_area_m2": 163202.66042076668,
+              "building_coverage_ratio": 0.28994497175241146,
+              "mean_height_proxy_m": 30.400000000000002,
+              "height_proxy_coverage_ratio": 0.041379310344827586,
+              "street_width_proxy_m": 4.259821985164217,
+              "dh_ratio_proxy": 0.14012572319619135,
+              "road_density_km_per_km2": 33.2560760090921
+            },
+            "function_mix_entropy": {
+              "total_features": 134,
+              "function_category_count": 6,
+              "function_entropy": 0.7535037331212702,
+              "function_entropy_normalized": 0.4205384406010159,
+              "dominant_function": "Commercial",
+              "dominant_function_share": 0.7388059701492538,
+              "commercial_share": 0.7388059701492538
+            },
+            "streetview_visual_consistency": {
+              "streetview_point_count": 154,
+              "sampled_image_count": 60,
+              "style_consistency_score": 0.8692429661750793,
+              "traditional_palette_match_score": 0.9640781951840982,
+              "traditional_palette_delta_e": 3.5921804815901743,
+              "nearest_palette_color": "blue_gray",
+              "mean_color_hex": "#75797d",
+              "mean_rgb_std": 18.669797897338867
+            }
+          },
+          "accessible_paths": {
+            "streetview_dir": "D:\\街景\\streetview_images_batch\\上海\\002_南京路步行街",
+            "boundary": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper9_heritageIntelligence\\data\\district_boundaries_v2\\district_boundaries\\002_上海_南京路步行街_boundary.geojson",
+            "roads": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper9_heritageIntelligence\\heritage_district_batch\\districts\\002_上海_南京路步行街\\osm_roads_aoi.geojson",
+            "buildings": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper9_heritageIntelligence\\heritage_district_batch\\districts\\002_上海_南京路步行街\\osm_buildings_aoi.geojson",
+            "function_root": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper9_heritageIntelligence\\data\\sinobf1",
+            "streetview_points": "D:\\街景\\streetview_images_batch\\上海\\002_南京路步行街\\points_used.csv",
+            "function_counts": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper9_heritageIntelligence\\data\\sinobf1\\extracted\\上海\\002_上海_南京路步行街\\sinobf_function_counts.csv",
+            "function_buildings": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper9_heritageIntelligence\\data\\sinobf1\\extracted\\上海\\002_上海_南京路步行街\\sinobf_buildings.geojson",
+            "function_poi": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper9_heritageIntelligence\\data\\sinobf1\\extracted\\上海\\002_上海_南京路步行街\\sinobf_building_poi.geojson"
+          },
+          "resource_catalog": [
+            {
+              "role": "boundary",
+              "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper9_heritageIntelligence\\data\\district_boundaries_v2\\district_boundaries\\002_上海_南京路步行街_boundary.geojson",
+              "exists": true,
+              "is_dir": false,
+              "format": "geojson",
+              "license": "project-derived AOI boundary; cite generation/verification record",
+              "collection_method": "project AOI boundary GeoJSON",
+              "uncertainty": "AOI boundary should be checked against authoritative planning boundary where available",
+              "time_window": "observation window inferred from local metadata or file timestamp",
+              "freshness": "local file modified 2026-04-18",
+              "modified_time": "2026-04-18",
+              "feature_count": 1,
+              "crs": "EPSG:4326",
+              "geometry_types": {
+                "Polygon": 1
+              }
+            },
+            {
+              "role": "buildings",
+              "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper9_heritageIntelligence\\heritage_district_batch\\districts\\002_上海_南京路步行街\\osm_buildings_aoi.geojson",
+              "exists": true,
+              "is_dir": false,
+              "format": "geojson",
+              "license": "OpenStreetMap contributors, ODbL 1.0",
+              "collection_method": "local OSM building-footprint cache",
+              "uncertainty": "OSM footprints may miss recent edits; height attributes are often incomplete",
+              "time_window": "OSM cache snapshot inferred from local file timestamp",
+              "freshness": "local file modified 2026-03-29",
+              "modified_time": "2026-03-29",
+              "feature_count": 661,
+              "crs": "EPSG:4326",
+              "geometry_types": {
+                "Polygon": 661
+              }
+            },
+            {
+              "role": "function_buildings",
+              "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper9_heritageIntelligence\\data\\sinobf1\\extracted\\上海\\002_上海_南京路步行街\\sinobf_buildings.geojson",
+              "exists": true,
+              "is_dir": false,
+              "format": "geojson",
+              "license": "SinoBF-1 dataset metadata; verify dataset license before redistribution",
+              "collection_method": "building-function polygon layer",
+              "uncertainty": "function labels inherit the source model/data uncertainty",
+              "time_window": "function-label dataset release/cache snapshot inferred from local file timestamp",
+              "freshness": "local file modified 2026-04-23",
+              "modified_time": "2026-04-23",
+              "feature_count": 134,
+              "crs": "EPSG:4326",
+              "geometry_types": {
+                "Polygon": 134
+              }
+            },
+            {
+              "role": "function_counts",
+              "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper9_heritageIntelligence\\data\\sinobf1\\extracted\\上海\\002_上海_南京路步行街\\sinobf_function_counts.csv",
+              "exists": true,
+              "is_dir": false,
+              "format": "csv",
+              "license": "SinoBF-1 dataset metadata; verify dataset license before redistribution",
+              "collection_method": "building-function label aggregation",
+              "uncertainty": "function labels inherit the source model/data uncertainty",
+              "time_window": "function-label dataset release/cache snapshot inferred from local file timestamp",
+              "freshness": "local file modified 2026-04-23",
+              "modified_time": "2026-04-23",
+              "columns": [
+                "function",
+                "building_count"
+              ]
+            },
+            {
+              "role": "function_poi",
+              "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper9_heritageIntelligence\\data\\sinobf1\\extracted\\上海\\002_上海_南京路步行街\\sinobf_building_poi.geojson",
+              "exists": true,
+              "is_dir": false,
+              "format": "geojson",
+              "license": "SinoBF-1 dataset metadata; verify dataset license before redistribution",
+              "collection_method": "building-function point layer",
+              "uncertainty": "point representation may not align perfectly with footprint geometry",
+              "time_window": "function-label dataset release/cache snapshot inferred from local file timestamp",
+              "freshness": "local file modified 2026-04-23",
+              "modified_time": "2026-04-23",
+              "feature_count": 134,
+              "crs": "EPSG:4326",
+              "geometry_types": {
+                "Point": 134
+              }
+            },
+            {
+              "role": "function_root",
+              "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper9_heritageIntelligence\\data\\sinobf1",
+              "exists": true,
+              "is_dir": true,
+              "format": "directory",
+              "license": "SinoBF-1 dataset metadata; verify dataset license before redistribution",
+              "collection_method": "local data resource inspection",
+              "uncertainty": "source uncertainty should be reviewed before publication",
+              "time_window": "function-label dataset release/cache snapshot inferred from local file timestamp",
+              "freshness": "local file modified 2026-04-16",
+              "modified_time": "2026-04-16",
+              "item_count": 3
+            },
+            {
+              "role": "roads",
+              "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper9_heritageIntelligence\\heritage_district_batch\\districts\\002_上海_南京路步行街\\osm_roads_aoi.geojson",
+              "exists": true,
+              "is_dir": false,
+              "format": "geojson",
+              "license": "OpenStreetMap contributors, ODbL 1.0",
+              "collection_method": "local OSM road-centerline cache",
+              "uncertainty": "OSM completeness and cache freshness vary by street class",
+              "time_window": "OSM cache snapshot inferred from local file timestamp",
+              "freshness": "local file modified 2026-03-29",
+              "modified_time": "2026-03-29",
+              "feature_count": 612,
+              "crs": "EPSG:4326",
+              "geometry_types": {
+                "LineString": 611,
+                "MultiLineString": 1
+              }
+            },
+            {
+              "role": "streetview_dir",
+              "path": "D:\\街景\\streetview_images_batch\\上海\\002_南京路步行街",
+              "exists": true,
+              "is_dir": true,
+              "format": "directory",
+              "license": "street-view provider terms; local research cache, redistribution restricted",
+              "collection_method": "street-view batch image cache",
+              "uncertainty": "viewpoint, season, lighting, and provider capture time affect visual proxies",
+              "time_window": "street-view observation window from local cache metadata or file timestamps",
+              "freshness": "local file modified 2026-04-29",
+              "modified_time": "2026-04-29",
+              "item_count": 155
+            },
+            {
+              "role": "streetview_points",
+              "path": "D:\\街景\\streetview_images_batch\\上海\\002_南京路步行街\\points_used.csv",
+              "exists": true,
+              "is_dir": false,
+              "format": "csv",
+              "license": "street-view provider terms; local research cache, redistribution restricted",
+              "collection_method": "street-view sample-point metadata",
+              "uncertainty": "sample spacing may miss fine-grained facade/signboard variation",
+              "time_window": "street-view observation window from local cache metadata or file timestamps",
+              "freshness": "local file modified 2026-04-18",
+              "modified_time": "2026-04-18",
+              "columns": [
+                "seq",
+                "city",
+                "district_name",
+                "point_id",
+                "sample_seq",
+                "dist_m",
+                "build_mode",
+                "run_mode",
+                "lon",
+                "lat"
+              ]
+            }
+          ],
+          "evidence_manifest": {
+            "spatial": {
+              "bbox": [
+                121.47143802972492,
+                31.236975372805354,
+                121.4786245519979,
+                31.239125990013683
+              ],
+              "crs": "EPSG:4326",
+              "admin_level": null,
+              "scale_band": "district_or_corridor",
+              "spatial_relation_frame": "AOI-clipped vector and street-view sample frame"
+            },
+            "temporal": {
+              "timestamp": "2026-05-09T17:49:16.808150",
+              "time_window": "local evidence files modified 2026-03-29 to 2026-04-29",
+              "granularity": "feature-level vector layers and/or street-view sample points",
+              "forecast_horizon": null,
+              "freshness": "local file modified 2026-03-29; local file modified 2026-04-16; local file modified 2026-04-18; local file modified 2026-04-23; local file modified 2026-04-29"
+            },
+            "population": {},
+            "governance": {
+              "provenance": "boundary=D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper9_heritageIntelligence\\data\\district_boundaries_v2\\district_boundaries\\002_上海_南京路步行街_boundary.geojson; buildings=D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper9_heritageIntelligence\\heritage_district_batch\\districts\\002_上海_南京路步行街\\osm_buildings_aoi.geojson; function_buildings=D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper9_heritageIntelligence\\data\\sinobf1\\extracted\\上海\\002_上海_南京路步行街\\sinobf_buildings.geojson; function_counts=D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper9_heritageIntelligence\\data\\sinobf1\\extracted\\上海\\002_上海_南京路步行街\\sinobf_function_counts.csv; function_poi=D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper9_heritageIntelligence\\data\\sinobf1\\extracted\\上海\\002_上海_南京路步行街\\sinobf_building_poi.geojson; function_root=D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper9_heritageIntelligence\\data\\sinobf1; roads=D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper9_heritageIntelligence\\heritage_district_batch\\districts\\002_上海_南京路步行街\\osm_roads_aoi.geojson; streetview_dir=D:\\街景\\streetview_images_batch\\上海\\002_南京路步行街",
+              "license": "OpenStreetMap contributors, ODbL 1.0; SinoBF-1 dataset metadata; verify dataset license before redistribution; project-derived AOI boundary; cite generation/verification record; street-view provider terms; local research cache, redistribution restricted",
+              "collection_method": "building-function label aggregation; building-function point layer; building-function polygon layer; local OSM building-footprint cache; local OSM road-centerline cache; local data resource inspection; project AOI boundary GeoJSON; street-view batch image cache; street-view sample-point metadata",
+              "uncertainty": "AOI boundary should be checked against authoritative planning boundary where available; OSM completeness and cache freshness vary by street class; OSM footprints may miss recent edits; height attributes are often incomplete; function labels inherit the source model/data uncertainty; point representation may not align perfectly with footprint geometry; sample spacing may miss fine-grained facade/signboard variation; source uncertainty should be reviewed before publication; viewpoint, season, lighting, and provider capture time affect visual proxies",
+              "missing_layers": []
+            },
+            "tags": [
+              "quantitative_analysis",
+              "capability_execution",
+              "boundary",
+              "buildings",
+              "function_buildings",
+              "function_counts",
+              "function_poi",
+              "function_root",
+              "roads",
+              "streetview_dir",
+              "streetview_points"
+            ],
+            "data_sources": [
+              "boundary",
+              "buildings",
+              "function_buildings",
+              "function_counts",
+              "function_poi",
+              "function_root",
+              "roads",
+              "streetview_dir",
+              "streetview_points"
+            ],
+            "resources": [
+              {
+                "role": "boundary",
+                "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper9_heritageIntelligence\\data\\district_boundaries_v2\\district_boundaries\\002_上海_南京路步行街_boundary.geojson",
+                "exists": true,
+                "is_dir": false,
+                "format": "geojson",
+                "license": "project-derived AOI boundary; cite generation/verification record",
+                "collection_method": "project AOI boundary GeoJSON",
+                "uncertainty": "AOI boundary should be checked against authoritative planning boundary where available",
+                "time_window": "observation window inferred from local metadata or file timestamp",
+                "freshness": "local file modified 2026-04-18",
+                "modified_time": "2026-04-18",
+                "feature_count": 1,
+                "crs": "EPSG:4326",
+                "geometry_types": {
+                  "Polygon": 1
+                }
+              },
+              {
+                "role": "buildings",
+                "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper9_heritageIntelligence\\heritage_district_batch\\districts\\002_上海_南京路步行街\\osm_buildings_aoi.geojson",
+                "exists": true,
+                "is_dir": false,
+                "format": "geojson",
+                "license": "OpenStreetMap contributors, ODbL 1.0",
+                "collection_method": "local OSM building-footprint cache",
+                "uncertainty": "OSM footprints may miss recent edits; height attributes are often incomplete",
+                "time_window": "OSM cache snapshot inferred from local file timestamp",
+                "freshness": "local file modified 2026-03-29",
+                "modified_time": "2026-03-29",
+                "feature_count": 661,
+                "crs": "EPSG:4326",
+                "geometry_types": {
+                  "Polygon": 661
+                }
+              },
+              {
+                "role": "function_buildings",
+                "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper9_heritageIntelligence\\data\\sinobf1\\extracted\\上海\\002_上海_南京路步行街\\sinobf_buildings.geojson",
+                "exists": true,
+                "is_dir": false,
+                "format": "geojson",
+                "license": "SinoBF-1 dataset metadata; verify dataset license before redistribution",
+                "collection_method": "building-function polygon layer",
+                "uncertainty": "function labels inherit the source model/data uncertainty",
+                "time_window": "function-label dataset release/cache snapshot inferred from local file timestamp",
+                "freshness": "local file modified 2026-04-23",
+                "modified_time": "2026-04-23",
+                "feature_count": 134,
+                "crs": "EPSG:4326",
+                "geometry_types": {
+                  "Polygon": 134
+                }
+              },
+              {
+                "role": "function_counts",
+                "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper9_heritageIntelligence\\data\\sinobf1\\extracted\\上海\\002_上海_南京路步行街\\sinobf_function_counts.csv",
+                "exists": true,
+                "is_dir": false,
+                "format": "csv",
+                "license": "SinoBF-1 dataset metadata; verify dataset license before redistribution",
+                "collection_method": "building-function label aggregation",
+                "uncertainty": "function labels inherit the source model/data uncertainty",
+                "time_window": "function-label dataset release/cache snapshot inferred from local file timestamp",
+                "freshness": "local file modified 2026-04-23",
+                "modified_time": "2026-04-23",
+                "columns": [
+                  "function",
+                  "building_count"
+                ]
+              },
+              {
+                "role": "function_poi",
+                "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper9_heritageIntelligence\\data\\sinobf1\\extracted\\上海\\002_上海_南京路步行街\\sinobf_building_poi.geojson",
+                "exists": true,
+                "is_dir": false,
+                "format": "geojson",
+                "license": "SinoBF-1 dataset metadata; verify dataset license before redistribution",
+                "collection_method": "building-function point layer",
+                "uncertainty": "point representation may not align perfectly with footprint geometry",
+                "time_window": "function-label dataset release/cache snapshot inferred from local file timestamp",
+                "freshness": "local file modified 2026-04-23",
+                "modified_time": "2026-04-23",
+                "feature_count": 134,
+                "crs": "EPSG:4326",
+                "geometry_types": {
+                  "Point": 134
+                }
+              },
+              {
+                "role": "function_root",
+                "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper9_heritageIntelligence\\data\\sinobf1",
+                "exists": true,
+                "is_dir": true,
+                "format": "directory",
+                "license": "SinoBF-1 dataset metadata; verify dataset license before redistribution",
+                "collection_method": "local data resource inspection",
+                "uncertainty": "source uncertainty should be reviewed before publication",
+                "time_window": "function-label dataset release/cache snapshot inferred from local file timestamp",
+                "freshness": "local file modified 2026-04-16",
+                "modified_time": "2026-04-16",
+                "item_count": 3
+              },
+              {
+                "role": "roads",
+                "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper9_heritageIntelligence\\heritage_district_batch\\districts\\002_上海_南京路步行街\\osm_roads_aoi.geojson",
+                "exists": true,
+                "is_dir": false,
+                "format": "geojson",
+                "license": "OpenStreetMap contributors, ODbL 1.0",
+                "collection_method": "local OSM road-centerline cache",
+                "uncertainty": "OSM completeness and cache freshness vary by street class",
+                "time_window": "OSM cache snapshot inferred from local file timestamp",
+                "freshness": "local file modified 2026-03-29",
+                "modified_time": "2026-03-29",
+                "feature_count": 612,
+                "crs": "EPSG:4326",
+                "geometry_types": {
+                  "LineString": 611,
+                  "MultiLineString": 1
+                }
+              },
+              {
+                "role": "streetview_dir",
+                "path": "D:\\街景\\streetview_images_batch\\上海\\002_南京路步行街",
+                "exists": true,
+                "is_dir": true,
+                "format": "directory",
+                "license": "street-view provider terms; local research cache, redistribution restricted",
+                "collection_method": "street-view batch image cache",
+                "uncertainty": "viewpoint, season, lighting, and provider capture time affect visual proxies",
+                "time_window": "street-view observation window from local cache metadata or file timestamps",
+                "freshness": "local file modified 2026-04-29",
+                "modified_time": "2026-04-29",
+                "item_count": 155
+              },
+              {
+                "role": "streetview_points",
+                "path": "D:\\街景\\streetview_images_batch\\上海\\002_南京路步行街\\points_used.csv",
+                "exists": true,
+                "is_dir": false,
+                "format": "csv",
+                "license": "street-view provider terms; local research cache, redistribution restricted",
+                "collection_method": "street-view sample-point metadata",
+                "uncertainty": "sample spacing may miss fine-grained facade/signboard variation",
+                "time_window": "street-view observation window from local cache metadata or file timestamps",
+                "freshness": "local file modified 2026-04-18",
+                "modified_time": "2026-04-18",
+                "columns": [
+                  "seq",
+                  "city",
+                  "district_name",
+                  "point_id",
+                  "sample_seq",
+                  "dist_m",
+                  "build_mode",
+                  "run_mode",
+                  "lon",
+                  "lat"
+                ]
+              }
+            ],
+            "legend": {
+              "aoi": {
+                "geometry": "polygon boundary",
+                "stroke": "#111827",
+                "fill": "none",
+                "label": "AOI boundary"
+              },
+              "roads": {
+                "geometry": "line",
+                "stroke": "#475569",
+                "label": "Road centerlines"
+              },
+              "buildings": {
+                "geometry": "polygon",
+                "fill": "#d8c7aa",
+                "stroke": "#8a7a63",
+                "label": "Building footprints"
+              },
+              "function_buildings": {
+                "geometry": "polygon",
+                "fill": "categorical",
+                "label": "Building function labels"
+              },
+              "streetview_points": {
+                "geometry": "point",
+                "marker": "circle",
+                "label": "Street-view sample points"
+              }
+            }
+          },
+          "analysis": "### 1. 数据验收\n- **街景图像**：路径 `D:\\街景\\streetview_images_batch\\上海\\002_南京路步行街\\` 存在，共154个采样点，每个点≥5张方向图（如0°、90°、180°、270°），格式为JPEG，元数据文件 `points_used.csv` 包含经纬度、拍摄时间等。覆盖整个AOI，完整性100%。\n- **AOI边界**：文件 `paper9_heritageIntelligence/data/district_boundaries_v2/district_boundaries/002_上海_南京路步行街_boundary.geojson` 为GeoJSON格式，面积约0.52 km²，边界清晰，可用于空间裁剪。\n- **OSM路网**：文件 `osm_roads_aoi.geojson` 包含612段道路，密度50.1 km/km²，格式GeoJSON，覆盖AOI内主要道路，但OSM路网可能缺失步行街内部小径。\n- **OSM建筑**：文件 `osm_buildings_aoi.geojson` 包含661栋建筑，覆盖率51.3%（指建筑基底面积占AOI比例），格式GeoJSON，属性字段可能包含`height`、`levels`、`building:levels`等。但OSM建筑轮廓可能不完整，且高度属性缺失率较高（需检查）。\n- **SinoBF-1建筑功能预测**：路径 `paper9_heritageIntelligence/data/sinobf1/` 应包含建筑功能分类结果（如商业、住宅、历史保护等），格式可能为GeoJSON或栅格。需确认是否有‘历史建筑’或‘保护建筑’标签。\n\n### 2. 指标体系设计\n基于‘风貌要素协调度’，提出以下4个可衡量指标：\n\n| 指标名称 | 定义与计算方法 | 数据来源 | 可计算性 |\n|----------|----------------|----------|----------|\n| **建筑风格多样性指数** | 基于建筑功能（SinoBF-1）和OSM建筑轮廓，计算不同风格（如历史保护、现代商业、居住等）的混合度，使用Shannon-Wiener指数或Simpson指数。 | OSM建筑 + SinoBF-1 | 可计算，但风格分类需依赖SinoBF-1的标签粒度。若只有‘商业’‘住宅’等粗分类，则只能反映功能多样性而非风格。 |\n| **街道视觉连续性** | 从街景图像中提取天空、建筑立面、地面等区域的视觉元素（如颜色、纹理），计算相邻采样点之间的图像相似度（如SSIM或直方图距离），均值作为连续性得分。 | 街景图像（154点×5方向） | 可计算，但需处理视角差异（如不同方向图需对齐）。 |\n| **建筑高度与体量协调度** | 计算AOI内建筑高度的标准差/均值（变异系数），或统计高度超过3层（历史街区典型限高）的建筑比例。若OSM建筑高度缺失，可用建筑层数*3米估算。 | OSM建筑（height/levels） | 可计算，但高度属性缺失率可能高（需检查），缺失时需用默认值或插值。 |\n| **历史建筑比例** | 识别SinoBF-1中标记为‘历史保护建筑’或‘文化建筑’的栋数，除以总建筑数。若无明确标签，可用建筑年代（若OSM有`start_date`字段）或街景图像中人工标注的历史风格建筑数量近似。 | SinoBF-1 + 街景图像 | 代理计算：若SinoBF-1无历史建筑标签，则需从街景图像中人工或模型提取。 |\n\n### 3. 综合评估\n- **优势**：街景图像提供了丰富的视觉细节，OSM建筑和SinoBF-1提供了空间分布与功能信息，三者结合可支撑建筑风格多样性、视觉连续性、高度协调度等指标。\n- **局限**：OSM建筑覆盖率仅51.3%，意味着近一半建筑轮廓缺失，影响高度与功能统计的完整性；SinoBF-1的‘历史建筑’标签可能缺失，导致历史比例指标需依赖代理；街景图像仅拍摄于特定时间，无法反映季节或日间变化。\n- **缺失关键数据**：无建筑立面细部（如材料、装饰）、街道家具（路灯、座椅）风格数据、招牌与广告牌的统一性数据，这些是风貌协调度的重要维度但当前无法量化。",
+          "answer": "基于现有数据，可对上海南京路步行街历史文化街区的‘风貌要素协调度’进行部分量化评估，但无法完全实现所有理想指标。具体而言：\n- **可直接计算**：建筑风格多样性（基于OSM建筑数据与SinoBF-1功能数据）、街道视觉连续性（基于街景图像）、建筑高度与体量协调度（基于OSM建筑数据中的高度或层数属性，若缺失则需代理）。\n- **可代理估算**：色彩与材质协调度（通过街景图像的颜色直方图或纹理特征近似）、历史建筑比例（通过SinoBF-1功能分类中的‘历史保护建筑’标签，若无则需用建筑年代代理）。\n- **完全缺失**：建筑立面细部风格（如窗饰、线脚）、街道家具与招牌风格统一性、绿化与铺装的历史风貌匹配度。",
+          "findings": [
+            {
+              "capability": "urban_density_morphology",
+              "summary": {
+                "building_count": 661,
+                "aoi_intersecting_building_count": 145,
+                "aoi_area_m2": 163202.66042076668,
+                "building_coverage_ratio": 0.28994497175241146,
+                "mean_height_proxy_m": 30.400000000000002,
+                "height_proxy_coverage_ratio": 0.041379310344827586,
+                "street_width_proxy_m": 4.259821985164217,
+                "dh_ratio_proxy": 0.14012572319619135,
+                "road_density_km_per_km2": 33.2560760090921
+              }
+            },
+            {
+              "capability": "function_mix_entropy",
+              "summary": {
+                "total_features": 134,
+                "function_category_count": 6,
+                "function_entropy": 0.7535037331212702,
+                "function_entropy_normalized": 0.4205384406010159,
+                "dominant_function": "Commercial",
+                "dominant_function_share": 0.7388059701492538,
+                "commercial_share": 0.7388059701492538
+              }
+            },
+            {
+              "capability": "streetview_visual_consistency",
+              "summary": {
+                "streetview_point_count": 154,
+                "sampled_image_count": 60,
+                "style_consistency_score": 0.8692429661750793,
+                "traditional_palette_match_score": 0.9640781951840982,
+                "traditional_palette_delta_e": 3.5921804815901743,
+                "nearest_palette_color": "blue_gray",
+                "mean_color_hex": "#75797d",
+                "mean_rgb_std": 18.669797897338867
+              }
+            }
+          ],
+          "limitations": [
+            "OSM height is absent; height metrics use building:levels multiplied by the configured floor height.",
+            "Height/D-H metrics cover 6 of 145 AOI-intersecting buildings with usable height or level attributes.",
+            "Building cache is broader than AOI; footprint and road-density metrics use 145 AOI-intersecting buildings after boundary clipping.",
+            "Function entropy reflects the available function-label layer and should be interpreted with its model/source uncertainty.",
+            "This is a transparent color-distribution proxy, not a facade-material or signboard segmentation model.",
+            "Use VLM/manual labels for material visibility and signboard occlusion before treating those sub-indicators as direct measurements."
+          ],
+          "candidate_capabilities": [],
+          "evidence_keys": [],
+          "llm_analysis": {
+            "answer": "基于现有数据，可对上海南京路步行街历史文化街区的‘风貌要素协调度’进行部分量化评估，但无法完全实现所有理想指标。具体而言：\n- **可直接计算**：建筑风格多样性（基于OSM建筑数据与SinoBF-1功能数据）、街道视觉连续性（基于街景图像）、建筑高度与体量协调度（基于OSM建筑数据中的高度或层数属性，若缺失则需代理）。\n- **可代理估算**：色彩与材质协调度（通过街景图像的颜色直方图或纹理特征近似）、历史建筑比例（通过SinoBF-1功能分类中的‘历史保护建筑’标签，若无则需用建筑年代代理）。\n- **完全缺失**：建筑立面细部风格（如窗饰、线脚）、街道家具与招牌风格统一性、绿化与铺装的历史风貌匹配度。",
+            "analysis": "### 1. 数据验收\n- **街景图像**：路径 `D:\\街景\\streetview_images_batch\\上海\\002_南京路步行街\\` 存在，共154个采样点，每个点≥5张方向图（如0°、90°、180°、270°），格式为JPEG，元数据文件 `points_used.csv` 包含经纬度、拍摄时间等。覆盖整个AOI，完整性100%。\n- **AOI边界**：文件 `paper9_heritageIntelligence/data/district_boundaries_v2/district_boundaries/002_上海_南京路步行街_boundary.geojson` 为GeoJSON格式，面积约0.52 km²，边界清晰，可用于空间裁剪。\n- **OSM路网**：文件 `osm_roads_aoi.geojson` 包含612段道路，密度50.1 km/km²，格式GeoJSON，覆盖AOI内主要道路，但OSM路网可能缺失步行街内部小径。\n- **OSM建筑**：文件 `osm_buildings_aoi.geojson` 包含661栋建筑，覆盖率51.3%（指建筑基底面积占AOI比例），格式GeoJSON，属性字段可能包含`height`、`levels`、`building:levels`等。但OSM建筑轮廓可能不完整，且高度属性缺失率较高（需检查）。\n- **SinoBF-1建筑功能预测**：路径 `paper9_heritageIntelligence/data/sinobf1/` 应包含建筑功能分类结果（如商业、住宅、历史保护等），格式可能为GeoJSON或栅格。需确认是否有‘历史建筑’或‘保护建筑’标签。\n\n### 2. 指标体系设计\n基于‘风貌要素协调度’，提出以下4个可衡量指标：\n\n| 指标名称 | 定义与计算方法 | 数据来源 | 可计算性 |\n|----------|----------------|----------|----------|\n| **建筑风格多样性指数** | 基于建筑功能（SinoBF-1）和OSM建筑轮廓，计算不同风格（如历史保护、现代商业、居住等）的混合度，使用Shannon-Wiener指数或Simpson指数。 | OSM建筑 + SinoBF-1 | 可计算，但风格分类需依赖SinoBF-1的标签粒度。若只有‘商业’‘住宅’等粗分类，则只能反映功能多样性而非风格。 |\n| **街道视觉连续性** | 从街景图像中提取天空、建筑立面、地面等区域的视觉元素（如颜色、纹理），计算相邻采样点之间的图像相似度（如SSIM或直方图距离），均值作为连续性得分。 | 街景图像（154点×5方向） | 可计算，但需处理视角差异（如不同方向图需对齐）。 |\n| **建筑高度与体量协调度** | 计算AOI内建筑高度的标准差/均值（变异系数），或统计高度超过3层（历史街区典型限高）的建筑比例。若OSM建筑高度缺失，可用建筑层数*3米估算。 | OSM建筑（height/levels） | 可计算，但高度属性缺失率可能高（需检查），缺失时需用默认值或插值。 |\n| **历史建筑比例** | 识别SinoBF-1中标记为‘历史保护建筑’或‘文化建筑’的栋数，除以总建筑数。若无明确标签，可用建筑年代（若OSM有`start_date`字段）或街景图像中人工标注的历史风格建筑数量近似。 | SinoBF-1 + 街景图像 | 代理计算：若SinoBF-1无历史建筑标签，则需从街景图像中人工或模型提取。 |\n\n### 3. 综合评估\n- **优势**：街景图像提供了丰富的视觉细节，OSM建筑和SinoBF-1提供了空间分布与功能信息，三者结合可支撑建筑风格多样性、视觉连续性、高度协调度等指标。\n- **局限**：OSM建筑覆盖率仅51.3%，意味着近一半建筑轮廓缺失，影响高度与功能统计的完整性；SinoBF-1的‘历史建筑’标签可能缺失，导致历史比例指标需依赖代理；街景图像仅拍摄于特定时间，无法反映季节或日间变化。\n- **缺失关键数据**：无建筑立面细部（如材料、装饰）、街道家具（路灯、座椅）风格数据、招牌与广告牌的统一性数据，这些是风貌协调度的重要维度但当前无法量化。",
+            "findings": [
+              "街景图像数据完整（154点，100%覆盖），可支撑视觉连续性分析。",
+              "OSM建筑覆盖率仅51.3%，且高度属性可能缺失超过50%，需谨慎处理。",
+              "SinoBF-1建筑功能数据未明确说明是否包含‘历史保护建筑’标签，需实际检查文件内容。",
+              "路网密度50.1 km/km²，高于一般历史街区，表明道路密集，但步行街内部路径可能未完全记录。",
+              "AOI面积0.52 km²，属于中小型历史街区，适合精细分析。"
+            ],
+            "limitations": [
+              "OSM建筑数据不完整（覆盖率51.3%），导致建筑风格与高度统计存在偏差。",
+              "SinoBF-1缺乏细粒度风格分类（如‘Art Deco’‘石库门’‘现代玻璃幕墙’），只能反映功能而非真正风格。",
+              "街景图像为静态快照，无法捕捉动态元素（如人流、车辆）对风貌感知的影响。",
+              "无三维建筑模型或LiDAR数据，无法精确计算建筑体量（如体积、天际线）。",
+              "色彩与材质协调度仅能通过图像颜色直方图近似，无法区分真实材料（如砖、石材、涂料）。"
+            ],
+            "confidence": 0.72
+          }
+        }
+      }
+    },
+    "completed": 1,
+    "total": 1,
+    "runtime": {
+      "runtime_profile": {
+        "name": "urban_runtime_kernel",
+        "inspired_by": "NousResearch/hermes-agent",
+        "adapted_patterns": [
+          "session_scoped_todo_ledger",
+          "checkpointed_execution",
+          "isolated_subtask_context",
+          "progressive_tool_surface",
+          "auditable_runtime_events"
+        ]
+      },
+      "plan_id": "direct_plan_20260509_174914",
+      "workflow_profile": "planner_ablation_direct_execution",
+      "complexity": "direct",
+      "interaction_mode": "supervisory",
+      "created_at": "2026-05-09T17:49:14.697737",
+      "tool_surface": {
+        "selected_capabilities": [],
+        "disclosure_policy": null,
+        "level0_index_size": null,
+        "runtime_policy": "isolated_subtasks_with_checkpointed_review"
+      },
+      "todos": [
+        {
+          "id": "direct_20260509_174914_697737",
+          "title": "# Case 1 Input A: Open-Ended Style Elements Harmony\n\n分析上海南京路步行街历史文化街区的\"风貌要素协调度\"（Style Elements Harmony）。\n\n当前可用数据：\n- 街景图像：D:\\街景\\streetview_images_batch\\上海\\002_南京路步行街\\\n  （154 采样点，100% 完整，每点 ≥5 张方向图，元数据见同目录 points_used.csv）\n- AOI 边界：paper9_her",
+          "agent": "analyst",
+          "status": "completed",
+          "dependencies": [],
+          "artifacts": [],
+          "error": null,
+          "started_at": "2026-05-09T17:49:14.697737",
+          "completed_at": "2026-05-09T17:49:39.780331"
+        }
+      ],
+      "checkpoints": [
+        {
+          "checkpoint_id": "DP-1",
+          "stage": "task_interpretation_and_scoping",
+          "mode": "supervisory",
+          "action": "approve",
+          "reason": "supervisory auto-approve",
+          "subtask_id": null,
+          "agent": null,
+          "payload_keys": [
+            "plan",
+            "subtask_count"
+          ],
+          "timestamp": "2026-05-09T17:49:14.697737",
+          "approved": true
+        },
+        {
+          "checkpoint_id": "DP-3",
+          "stage": "spatial_representation_review",
+          "mode": "supervisory",
+          "action": "approve",
+          "reason": "supervisory auto-approve",
+          "subtask_id": "direct_20260509_174914_697737",
+          "agent": "analyst",
+          "payload_keys": [
+            "agent",
+            "objective",
+            "result",
+            "subtask_id"
+          ],
+          "timestamp": "2026-05-09T17:49:39.780331",
+          "approved": true
+        }
+      ],
+      "events": [
+        {
+          "type": "runtime_initialized",
+          "payload": {
+            "todo_count": 1
+          },
+          "timestamp": "2026-05-09T17:49:14.697737"
+        },
+        {
+          "type": "checkpoint_recorded",
+          "payload": {
+            "checkpoint_id": "DP-1",
+            "stage": "task_interpretation_and_scoping",
+            "action": "approve",
+            "approved": true,
+            "subtask_id": null
+          },
+          "timestamp": "2026-05-09T17:49:14.697737"
+        },
+        {
+          "type": "subtask_started",
+          "payload": {
+            "subtask_id": "direct_20260509_174914_697737",
+            "agent": "analyst"
+          },
+          "timestamp": "2026-05-09T17:49:14.697737"
+        },
+        {
+          "type": "checkpoint_recorded",
+          "payload": {
+            "checkpoint_id": "DP-3",
+            "stage": "spatial_representation_review",
+            "action": "approve",
+            "approved": true,
+            "subtask_id": "direct_20260509_174914_697737"
+          },
+          "timestamp": "2026-05-09T17:49:39.780331"
+        },
+        {
+          "type": "subtask_completed",
+          "payload": {
+            "subtask_id": "direct_20260509_174914_697737",
+            "artifact_count": 0
+          },
+          "timestamp": "2026-05-09T17:49:39.780331"
+        }
+      ]
+    },
+    "_meta": {
+      "review": {
+        "latency_s": 0.0002,
+        "input_tokens_est": 9682,
+        "output_tokens_est": 1
+      }
+    }
+  },
+  "final_answer": "基于现有数据，可对上海南京路步行街历史文化街区的‘风貌要素协调度’进行部分量化评估，但无法完全实现所有理想指标。具体而言：\n- **可直接计算**：建筑风格多样性（基于OSM建筑数据与SinoBF-1功能数据）、街道视觉连续性（基于街景图像）、建筑高度与体量协调度（基于OSM建筑数据中的高度或层数属性，若缺失则需代理）。\n- **可代理估算**：色彩与材质协调度（通过街景图像的颜色直方图或纹理特征近似）、历史建筑比例（通过SinoBF-1功能分类中的‘历史保护建筑’标签，若无则需用建筑年代代理）。\n- **完全缺失**：建筑立面细部风格（如窗饰、线脚）、街道家具与招牌风格统一性、绿化与铺装的历史风貌匹配度。",
+  "review": {},
+  "quality_control": {
+    "plan_qc": {},
+    "exec_qc": {},
+    "plan_passed": true,
+    "exec_passed": true
+  },
+  "alignment_support": {
+    "correction_modules": {
+      "scale_alignment": {
+        "name": "scale_alignment",
+        "description": "Record scale shifts, MAUP-like risks, and analyst-preferred reading scales.",
+        "focus": "scale_and_maup",
+        "input_fields": [
+          "scale"
+        ],
+        "output_fields": [
+          "alignment_diagnostics",
+          "human_alignment"
+        ]
+      },
+      "distribution_review": {
+        "name": "distribution_review",
+        "description": "Persist pre-analysis distribution checks and visibility requirements.",
+        "focus": "distribution_preview",
+        "input_fields": [
+          "distribution"
+        ],
+        "output_fields": [
+          "distribution_preview",
+          "human_alignment"
+        ]
+      },
+      "stakeholder_equity": {
+        "name": "stakeholder_equity",
+        "description": "Attach stakeholder-specific concerns, survey feedback, and spatial justice warnings.",
+        "focus": "fairness_and_contestation",
+        "input_fields": [
+          "stakeholder_feedback"
+        ],
+        "output_fields": [
+          "alignment_diagnostics",
+          "human_alignment"
+        ]
+      },
+      "memory_priority": {
+        "name": "memory_priority",
+        "description": "Capture which previous cases or overrides should be promoted or suppressed in later retrieval.",
+        "focus": "memory_guidance",
+        "input_fields": [
+          "memory_directives"
+        ],
+        "output_fields": [
+          "human_alignment",
+          "memory_directives"
+        ]
+      }
+    },
+    "memory_snapshot": {}
+  },
+  "efficiency": {
+    "plan_latency_s": 5.099998088553548e-05,
+    "exec_latency_s": 25.086434400009644,
+    "review_latency_s": 0.0002,
+    "quality_control_latency_s": 0.0,
+    "total_latency_s": 25.088639199966565,
+    "detail": [
+      {
+        "layer": "planning",
+        "latency_s": 0.0001,
+        "input_tokens_est": 394,
+        "output_tokens_est": 959,
+        "est_cost_usd": 0.016355
+      },
+      {
+        "layer": "quality_control_plan",
+        "latency_s": 0.0,
+        "input_tokens_est": 1374,
+        "output_tokens_est": 1,
+        "est_cost_usd": 0.006885
+      },
+      {
+        "layer": "execution",
+        "latency_s": 25.0864,
+        "input_tokens_est": 959,
+        "output_tokens_est": 9719,
+        "est_cost_usd": 0.15058
+      },
+      {
+        "layer": "review",
+        "latency_s": 0.0002,
+        "input_tokens_est": 9682,
+        "output_tokens_est": 1,
+        "est_cost_usd": 0.048425
+      },
+      {
+        "layer": "quality_control_exec",
+        "latency_s": 0.0,
+        "input_tokens_est": 10233,
+        "output_tokens_est": 1,
+        "est_cost_usd": 0.05118
+      },
+      {
+        "layer": "total",
+        "latency_s": 25.0886,
+        "input_tokens_est": 394,
+        "output_tokens_est": 9719,
+        "est_cost_usd": 0.147755
+      }
+    ],
+    "summary": {
+      "planning": {
+        "count": 1,
+        "input_tokens_est": 394,
+        "output_tokens_est": 959,
+        "latency_s": 0.0001,
+        "est_cost_usd": 0.016355
+      },
+      "quality_control": {
+        "count": 2,
+        "input_tokens_est": 11607,
+        "output_tokens_est": 2,
+        "latency_s": 0.0,
+        "est_cost_usd": 0.058065
+      },
+      "execution": {
+        "count": 1,
+        "input_tokens_est": 959,
+        "output_tokens_est": 9719,
+        "latency_s": 25.0864,
+        "est_cost_usd": 0.15058
+      },
+      "review": {
+        "count": 1,
+        "input_tokens_est": 9682,
+        "output_tokens_est": 1,
+        "latency_s": 0.0002,
+        "est_cost_usd": 0.048425
+      },
+      "total": {
+        "count": 1,
+        "input_tokens_est": 394,
+        "output_tokens_est": 9719,
+        "latency_s": 25.0886,
+        "est_cost_usd": 0.147755
+      }
+    }
+  },
+  "ablation_config": {
+    "planning": false,
+    "review": false,
+    "quality_control": false,
+    "dual_space": false,
+    "memory": false
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "experiment_id": "case1_plus20_heritage_grounding_20260512",
+  "title": "Case1 plus 20 similar heritage-district tasks for UrbanAgent grounding, revision, and cumulative-refinement evaluation",
+  "case1": {
+    "id": "002",
+    "city": "上海",
+    "district": "南京路步行街",
+    "alias": "南京东路"
+  },
+  "validation_cases": [
+    {"id": "001", "city": "上海", "district": "外滩"},
+    {"id": "003", "city": "上海", "district": "思南公馆"},
+    {"id": "004", "city": "上海", "district": "愚园路历史风貌区"},
+    {"id": "008", "city": "上海", "district": "北外滩"},
+    {"id": "009", "city": "宁波", "district": "宁波老外滩"},
+    {"id": "011", "city": "温州", "district": "五马街"},
+    {"id": "012", "city": "杭州", "district": "湖滨历史文化街区"},
+    {"id": "013", "city": "苏州", "district": "山塘街"},
+    {"id": "014", "city": "无锡", "district": "清名桥历史文化街区"},
+    {"id": "015", "city": "南京", "district": "颐和路历史文化街区"},
+    {"id": "016", "city": "镇江", "district": "西津渡历史文化街区"},
+    {"id": "018", "city": "天津", "district": "意大利风情区"},
+    {"id": "019", "city": "天津", "district": "解放北路历史文化街区"},
+    {"id": "020", "city": "天津", "district": "小白楼历史文化街区"},
+    {"id": "021", "city": "青岛", "district": "八大关"},
+    {"id": "025", "city": "哈尔滨", "district": "中央大街"},
+    {"id": "026", "city": "哈尔滨", "district": "道外中华巴洛克历史文化街区"},
+    {"id": "027", "city": "广州", "district": "沙面岛"},
+    {"id": "028", "city": "广州", "district": "上下九步行街"},
+    {"id": "029", "city": "广州", "district": "恩宁路历史文化街区"}
+  ],
+  "authoritative_inputs": {
+    "aoi_dir": "D:/GitHub_1/world_agent/urban-mobility-agent/paper9_heritageIntelligence/data/district_boundaries_v2/district_boundaries",
+    "streetview_root": "D:/街景/streetview_images_batch",
+    "sinobf_root": "D:/GitHub_1/world_agent/urban-mobility-agent/paper9_heritageIntelligence/data/sinobf1",
+    "osm_cache_root": "D:/GitHub_1/world_agent/urban-mobility-agent/paper9_heritageIntelligence/heritage_district_batch/districts",
+    "osm_source": "OpenStreetMap via Overpass API; use local Overpass-derived cache when present, otherwise call fetch_osm_overpass_tool"
+  },
+  "input_grounding_policy": {
+    "authoritative_aoi_required": true,
+    "do_not_use_legacy_aoi": true,
+    "legacy_aoi_examples": [
+      "paper9_heritageIntelligence/heritage_district_batch/districts/*/aoi.geojson",
+      "paper9_heritageIntelligence/heritage_boundary_review/aoi_from_review/*/aoi.geojson"
+    ],
+    "dataset_cards_required": true,
+    "known_limits_required": true,
+    "allow_proxy_indicators": true,
+    "require_missing_evidence_disclosure": true,
+    "literature_grounding": "reserved_interface_only"
+  },
+  "ablation_conditions": [
+    "full",
+    "no_memory",
+    "no_reviewer",
+    "no_input_grounding"
+  ]
+}

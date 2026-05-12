@@ -22,7 +22,17 @@ from datetime import datetime
 from collections import deque
 from dataclasses import dataclass, field
 
-from .cube_retriever import CubeGraphMemoryBackend, normalize_temporal_context
+try:
+    from experimental.cube_retriever import CubeGraphMemoryBackend, normalize_temporal_context
+except Exception:  # pragma: no cover - optional experimental plugin
+    CubeGraphMemoryBackend = None  # type: ignore[assignment]
+
+    def normalize_temporal_context(value: Any) -> Optional[Dict[str, Any]]:
+        if isinstance(value, dict):
+            return value
+        if hasattr(value, "to_dict"):
+            return value.to_dict()
+        return None
 
 logger = logging.getLogger(__name__)
 
@@ -500,7 +510,7 @@ class MemoryModule:
         self.pattern_detector = TemporalPatternDetector() if enable_pattern_detector else None
         self.cube_retriever = (
             CubeGraphMemoryBackend(self.config.get("cube_retrieval_config"))
-            if enable_cube_retrieval else None
+            if enable_cube_retrieval and CubeGraphMemoryBackend is not None else None
         )
 
     async def retrieve(self, query: Dict, query_time: Optional[datetime] = None) -> Dict[str, Any]:

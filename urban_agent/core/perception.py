@@ -65,8 +65,8 @@ def _infer_data_paths(task: Dict[str, Any]) -> dict[str, str]:
             if resolved and resolved.exists():
                 paths[f"extracted_{len(paths)}"] = str(resolved)
         patterns = [
-            r"[A-Za-z]:\\[^\n\r，,。；;`|]+",
-            r"(?:\.\.[\\/])?paper9_heritageIntelligence[\\/][^\n\r，,。；;\s`|]+",
+            r"[A-Za-z]:[\\/][^\n\r，,。；;\s`|]+",
+            r"(?:\.\.[\\/])?[A-Za-z0-9_.\-]+[\\/][^\n\r，,。；;\s`|]+",
         ]
         for pattern in patterns:
             for match in re.finditer(pattern, text):

@@ -1,0 +1,86 @@
+{
+  "case_study": {
+    "id": "ningbo_old_bund_heritage_walkability",
+    "title": "宁波老外滩历史街区步行可达性与保护压力诊断",
+    "location": "宁波老外滩",
+    "task": "识别历史街区内步行网络、建筑强度、夜间活力与保护建筑候选对象之间的空间耦合关系，并提出优先优化地段。",
+    "model_name": "Heritage Walkability Pressure Assessment",
+    "data_resources": [
+      {
+        "name": "Old Bund AOI",
+        "type": "GeoJSON/GPKG polygon",
+        "status": "available",
+        "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\artifacts\\ningbo_old_bund\\osm\\old_bund_aoi.geojson"
+      },
+      {
+        "name": "OSM roads in AOI",
+        "type": "GeoJSON/GPKG lines",
+        "status": "available",
+        "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\artifacts\\ningbo_old_bund\\osm\\osm_roads_aoi.geojson"
+      },
+      {
+        "name": "OSM buildings with height proxies",
+        "type": "GPKG polygons + CSV",
+        "status": "available",
+        "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\artifacts\\ningbo_old_bund\\qgis_package\\data\\vector\\old_bund_layers.gpkg"
+      },
+      {
+        "name": "Protected building candidates",
+        "type": "CSV evidence table",
+        "status": "needs official verification",
+        "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\artifacts\\ningbo_old_bund\\qgis_package\\data\\tables\\protected_buildings_index.csv"
+      },
+      {
+        "name": "Night-light context",
+        "type": "GeoTIFF raster",
+        "status": "available",
+        "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\artifacts\\ningbo_old_bund\\qgis_package\\data\\raster\\viirs_night_lights_cache_z8.tif"
+      }
+    ],
+    "parameters": {
+      "analysis_radius_m": 500,
+      "walkability_threshold": 0.7,
+      "heritage_verification_required": true,
+      "qgis_live_sync": true
+    }
+  },
+  "layers": [
+    {
+      "id": "aoi",
+      "name": "Old Bund AOI",
+      "geometry": "Polygon",
+      "style": {
+        "color": "#4f8cff"
+      }
+    },
+    {
+      "id": "roads",
+      "name": "Road Network",
+      "geometry": "LineString",
+      "style": {
+        "color": "#29c7ac"
+      }
+    },
+    {
+      "id": "buildings",
+      "name": "Buildings",
+      "geometry": "Polygon",
+      "style": {
+        "color": "#d8b15f"
+      }
+    }
+  ],
+  "crs": "EPSG:4326",
+  "qgis": {
+    "available": false,
+    "executable": null,
+    "version": null,
+    "bridge": {
+      "connected": false,
+      "base_url": "http://127.0.0.1:8766",
+      "message": "QGIS live bridge is not connected: <urlopen error timed out>",
+      "mode": "pending_queue"
+    },
+    "message": "qgis_process is not available on PATH; QGIS live bridge is waiting for connection."
+  }
+}

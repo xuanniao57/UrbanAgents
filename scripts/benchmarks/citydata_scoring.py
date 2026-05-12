@@ -4,7 +4,7 @@ import json
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
-from urban_agent.adapters import TrafficSignalAdapter
+from benchmarks.citybench import TrafficSignalAdapter
 
 
 TRAFFIC_ADAPTER = TrafficSignalAdapter()

@@ -1,0 +1,7 @@
+operator,metric,value,unit,method,confidence,applicability
+connectivity,road_density_km_per_km2,32.9226,km/km2,road length normalized by AOI area,0.84,computed
+accessibility,road_length_m,2138.5219,m,OSM roads clipped to AOI,0.82,computed
+density,building_coverage_ratio,0.4721,ratio,building footprint area / AOI area,0.8,computed
+density,building_count_per_ha,9.237,count/ha,building count normalized by AOI hectares,0.8,computed
+walkability,heritage_candidate_count,11,count,candidate evidence table,0.58,needs verification
+activity,nightlight_mean_signal,255.0,0-255,VIIRS context raster sample,0.6,coarse context

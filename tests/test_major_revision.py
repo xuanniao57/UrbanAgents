@@ -35,8 +35,9 @@ class TestQualityController:
         assert QualityReport is not None
 
     def test_default_weights(self):
-        from urban_agent.agents.quality_controller import DEFAULT_WEIGHTS
-        total = sum(DEFAULT_WEIGHTS.values())
+        from urban_agent.agents.quality_controller import QualityController
+        controller = QualityController()
+        total = sum(controller.weights.values())
         assert abs(total - 1.0) < 1e-6, f"Weights must sum to 1.0, got {total}"
 
     def test_quality_report_dataclass(self):
@@ -77,16 +78,16 @@ class TestGovernance:
 
     def test_tool_inventory_count(self):
         from urban_agent.governance import TOOL_INVENTORY
-        assert len(TOOL_INVENTORY) == 15, f"Expected 15 tools, got {len(TOOL_INVENTORY)}"
+        assert len(TOOL_INVENTORY) == 8
 
     def test_tool_categories_distribution(self):
         from urban_agent.governance import TOOL_INVENTORY, ToolCategory
         by_cat = {}
         for t in TOOL_INVENTORY:
             by_cat[t.category] = by_cat.get(t.category, 0) + 1
-        assert by_cat[ToolCategory.SYSTEM_INTERACTION] == 6
-        assert by_cat[ToolCategory.DATA_UNDERSTANDING] == 6
-        assert by_cat[ToolCategory.DOMAIN_KNOWLEDGE] == 3
+        assert by_cat[ToolCategory.SYSTEM_INTERACTION] == 1
+        assert by_cat[ToolCategory.DATA_UNDERSTANDING] == 5
+        assert by_cat[ToolCategory.DOMAIN_KNOWLEDGE] == 2
 
     def test_governance_registry(self):
         from urban_agent.governance import GovernanceRegistry
@@ -106,8 +107,11 @@ class TestGovernance:
         from urban_agent.governance import GovernanceRegistry
         registry = GovernanceRegistry()
         table = registry.tool_inventory_table()
-        assert len(table) == 15
+        assert len(table) == 8
         assert all("Category" in row and "Tool" in row for row in table)
+        tools = {row["Tool"] for row in table}
+        for name in ("fetch_osm_data", "calculate_density", "generate_measurement_report"):
+            assert name in tools
 
     def test_data_resource(self):
         from urban_agent.governance import GovernanceRegistry, DataResource

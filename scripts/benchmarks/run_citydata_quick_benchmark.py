@@ -29,7 +29,7 @@ if str(ROOT) not in sys.path:
 
 from urban_agent.llm.qwen_client import QwenClient
 from urban_agent.llm.kimi_client import KimiClient
-from urban_agent.adapters import TrafficSignalAdapter
+from benchmarks.citybench import TrafficSignalAdapter
 from urban_agent.task_agent import UrbanTaskAgent
 
 

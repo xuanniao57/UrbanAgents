@@ -1,0 +1,68 @@
+{
+  "config": {
+    "enable_planning": false,
+    "enable_review": false,
+    "enable_quality_control": false,
+    "enable_dual_space": false,
+    "enable_memory": false
+  },
+  "elapsed_s": 25.1,
+  "gap1": {
+    "evidence_manifest_present": true,
+    "spatial_block": {
+      "bbox": true,
+      "crs": true,
+      "admin_level": false
+    },
+    "temporal_block": {
+      "time_window": true,
+      "granularity": true,
+      "freshness": true
+    },
+    "population_block": {
+      "target_group": false,
+      "affected_group": false
+    },
+    "governance_block": {
+      "provenance": true,
+      "missing_layers": false
+    },
+    "selected_capabilities_count": 0
+  },
+  "gap2": {
+    "urban_validity_score": null,
+    "policy_scores": {
+      "spatial": null,
+      "temporal": null,
+      "population": null,
+      "evidence": null
+    },
+    "hard_failures": [],
+    "review_passed": null,
+    "qc_plan_pass": true,
+    "qc_exec_pass": true,
+    "exec_confidence": null,
+    "confidence_dimensions": {},
+    "artifact_count": 0,
+    "metric_row_count": 22
+  },
+  "gap3": {
+    "todos_total": 1,
+    "todos_completed": 1,
+    "checkpoints_count": 2,
+    "feedback_lessons_used": false
+  },
+  "table3": {
+    "success": true,
+    "latency_s": 25.09,
+    "est_cost_usd": 0.42118,
+    "exec_confidence": null,
+    "review_score": null,
+    "warning_count": 0,
+    "hard_failure_count": 0,
+    "artifact_count": 0,
+    "metric_row_count": 22
+  },
+  "trial": 2,
+  "config_label": "c6_vanilla"
+}

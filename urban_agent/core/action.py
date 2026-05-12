@@ -7,8 +7,6 @@ import json
 import logging
 from typing import Dict, List, Any, Optional
 
-from ..mcp_tools import UrbanMCPTools
-
 logger = logging.getLogger(__name__)
 
 
@@ -33,7 +31,7 @@ class ActionModule:
         self.llm_client = llm_client
         self.config = config or {}
         self.tool_runtime = self.config.get("tool_runtime", "mcp")
-        self.mcp_tools = UrbanMCPTools()
+        self.mcp_tools = self.config.get("mcp_tools")
         
         # 工具注册表
         self.tools: Dict[str, Any] = {}
@@ -243,6 +241,12 @@ class ActionModule:
             try:
                 if self.mcp_client and hasattr(self.mcp_client, "execute_tool"):
                     return self.mcp_client.execute_tool(tool_name, params)
+                if self.mcp_tools is None and self.config.get("enable_builtin_mcp"):
+                    from urban_agent.mcp_tools import get_mcp_tools
+
+                    self.mcp_tools = get_mcp_tools()
+                if self.mcp_tools is None:
+                    return {"success": False, "error": "MCP runtime is not configured"}
                 return self.mcp_tools.execute_tool(tool_name, params)
             except Exception as e:
                 logger.error(f"MCP tool {tool_name} failed: {e}")

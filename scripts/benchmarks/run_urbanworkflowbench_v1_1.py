@@ -17,7 +17,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.benchmarks.run_citydata_quick_benchmark import load_env_file, to_jsonable
-from urban_agent.cognition import SpatialCognition
+from legacy.urban_agent_legacy.cognition import SpatialCognition
 from urban_agent.core.action import ActionModule
 from urban_agent.core.memory import MemoryModule
 from urban_agent.core.reasoning import ReasoningModule

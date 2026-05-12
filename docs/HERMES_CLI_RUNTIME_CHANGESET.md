@@ -88,6 +88,9 @@ Purpose:
 - Adds Kimi coding-client preference and fallback to the standard Kimi client.
 - Exposes MCP tools in OpenAI-compatible function-calling format.
 - Adds tool-handler maps so model clients can execute selected MCP tools through structured tool calls.
+- Adds `urban_agent.tools.agent_toolkit`, a Hermes-inspired core agent tool surface for UrbanAgent: web search/extract, terminal/process, file read/write/patch/search, browser action requests, vision/image requests, skills, todo, memory, session search, clarify, code execution, delegation, cron, messaging, Home Assistant, and kanban coordination.
+- Keeps `plugins.hermes` as a compatibility wrapper while making the general tool surface part of UrbanAgent's own `tools` package.
+- Keeps external or risky tools gated: terminal/code/file-write/process-control actions return dry-run or enablement records unless the corresponding UrbanAgent environment flag is set.
 
 ### 5. Observable runtime and QGIS-oriented artifacts
 

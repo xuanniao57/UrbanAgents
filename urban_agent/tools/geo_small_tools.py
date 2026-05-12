@@ -28,7 +28,9 @@ def build_aoi_context_buffer_tool(arguments: Dict[str, Any]) -> Dict[str, Any]:
     boundary_path = paths.get("boundary")
     if not boundary_path:
         return {"status": "unavailable", "reason": "no boundary layer found"}
-    boundary = gpd.read_file(boundary_path)
+    from .geo_tools import read_geo_layer
+
+    boundary = read_geo_layer(boundary_path)
     context, diagnostics = build_aoi_context_buffer(
         boundary,
         width_factor=float(arguments.get("context_buffer_width_factor", 3.0)),
@@ -52,7 +54,9 @@ def validate_source_extent_against_context(arguments: Dict[str, Any]) -> Dict[st
         if not path_text:
             continue
         try:
-            loaded[role] = gpd.read_file(path_text)
+            from .geo_tools import read_geo_layer
+
+            loaded[role] = read_geo_layer(path_text)
         except Exception as error:
             loaded.setdefault("_load_errors", {})[role] = str(error)
     aligned, diagnostics = align_loaded_layers_to_aoi(
@@ -75,9 +79,16 @@ def fetch_osm_overpass_tool(arguments: Dict[str, Any]) -> Dict[str, Any]:
     return fetch_osm_overpass(arguments)
 
 
+def build_input_grounding_package_tool(arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """Small tool: build dataset cards, grounding policy, and computability matrix."""
+    from ..grounding import build_input_grounding_package
+
+    return build_input_grounding_package(arguments)
+
+
 def export_gis_layer_stack(arguments: Dict[str, Any]) -> Dict[str, Any]:
     """Small tool facade: export GIS layers after diagnostics and policy-ready metadata are computed."""
-    from .geo_tools import build_gis_artifact_bundle
+    from .export.gis_bundle import build_gis_artifact_bundle
 
     return build_gis_artifact_bundle(arguments)
 

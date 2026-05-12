@@ -8,8 +8,6 @@ import logging
 import re
 from typing import Dict, List, Any, Optional
 
-from ..adapters import TrafficSignalAdapter
-
 logger = logging.getLogger(__name__)
 
 
@@ -32,7 +30,6 @@ class ReasoningModule:
         self.llm_client = llm_client
         self.config = config or {}
         self.mode = self.config.get("mode", "enhanced")
-        self.traffic_adapter = TrafficSignalAdapter()
         self.knowledge_graph = self._init_knowledge_graph()
         
     def _init_knowledge_graph(self) -> Dict:
@@ -477,13 +474,8 @@ class ReasoningModule:
             selected_phase = task.get("phase_map", {}).get(selected_option, selected_option)
             green_time = min(25 + int(best_option.get("waiting_vehicle_count", 0)) * 3, 90)
         elif self._is_enhanced_mode() and queue_lengths:
-            proxy_task = self.traffic_adapter.build_task_from_queue_lengths(
-                city=task.get("city", "unknown"),
-                queue_lengths=queue_lengths,
-                current_phase=task.get("current_phase"),
-            )
-            selected_option = self.traffic_adapter.pick_default_option(proxy_task)
-            selected_phase = proxy_task.get("phase_map", {}).get(selected_option, selected_option)
+            selected_option = max(queue_lengths, key=lambda key: int(queue_lengths.get(key, 0)))
+            selected_phase = task.get("phase_map", {}).get(selected_option, selected_option)
             green_time = min(25 + int(max(queue_lengths.values())) * 3, 90)
         elif self._is_enhanced_mode() and memory_phase is not None:
             selected_option = None

@@ -181,7 +181,7 @@ with open("output.svg", "w") as f:
 ### 使用MCP工具
 
 ```python
-from urban_agent.mcp_tools import get_mcp_tools
+from plugins.mcp import get_mcp_tools
 
 # 获取MCP工具实例
 mcp = get_mcp_tools()
@@ -200,7 +200,7 @@ tool_definitions = mcp.get_tool_definitions()
 ### 自定义测量
 
 ```python
-from urban_agent.decision import SpatialMeasurement
+from legacy.urban_agent_legacy.decision import SpatialMeasurement
 
 measurement = SpatialMeasurement()
 
