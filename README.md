@@ -25,6 +25,8 @@ UrbanAgent is a multi-agent framework that uses Large Language Models to perform
 
 - **Multi-LLM Support**: Qwen, OpenAI, DeepSeek, Kimi — any OpenAI-compatible endpoint
 
+- **Progressive Capability Disclosure**: GIS tools, Python libraries, Rhino/Grasshopper workflows, and ML/DL algorithms are registered as method-level capabilities; agents see compact capability cards first and expand to invocation schemas only when needed.
+
 - **UrbanWorkflowBench**: Built-in benchmark suite for evaluating agent capabilities across 8 urban task types
 
 - **Task-Oriented CLI + Python API**: A real terminal workflow for arbitrary city analysis tasks, plus advanced pipeline commands for power users
@@ -130,8 +132,15 @@ urban-agent analyze --task-type open_workflow --task "Assess street connectivity
 # Check provider and environment status before handing it to a collaborator
 urban-agent doctor
 
+# Run a collaborator-facing urban vitality case from a JSON input template
+urban-agent analyze --task "Assess urban vitality for this study area" --input examples/case2_urban_vitality_input.example.json --interaction-mode supervisory --output-dir outputs/case2_vitality
+
 # Show the active config file and configured providers
 urban-agent config
+
+# Inspect method-level capabilities and the selected backend schemas
+urban-agent capabilities --query "walkability accessibility" --level 1
+urban-agent capabilities --query "grasshopper parametric design" --level 2
 
 # Backward-compatible end-to-end pipeline entry
 python -m urban_agent run --task-type geoqa --question "分析同济大学周边步行可达性"
@@ -145,6 +154,8 @@ python -m urban_agent review --input results.json
 ```
 
 The recommended collaborator-facing surface is `urban-agent shell`, `urban-agent analyze`, `urban-agent doctor`, and `urban-agent config`, not the internal pipeline stages above. Standard installation does not require entering the repository path: the CLI loads `~/.urban-agent/.env` unless `URBAN_AGENT_ENV` or `URBAN_AGENT_HOME` is set. The built-in case-study workflow is kept as a source-repo demo path rather than part of the standard installed product surface.
+
+For a clean handoff to a collaborator, start with `docs/COLLABORATOR_CASE2_QUICKSTART.md` and copy `examples/case2_urban_vitality_input.example.json`.
 
 #### Python API
 
@@ -165,12 +176,19 @@ Run `urban-agent init` once to create a user-level config at `~/.urban-agent/.en
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `LLM_PROVIDER` | `qwen` | `qwen` / `openai` / `deepseek` / `kimi` |
+| `LLM_MODEL` | provider default | Global model override; for DeepSeek v4 pro use `deepseek-v4-pro` |
 | `QWEN_API_KEY` | — | DashScope API key |
 | `OPENAI_API_KEY` | — | OpenAI API key |
-| `Deepseek_API_KEY` | — | DeepSeek API key |
+| `DEEPSEEK_API_KEY` | — | DeepSeek API key |
+| `DEEPSEEK_MODEL` | `deepseek-v4-pro` | DeepSeek model name |
+| `DEEPSEEK_THINKING` | `enabled` | DeepSeek thinking-mode switch |
+| `DEEPSEEK_REASONING_EFFORT` | `high` | DeepSeek v4 pro reasoning effort |
 | `KIMI_API_KEY` | — | Moonshot API key |
+| `KIMI_CLIENT_TYPE` | `auto` | `auto` prefers Kimi Coding via `KIMI_CODE_API_KEY`, then falls back to standard Kimi |
 
 Any OpenAI-compatible endpoint works. See `.env.example` for all options.
+
+DeepSeek uses the OpenAI-compatible chat completions endpoint. When `DEEPSEEK_THINKING=enabled`, UrbanAgent sends `thinking={"type":"enabled"}` through `extra_body`, omits sampling parameters that are ignored in thinking mode, and preserves `reasoning_content` during tool-call loops.
 
 ### Supported Tasks (CityBench-aligned)
 

@@ -22,6 +22,7 @@ from .base import (
     BaseAgent,
     SubTask,
 )
+from .runtime import RuntimeLedger, checkpoint_for_agent, checkpoint_is_approved
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,7 @@ class ManagerAgent(BaseAgent):
         self.workers = workers or {}
         self.reviewers = reviewers or {}
         self._subtask_results: Dict[str, Dict[str, Any]] = {}
+        self._runtime_ledger: Optional[RuntimeLedger] = None
 
     @property
     def role_prompt(self) -> str:
@@ -73,6 +75,28 @@ class ManagerAgent(BaseAgent):
         subtasks = self._parse_subtasks(plan_data)
         execution_order = plan_data.get("execution_order", [st.subtask_id for st in subtasks])
         subtask_map = {st.subtask_id: st for st in subtasks}
+        self._subtask_results = {}
+        self._runtime_ledger = RuntimeLedger.from_plan(
+            plan_data,
+            interaction_mode=self._checkpoint_mode(),
+        )
+
+        scope_decision = await self._run_human_checkpoint(
+            "DP-1",
+            "task_interpretation_and_scoping",
+            {"plan": plan_data, "subtask_count": len(subtasks)},
+            trace_id,
+        )
+        if not checkpoint_is_approved(scope_decision):
+            self._runtime_ledger.cancel_pending(scope_decision.get("reason", "checkpoint blocked execution"))
+            aggregated = self._aggregate_results(subtasks)
+            return AgentMessage(
+                sender=AgentRole.MANAGER,
+                receiver=AgentRole.PLANNER,
+                msg_type="result",
+                payload={"results": aggregated, "plan_id": plan_data.get("plan_id")},
+                trace_id=trace_id,
+            )
 
         # 按序执行（尊重依赖关系）
         for st_id in execution_order:
@@ -128,6 +152,8 @@ class ManagerAgent(BaseAgent):
             logger.warning(f"No worker for role {role.value}, skipping {subtask.subtask_id}")
             subtask.status = "failed"
             subtask.result = {"error": f"No worker for {role.value}"}
+            if self._runtime_ledger is not None:
+                self._runtime_ledger.fail_subtask(subtask.subtask_id, subtask.result["error"])
             return
 
         # 构造隔离上下文 — Worker 只看到自己需要的数据
@@ -143,14 +169,55 @@ class ManagerAgent(BaseAgent):
 
         try:
             subtask.status = "running"
+            if self._runtime_ledger is not None:
+                self._runtime_ledger.start_subtask(
+                    subtask.subtask_id,
+                    agent=role.value,
+                    objective=subtask.objective,
+                )
             result_msg = await worker.execute(msg)
-            subtask.result = result_msg.payload
+            result_payload = result_msg.payload
+            checkpoint = checkpoint_for_agent(role.value)
+            if checkpoint:
+                checkpoint_id, stage = checkpoint
+                decision = await self._run_human_checkpoint(
+                    checkpoint_id,
+                    stage,
+                    {
+                        "subtask_id": subtask.subtask_id,
+                        "agent": role.value,
+                        "objective": subtask.objective,
+                        "result": result_payload,
+                    },
+                    trace_id,
+                    subtask_id=subtask.subtask_id,
+                    agent=role.value,
+                )
+                if not checkpoint_is_approved(decision):
+                    subtask.status = "failed"
+                    subtask.result = {
+                        "error": "blocked_by_human_checkpoint",
+                        "checkpoint_decision": decision,
+                        "draft_result": result_payload,
+                    }
+                    if self._runtime_ledger is not None:
+                        self._runtime_ledger.fail_subtask(
+                            subtask.subtask_id,
+                            decision.get("reason", "checkpoint blocked result"),
+                        )
+                    return
+
+            subtask.result = result_payload
             subtask.status = "completed"
-            self._subtask_results[subtask.subtask_id] = result_msg.payload
+            self._subtask_results[subtask.subtask_id] = result_payload
+            if self._runtime_ledger is not None:
+                self._runtime_ledger.complete_subtask(subtask.subtask_id, result_payload)
         except Exception as e:
             logger.error(f"Subtask {subtask.subtask_id} failed: {e}")
             subtask.status = "failed"
             subtask.result = {"error": str(e)}
+            if self._runtime_ledger is not None:
+                self._runtime_ledger.fail_subtask(subtask.subtask_id, str(e))
 
     def _build_isolated_context(self, subtask: SubTask) -> Dict[str, Any]:
         """
@@ -165,10 +232,17 @@ class ManagerAgent(BaseAgent):
             "input_data": dict(subtask.input_data),
         }
 
-        # 注入依赖子任务的输出（且仅限依赖）
-        for dep_id in subtask.dependencies:
-            if dep_id in self._subtask_results:
-                context.setdefault("dependency_results", {})[dep_id] = self._subtask_results[dep_id]
+        if subtask.input_data.get("capability_context"):
+            context["capability_context"] = subtask.input_data["capability_context"]
+
+        # Reporter is the synthesis role: it needs all completed upstream outputs.
+        # Other workers keep dependency-only context isolation.
+        if subtask.assigned_role == AgentRole.REPORTER:
+            context["dependency_results"] = dict(self._subtask_results)
+        else:
+            for dep_id in subtask.dependencies:
+                if dep_id in self._subtask_results:
+                    context.setdefault("dependency_results", {})[dep_id] = self._subtask_results[dep_id]
 
         if subtask.review_feedback:
             context["review_feedback"] = subtask.review_feedback
@@ -202,6 +276,51 @@ class ManagerAgent(BaseAgent):
 
         return aggregated
 
+    async def _run_human_checkpoint(
+        self,
+        checkpoint_id: str,
+        stage: str,
+        data: Dict[str, Any],
+        trace_id: str,
+        *,
+        subtask_id: Optional[str] = None,
+        agent: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        checkpoint_agent = self.reviewers.get(AgentRole.HUMAN_CHECKPOINT)
+        mode = self._checkpoint_mode()
+        decision: Dict[str, Any] = {"action": "approve", "reason": "human checkpoint not configured"}
+
+        if checkpoint_agent is not None:
+            checkpoint_msg = AgentMessage(
+                sender=AgentRole.MANAGER,
+                receiver=AgentRole.HUMAN_CHECKPOINT,
+                msg_type="checkpoint",
+                payload={"checkpoint_id": checkpoint_id, "stage": stage, "data": data},
+                trace_id=trace_id,
+            )
+            try:
+                feedback = await checkpoint_agent.execute(checkpoint_msg)
+                decision = feedback.payload.get("decision", decision)
+            except Exception as error:
+                logger.warning("Human checkpoint %s failed: %s", checkpoint_id, error)
+                decision = {"action": "approve", "reason": f"checkpoint failed open: {error}"}
+
+        if self._runtime_ledger is not None:
+            self._runtime_ledger.record_checkpoint(
+                checkpoint_id=checkpoint_id,
+                stage=stage,
+                mode=mode,
+                decision=decision,
+                subtask_id=subtask_id,
+                agent=agent,
+                payload=data,
+            )
+        return decision
+
+    def _checkpoint_mode(self) -> str:
+        checkpoint_agent = self.reviewers.get(AgentRole.HUMAN_CHECKPOINT)
+        return str(getattr(checkpoint_agent, "interaction_mode", "autonomous"))
+
     def _aggregate_results(self, subtasks: List[SubTask]) -> Dict[str, Any]:
         """汇总所有子任务结果"""
         results = {}
@@ -212,11 +331,14 @@ class ManagerAgent(BaseAgent):
                 "status": st.status,
                 "result": st.result,
             }
-        return {
+        aggregated = {
             "subtask_results": results,
             "completed": sum(1 for st in subtasks if st.status == "completed"),
             "total": len(subtasks),
         }
+        if self._runtime_ledger is not None:
+            aggregated["runtime"] = self._runtime_ledger.to_dict()
+        return aggregated
 
     @staticmethod
     def _parse_subtasks(plan_data: Dict) -> List[SubTask]:

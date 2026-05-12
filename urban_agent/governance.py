@@ -288,13 +288,6 @@ TOOL_INVENTORY: List[ToolDescriptor] = [
         write_roles={"cartographer", "analyst"},
     ),
     ToolDescriptor(
-        name="infer_population_from_indicators",
-        description="根据指标估计人口",
-        category=ToolCategory.DATA_UNDERSTANDING,
-        read_roles={"analyst"},
-        write_roles={"analyst"},
-    ),
-    ToolDescriptor(
         name="rank_traffic_signal_phases",
         description="根据车辆数据排序交通信号相位",
         category=ToolCategory.DATA_UNDERSTANDING,
@@ -316,20 +309,6 @@ TOOL_INVENTORY: List[ToolDescriptor] = [
         category=ToolCategory.DOMAIN_KNOWLEDGE,
         read_roles={"reporter", "analyst"},
         write_roles={"reporter"},
-    ),
-    ToolDescriptor(
-        name="select_multiple_choice_option",
-        description="将原始回答映射为标准化选项",
-        category=ToolCategory.DOMAIN_KNOWLEDGE,
-        read_roles={"analyst", "reporter"},
-        write_roles={"analyst"},
-    ),
-    ToolDescriptor(
-        name="score_navigation_plan",
-        description="评估导航动作序列准确性",
-        category=ToolCategory.DOMAIN_KNOWLEDGE,
-        read_roles={"analyst", "spatial_reviewer"},
-        write_roles={"analyst"},
     ),
     ToolDescriptor(
         name="select_exploration_target",

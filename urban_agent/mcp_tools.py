@@ -11,7 +11,6 @@ MCP Tools Integration: MCP协议工具集成模块
 from typing import Dict, List, Any, Optional, Callable
 import json
 import math
-import re
 from dataclasses import dataclass
 
 from .connectors import ConnectorRegistry, RhinoComputeConnector
@@ -183,37 +182,6 @@ class UrbanMCPTools:
             handler=self._handle_generate_report
         )
 
-        # Benchmark-oriented tools
-        self.register_tool(
-            name="infer_population_from_indicators",
-            description="根据夜光、碳排和其他指标估计人口，并可映射到多选答案",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "indicator_values": {"type": "object", "description": "指标字典，如 nightlight/carbon/worldpop"},
-                    "choices": {"type": "object", "description": "可选答案映射，如 {A: 1000, B: 2000}"}
-                },
-                "required": ["indicator_values"]
-            },
-            handler=self._handle_infer_population_from_indicators
-        )
-
-        self.register_tool(
-            name="select_multiple_choice_option",
-            description="根据模型原始回答、证据或数值，在多选题中选出标准化选项",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "choices": {"type": "object", "description": "选项字典"},
-                    "raw_answer": {"type": "string", "description": "模型原始回答"},
-                    "numeric_target": {"type": "number", "description": "若答案本质是数值，可用该值映射到最近选项"},
-                    "evidence_text": {"type": "string", "description": "额外证据文本"}
-                },
-                "required": ["choices"]
-            },
-            handler=self._handle_select_multiple_choice_option
-        )
-
         self.register_tool(
             name="rank_traffic_signal_phases",
             description="根据等待车辆数、总车辆数和车道数，对交通信号相位进行排序",
@@ -225,20 +193,6 @@ class UrbanMCPTools:
                 "required": ["phase_options"]
             },
             handler=self._handle_rank_traffic_signal_phases
-        )
-
-        self.register_tool(
-            name="score_navigation_plan",
-            description="比较预测导航动作序列与参考序列，返回 exact match 和 step accuracy",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "predicted_actions": {"type": "array", "items": {"type": "string"}},
-                    "reference_actions": {"type": "array", "items": {"type": "string"}}
-                },
-                "required": ["predicted_actions", "reference_actions"]
-            },
-            handler=self._handle_score_navigation_plan
         )
 
         self.register_tool(
@@ -337,6 +291,36 @@ class UrbanMCPTools:
             }
             for tool in self.tools.values()
         ]
+
+    def get_openai_tool_definitions(self, names: Optional[List[str]] = None) -> List[Dict]:
+        """Return MCP tools in OpenAI-compatible function-calling format."""
+        selected = set(names or self.tools.keys())
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": tool.parameters,
+                },
+            }
+            for tool in self.tools.values()
+            if tool.name in selected
+        ]
+
+    def get_tool_handler_map(self, names: Optional[List[str]] = None) -> Dict[str, Callable[..., str]]:
+        """Return callable handlers suitable for LLM tool-call loops."""
+        selected = set(names or self.tools.keys())
+        handlers: Dict[str, Callable[..., str]] = {}
+        for tool_name in selected:
+            if tool_name not in self.tools:
+                continue
+
+            def _handler(_tool_name: str = tool_name, **kwargs: Any) -> str:
+                return json.dumps(self.execute_tool(_tool_name, kwargs), ensure_ascii=False, default=str)
+
+            handlers[tool_name] = _handler
+        return handlers
     
     def execute_tool(self, tool_name: str, arguments: Dict) -> Dict:
         """
@@ -547,64 +531,6 @@ class UrbanMCPTools:
             'sections': ['baseline', 'proposals', 'measurements']
         }
 
-    def _handle_infer_population_from_indicators(self, args: Dict) -> Dict:
-        """根据遥感衍生指标估计人口"""
-        indicator_values = args.get("indicator_values", {}) or {}
-        choices = args.get("choices", {}) or {}
-
-        nightlight = float(indicator_values.get("nightlight") or 0)
-        carbon = float(indicator_values.get("carbon") or 0)
-        worldpop = indicator_values.get("worldpop")
-        worldpop = float(worldpop) if worldpop not in (None, "", "nan") else None
-
-        estimated_population = max(0.0, nightlight * 80 + carbon * 2.5)
-        if worldpop is not None and worldpop > 0:
-            estimated_population = (estimated_population + worldpop) / 2
-
-        selected_option = None
-        if choices:
-            selected_option = min(
-                choices.items(),
-                key=lambda item: abs(float(item[1]) - estimated_population)
-            )[0]
-
-        return {
-            "estimated_population": round(estimated_population, 2),
-            "selected_option": selected_option,
-            "used_indicators": {
-                "nightlight": nightlight,
-                "carbon": carbon,
-                "worldpop": worldpop,
-            }
-        }
-
-    def _handle_select_multiple_choice_option(self, args: Dict) -> Dict:
-        """将原始回答标准化到选项字母"""
-        choices = args.get("choices", {}) or {}
-        raw_answer = str(args.get("raw_answer") or "")
-        evidence_text = str(args.get("evidence_text") or "")
-        numeric_target = args.get("numeric_target")
-
-        combined_text = f"{raw_answer}\n{evidence_text}".upper()
-        for key in choices:
-            normalized_key = str(key).upper()
-            if re.search(rf"\b{re.escape(normalized_key)}\b", combined_text):
-                return {"selected_option": normalized_key, "method": "direct_option_match"}
-
-        for key, value in choices.items():
-            value_text = str(value).strip().lower()
-            if value_text and value_text in f"{raw_answer} {evidence_text}".lower():
-                return {"selected_option": str(key).upper(), "method": "choice_text_match"}
-
-        if numeric_target is not None and choices:
-            selected_option = min(
-                choices.items(),
-                key=lambda item: abs(float(item[1]) - float(numeric_target))
-            )[0]
-            return {"selected_option": str(selected_option).upper(), "method": "nearest_numeric_choice"}
-
-        return {"selected_option": None, "method": "no_match"}
-
     def _handle_rank_traffic_signal_phases(self, args: Dict) -> Dict:
         """给交通相位候选排序"""
         phase_options = args.get("phase_options", []) or []
@@ -620,32 +546,6 @@ class UrbanMCPTools:
         return {
             "best_option": best_option,
             "ranked_options": ranked
-        }
-
-    def _handle_score_navigation_plan(self, args: Dict) -> Dict:
-        """对导航动作序列打分"""
-        predicted_actions = [str(item).lower() for item in args.get("predicted_actions", [])]
-        reference_actions = [str(item).lower() for item in args.get("reference_actions", [])]
-
-        if not reference_actions:
-            return {
-                "exact_match": False,
-                "step_accuracy": 0.0,
-                "matched_steps": 0,
-                "reference_length": 0,
-            }
-
-        matched_steps = sum(
-            1 for predicted, reference in zip(predicted_actions, reference_actions)
-            if predicted == reference
-        )
-        step_accuracy = matched_steps / len(reference_actions)
-
-        return {
-            "exact_match": predicted_actions == reference_actions,
-            "step_accuracy": round(step_accuracy, 4),
-            "matched_steps": matched_steps,
-            "reference_length": len(reference_actions),
         }
 
     def _handle_select_exploration_target(self, args: Dict) -> Dict:

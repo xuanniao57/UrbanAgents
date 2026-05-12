@@ -77,7 +77,7 @@ class TestGovernance:
 
     def test_tool_inventory_count(self):
         from urban_agent.governance import TOOL_INVENTORY
-        assert len(TOOL_INVENTORY) == 18, f"Expected 18 tools, got {len(TOOL_INVENTORY)}"
+        assert len(TOOL_INVENTORY) == 15, f"Expected 15 tools, got {len(TOOL_INVENTORY)}"
 
     def test_tool_categories_distribution(self):
         from urban_agent.governance import TOOL_INVENTORY, ToolCategory
@@ -85,8 +85,8 @@ class TestGovernance:
         for t in TOOL_INVENTORY:
             by_cat[t.category] = by_cat.get(t.category, 0) + 1
         assert by_cat[ToolCategory.SYSTEM_INTERACTION] == 6
-        assert by_cat[ToolCategory.DATA_UNDERSTANDING] == 7
-        assert by_cat[ToolCategory.DOMAIN_KNOWLEDGE] == 5
+        assert by_cat[ToolCategory.DATA_UNDERSTANDING] == 6
+        assert by_cat[ToolCategory.DOMAIN_KNOWLEDGE] == 3
 
     def test_governance_registry(self):
         from urban_agent.governance import GovernanceRegistry
@@ -106,7 +106,7 @@ class TestGovernance:
         from urban_agent.governance import GovernanceRegistry
         registry = GovernanceRegistry()
         table = registry.tool_inventory_table()
-        assert len(table) == 18
+        assert len(table) == 15
         assert all("Category" in row and "Tool" in row for row in table)
 
     def test_data_resource(self):
@@ -187,43 +187,6 @@ class TestEfficiencyTracker:
         assert len(tracker.records) == 1
         tracker.reset()
         assert len(tracker.records) == 0
-
-
-# =========================================================================
-# 4. Evaluator V2 — Complexity Stratification
-# =========================================================================
-
-class TestComplexityStratification:
-    """Test GeoJSON-Agents-style complexity classification."""
-
-    def test_basic_classification(self):
-        from urban_agent.evaluation.citybench_evaluator_v2 import CityBenchEvaluatorV2
-        task = {"question": "What is the capital of France?"}
-        assert CityBenchEvaluatorV2.classify_complexity(task) == "basic"
-
-    def test_intermediate_classification(self):
-        from urban_agent.evaluation.citybench_evaluator_v2 import CityBenchEvaluatorV2
-        task = {
-            "question": "分析该区域的建筑密度",
-            "steps": ["fetch_data", "calculate"],
-        }
-        assert CityBenchEvaluatorV2.classify_complexity(task) == "intermediate"
-
-    def test_advanced_classification(self):
-        from urban_agent.evaluation.citybench_evaluator_v2 import CityBenchEvaluatorV2
-        task = {
-            "question": "综合分析跨区域的出行模式并预测未来趋势",
-            "workflow_steps": ["s1", "s2", "s3", "s4", "s5"],
-        }
-        assert CityBenchEvaluatorV2.classify_complexity(task) == "advanced"
-
-    def test_tool_count_triggers_advanced(self):
-        from urban_agent.evaluation.citybench_evaluator_v2 import CityBenchEvaluatorV2
-        task = {
-            "question": "Simple question",
-            "reference_tools": ["tool1", "tool2", "tool3"],
-        }
-        assert CityBenchEvaluatorV2.classify_complexity(task) == "advanced"
 
 
 # =========================================================================

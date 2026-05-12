@@ -8,6 +8,10 @@ if str(ROOT) not in sys.path:
 
 from urban_agent.agents.base import AgentMessage, AgentRole
 from urban_agent.agents.reviewers import SpatialReviewerAgent
+from urban_agent.feedback_memory import FeedbackMemory
+
+
+_feedback_mem = FeedbackMemory()
 
 
 def _aggregated_result(evidence_manifest, report=None, outputs=None):
@@ -39,7 +43,7 @@ def _aggregated_result(evidence_manifest, report=None, outputs=None):
 
 
 def test_review_hub_passes_with_complete_evidence_manifest():
-    reviewer = SpatialReviewerAgent()
+    reviewer = SpatialReviewerAgent(feedback_memory=_feedback_mem)
     evidence_manifest = {
         "spatial": {
             "bbox": [121.4, 31.2, 121.5, 31.3],
@@ -86,7 +90,7 @@ def test_review_hub_passes_with_complete_evidence_manifest():
 
 
 def test_review_hub_fails_without_population_and_governance_evidence():
-    reviewer = SpatialReviewerAgent()
+    reviewer = SpatialReviewerAgent(feedback_memory=_feedback_mem)
     evidence_manifest = {
         "spatial": {
             "bbox": [121.4, 31.2, 121.5, 31.3],
@@ -109,3 +113,105 @@ def test_review_hub_fails_without_population_and_governance_evidence():
     assert result.payload["passed"] is False
     assert "population_and_stakeholder_review" in result.payload["hard_failures"]
     assert "evidence_and_governance_review" in result.payload["hard_failures"]
+
+
+def test_review_hub_flags_unclipped_formal_gis_layers():
+    reviewer = SpatialReviewerAgent(feedback_memory=_feedback_mem)
+    evidence_manifest = {
+        "spatial": {"bbox": [121.4, 31.2, 121.5, 31.3], "crs": "EPSG:4326"},
+        "governance": {
+            "provenance": "osm",
+            "license": "ODbL",
+            "collection_method": "local cache",
+            "uncertainty": "cache extent may exceed AOI",
+            "missing_layers": [],
+        },
+        "tags": ["gis"],
+    }
+    payload = _aggregated_result(
+        evidence_manifest,
+        outputs=["gis_layer_package"],
+    )
+    result_payload = payload["subtask_results"]["st_1"]["result"]
+    result_payload.update({
+        "artifact_role": "formal_gis",
+        "layer_stack": {"roads": "run.gpkg|layername=roads"},
+        "legend": {"roads": {"label": "Road centerlines"}},
+        "alignment_diagnostics": {
+            "status": "aligned_with_warnings",
+            "issues": [],
+            "layers": {
+                "roads": {
+                    "source_feature_count": 100,
+                    "exported_feature_count": 100,
+                    "source_outside_aoi_feature_ratio": 0.72,
+                    "output_clipped_to_aoi": False,
+                }
+            },
+        },
+    })
+
+    message = AgentMessage(
+        sender=AgentRole.MANAGER,
+        receiver=AgentRole.SPATIAL_REVIEWER,
+        msg_type="review",
+        payload=payload,
+    )
+    result = asyncio.run(reviewer.execute(message))
+
+    assert any("without clipping" in warning for warning in result.payload["warnings"])
+
+
+def test_review_hub_flags_metric_csv_without_spatial_result_layer():
+    reviewer = SpatialReviewerAgent(feedback_memory=_feedback_mem)
+    evidence_manifest = {
+        "spatial": {"bbox": [121.4, 31.2, 121.5, 31.3], "crs": "EPSG:4326"},
+        "temporal": {"time_window": "local cache", "granularity": "feature-level", "freshness": "local"},
+        "population": {
+            "target_group": "pedestrians",
+            "observed_group": "pedestrians",
+            "affected_group": "pedestrians",
+            "stakeholder_source": "expert review",
+        },
+        "governance": {
+            "provenance": "osm",
+            "license": "ODbL",
+            "collection_method": "local cache",
+            "uncertainty": "cache extent may exceed AOI",
+            "missing_layers": [],
+        },
+        "tags": ["gis"],
+    }
+    payload = _aggregated_result(
+        evidence_manifest,
+        outputs=["gis_layer_package", "metric_csv", "chart_png"],
+    )
+    result_payload = payload["subtask_results"]["st_1"]["result"]
+    result_payload.update({
+        "artifact_role": "formal_gis",
+        "layer_stack": {"roads": "run.gpkg|layername=roads"},
+        "legend": {"roads": {"label": "Road centerlines"}},
+        "alignment_diagnostics": {
+            "status": "aligned_with_context_buffer",
+            "issues": [],
+            "context_buffer": {
+                "status": "generated",
+                "width_factor": 3.0,
+                "height_factor": 3.0,
+                "area_ratio_to_aoi_bbox": 9.0,
+                "centered_on_aoi": True,
+            },
+            "metric_spatialization": {"status": "failed"},
+            "layers": {},
+        },
+    })
+
+    message = AgentMessage(
+        sender=AgentRole.MANAGER,
+        receiver=AgentRole.SPATIAL_REVIEWER,
+        msg_type="review",
+        payload=payload,
+    )
+    result = asyncio.run(reviewer.execute(message))
+
+    assert any("not spatialized" in warning for warning in result.payload["warnings"])

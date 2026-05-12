@@ -107,7 +107,6 @@ _TASK_GRANULARITY: Dict[str, str] = {
     "population_prediction": "any",
     "object_detection": "any",
     "geolocation": "any",
-    "geoqa": "any",
 }
 
 _GRANULARITY_SCORES: Dict[str, float] = {

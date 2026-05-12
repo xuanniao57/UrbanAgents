@@ -6,11 +6,74 @@ Perception Module
 import base64
 import json
 import logging
-from typing import Dict, List, Any, Optional
+import os
+import re
 from pathlib import Path
+from typing import Dict, List, Any, Optional
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_PACKAGE_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _clean_path_text(value: str) -> str:
+    return value.strip().strip('"\'`').rstrip("，,。；;：:")
+
+
+def _resolve_path(value: str) -> Optional[Path]:
+    raw = _clean_path_text(value)
+    if not raw:
+        return None
+    path = Path(raw)
+    candidates = [path]
+    if not path.is_absolute():
+        candidates.extend([
+            Path.cwd() / path,
+            _PACKAGE_ROOT / path,
+            _REPO_ROOT / path,
+        ])
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve()
+        except OSError:
+            continue
+        if resolved.exists():
+            return resolved
+    return path
+
+
+def _infer_data_paths(task: Dict[str, Any]) -> dict[str, str]:
+    """Extract potential data file paths from task description and context."""
+    paths: dict[str, str] = {}
+    # Check explicit data_resources
+    resources = task.get("data_resources") or task.get("required_data") or []
+    if isinstance(resources, dict):
+        for key, val in resources.items():
+            if isinstance(val, dict) and val.get("path"):
+                paths[key] = str(val["path"])
+            elif isinstance(val, str):
+                resolved = _resolve_path(val)
+                if resolved and resolved.exists():
+                    paths[key] = str(resolved)
+    # Scan task text for file paths
+    for field in ("question", "description", "task"):
+        text = str(task.get(field, ""))
+        for match in re.finditer(r"`([^`]+)`", text):
+            resolved = _resolve_path(match.group(1))
+            if resolved and resolved.exists():
+                paths[f"extracted_{len(paths)}"] = str(resolved)
+        patterns = [
+            r"[A-Za-z]:\\[^\n\r，,。；;`|]+",
+            r"(?:\.\.[\\/])?paper9_heritageIntelligence[\\/][^\n\r，,。；;\s`|]+",
+        ]
+        for pattern in patterns:
+            for match in re.finditer(pattern, text):
+                resolved = _resolve_path(match.group(0))
+                if resolved and resolved.exists():
+                    paths[f"extracted_{len(paths)}"] = str(resolved)
+    return paths
 
 
 class PerceptionModule:
@@ -69,7 +132,26 @@ class PerceptionModule:
         elif data_type == "mixed":
             return await self._process_mixed(task, city_data)
         else:
-            return {"type": data_type, "content": task.get("content", {})}
+            # Unknown or unset data_type — return structured context from task
+            inferred_paths = _infer_data_paths(task)
+            return {
+                "type": data_type or "auto_inferred",
+                "content": task.get("content", {}),
+                "inferred_data_sources": inferred_paths,
+                "status": "perception_complete",
+                "note": f"No explicit data_type set (got '{data_type}'). Extracted available paths from task context.",
+                "data_sources": list(inferred_paths.keys()),
+                "declared_paths": [
+                    {
+                        "name": name,
+                        "path": path,
+                        "exists": Path(path).exists(),
+                        "is_dir": Path(path).is_dir(),
+                        "is_file": Path(path).is_file(),
+                    }
+                    for name, path in inferred_paths.items()
+                ],
+            }
     
     async def _process_remote_sensing(
         self,

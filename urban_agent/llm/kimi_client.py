@@ -45,7 +45,7 @@ class KimiClient:
         # 根据类型选择配置
         if client_type == "coding":
             self.api_key = api_key or os.getenv("KIMI_CODE_API_KEY")
-            self.base_url = base_url or os.getenv("KIMI_CODE_API_BASE", "https://api.kimi.com/coding/")
+            self.base_url = base_url or os.getenv("KIMI_CODE_API_BASE", "https://api.kimi.com/coding/v1")
             self.model = model or os.getenv("KIMI_CODE_MODEL", "kimi-for-coding")
         else:
             self.api_key = api_key or os.getenv("KIMI_API_KEY")
@@ -231,6 +231,53 @@ Follow best practices and include appropriate error handling."""
         except Exception as e:
             logger.error(f"Kimi代码生成失败: {e}")
             return f"Error: {str(e)}"
+
+
+class KimiFallbackClient:
+    """Prefer one Kimi client and fall back to another when calls fail."""
+
+    def __init__(self, primary: KimiClient, fallback: KimiClient):
+        self.primary = primary
+        self.fallback = fallback
+        self.client_type = primary.client_type
+        self.fallback_client_type = fallback.client_type
+        self.model = primary.model
+        self.fallback_model = fallback.model
+        self.active_client_type = primary.client_type
+        self.active_model = primary.model
+
+    @staticmethod
+    def _is_error(result: Any) -> bool:
+        return isinstance(result, str) and result.startswith("Error:")
+
+    async def _call_with_fallback(self, method_name: str, *args: Any, **kwargs: Any) -> str:
+        primary_method = getattr(self.primary, method_name)
+        fallback_method = getattr(self.fallback, method_name)
+        try:
+            result = await primary_method(*args, **kwargs)
+        except Exception as error:
+            result = f"Error: {str(error)}"
+        if not self._is_error(result):
+            self.active_client_type = self.primary.client_type
+            self.active_model = self.primary.model
+            return result
+        fallback_result = await fallback_method(*args, **kwargs)
+        if not self._is_error(fallback_result):
+            self.active_client_type = self.fallback.client_type
+            self.active_model = self.fallback.model
+        return fallback_result
+
+    async def generate(self, prompt: str, temperature: float = 1.0, max_tokens: int = 2000) -> str:
+        return await self._call_with_fallback("generate", prompt, temperature=temperature, max_tokens=max_tokens)
+
+    async def chat(self, messages: List[Dict[str, str]], temperature: float = 1.0, max_tokens: int = 2000) -> str:
+        return await self._call_with_fallback("chat", messages, temperature=temperature, max_tokens=max_tokens)
+
+    async def analyze_image(self, image_path: str, prompt: str, temperature: float = 1.0) -> str:
+        return await self._call_with_fallback("analyze_image", image_path, prompt, temperature=temperature)
+
+    async def code_generate(self, prompt: str, context: Optional[str] = None, temperature: float = 0.3) -> str:
+        return await self._call_with_fallback("code_generate", prompt, context=context, temperature=temperature)
 
 
 class MultiLLMClient:

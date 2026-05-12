@@ -214,29 +214,8 @@ class ReasoningModule:
         Returns:
             推理结果
         """
-        task_type = task.get("task_type", "unknown")
-        
-        logger.info(f"推理模块处理任务类型: {task_type}")
-        
-        # 根据任务类型选择推理策略
-        if task_type == "population_prediction":
-            return await self._reason_population(perception_data, memory_context, task)
-        elif task_type == "object_detection":
-            return await self._reason_objects(perception_data, memory_context, task)
-        elif task_type == "geolocation":
-            return await self._reason_geolocation(perception_data, memory_context, task)
-        elif task_type == "geoqa":
-            return await self._reason_geoqa(perception_data, memory_context, task)
-        elif task_type == "mobility_prediction":
-            return await self._reason_mobility(perception_data, memory_context, task)
-        elif task_type == "traffic_signal":
-            return await self._reason_traffic(perception_data, memory_context, task)
-        elif task_type == "outdoor_navigation":
-            return await self._reason_navigation(perception_data, memory_context, task)
-        elif task_type == "urban_exploration":
-            return await self._reason_exploration(perception_data, memory_context, task)
-        else:
-            return await self._general_reasoning(perception_data, memory_context, task)
+        logger.info("推理模块使用通用 planner-driven 路径")
+        return await self._general_reasoning(perception_data, memory_context, task)
     
     async def _reason_population(
         self,
@@ -394,54 +373,6 @@ class ReasoningModule:
             "identified_city": identified_city,
             "conclusion": response,
             "confidence": 0.6 if identified_city != "Unknown" else 0.3
-        }
-    
-    async def _reason_geoqa(
-        self,
-        perception_data: Dict,
-        memory_context: Dict,
-        task: Dict
-    ) -> Dict[str, Any]:
-        """地理问答推理"""
-        question = task.get("question", "")
-        
-        reasoning_chain = [
-            f"Question: {question}",
-            "Retrieving relevant spatial information...",
-            "Analyzing geographic relationships...",
-            "Formulating answer..."
-        ]
-        
-        choices = task.get("choices", {})
-        context = json.dumps(perception_data, indent=2, default=str)
-        
-        if self.llm_client:
-            prompt = f"""Answer this geographic question based on the provided context:
-            
-            Question: {question}
-            
-            Context: {context}
-            
-            Choices: {json.dumps(choices, ensure_ascii=False) if choices else 'No fixed choices'}
-            
-            Provide a concise answer. If choices are provided, answer with the option letter and the final answer."""
-            
-            try:
-                answer = await self.llm_client.generate(prompt)
-            except:
-                answer = "Unable to answer based on available information"
-        else:
-            answer = "LLM not available for reasoning"
-
-        selected_option = self._extract_choice_letter(answer, choices) if choices else None
-        
-        return {
-            "task_type": "geoqa",
-            "reasoning_chain": reasoning_chain,
-            "question": question,
-            "answer": answer,
-            "selected_option": selected_option,
-            "confidence": 0.65
         }
     
     async def _reason_mobility(
@@ -705,7 +636,7 @@ class ReasoningModule:
         ]
         
         return {
-            "task_type": "general",
+            "workflow_profile": task.get("workflow_profile", "adaptive_urban_analysis"),
             "reasoning_chain": reasoning_chain,
             "conclusion": "General reasoning completed",
             "confidence": 0.5

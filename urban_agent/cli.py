@@ -4,14 +4,14 @@
 
 Examples:
     python -m urban_agent
-    python -m urban_agent analyze --task-type geoqa --task "分析同济大学周边步行可达性"
-    python -m urban_agent analyze --task-type open_workflow --task "基于输入 GeoJSON 诊断街道连通性" --input ./my_city_task.json
+    python -m urban_agent analyze --task "分析同济大学周边步行可达性"
+    python -m urban_agent analyze --task "基于输入 GeoJSON 诊断街道连通性" --input ./my_city_task.json
     python -m urban_agent doctor
 
 Legacy pipeline commands are still available:
     python -m urban_agent perceive --data-type osm --bbox "121.4,31.2,121.5,31.3"
     python -m urban_agent cognize --input perception_result.json
-    python -m urban_agent reason --task-type geoqa --input cognition_result.json --question "..."
+    python -m urban_agent reason --input cognition_result.json --question "..."
     python -m urban_agent visualize --input analysis_result.json --format html
     python -m urban_agent review --input results.json
 """
@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 from contextlib import nullcontext
+from dataclasses import dataclass
 import importlib.util
 import json
 import logging
@@ -29,6 +30,7 @@ import platform
 import shutil
 import shlex
 import sys
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional, Sequence
@@ -46,6 +48,18 @@ try:
 except ImportError:
     box = Columns = Console = Group = Panel = Rule = Table = Text = None
     _RICH_AVAILABLE = False
+
+try:
+    from prompt_toolkit import prompt as _pt_prompt
+    from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
+    from prompt_toolkit.completion import WordCompleter
+    from prompt_toolkit.history import FileHistory
+    from prompt_toolkit.styles import Style as PromptStyle
+
+    _PROMPT_TOOLKIT_AVAILABLE = True
+except ImportError:
+    _pt_prompt = AutoSuggestFromHistory = FileHistory = PromptStyle = WordCompleter = None
+    _PROMPT_TOOLKIT_AVAILABLE = False
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
@@ -66,17 +80,29 @@ OPENAI_API_KEY=
 OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_MODEL=gpt-4o-mini
 
+DEEPSEEK_API_KEY=
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-v4-pro
+DEEPSEEK_THINKING=enabled
+DEEPSEEK_REASONING_EFFORT=high
 Deepseek_API_KEY=
 Deepseek_API_BASE=https://api.deepseek.com
-Deepseek_MODEL=deepseek-chat
+Deepseek_MODEL=deepseek-v4-pro
 DEEPSEEK_REASONER_MODEL=deepseek-reasoner
+# Multi-model routing: planner → deep reasoning, exec → flash
+DEEPSEEK_PLANNER_MODEL=deepseek-v4-pro
+DEEPSEEK_PLANNER_THINKING=enabled
+DEEPSEEK_PLANNER_REASONING_EFFORT=high
+DEEPSEEK_EXEC_MODEL=deepseek-chat
+DEEPSEEK_EXEC_THINKING=disabled
 
 KIMI_API_KEY=
 KIMI_BASE_URL=https://api.moonshot.cn/v1
 KIMI_MODEL=moonshot-v1-auto
+KIMI_CLIENT_TYPE=auto
 KIMI_CODE_API_KEY=
-KIMI_CODE_API_BASE=https://api.moonshot.cn/v1
-KIMI_CODE_MODEL=moonshot-v1-auto
+KIMI_CODE_API_BASE=https://api.kimi.com/coding/v1
+KIMI_CODE_MODEL=kimi-for-coding
 """
 
 
@@ -134,29 +160,17 @@ DEFAULT_RUNS_DIR = _default_runs_dir(PROJECT_ROOT)
 DEFAULT_CASE_OUTPUT_DIR = PROJECT_ROOT / "artifacts" / "case_studies"
 ENV_TEMPLATE_FILE = PROJECT_ROOT / ".env.example"
 
-SUPPORTED_TASK_TYPES = (
-    "population_prediction",
-    "object_detection",
-    "geolocation",
-    "geoqa",
-    "mobility_prediction",
-    "traffic_signal",
-    "outdoor_navigation",
-    "urban_exploration",
-    "open_workflow",
-)
-
 SUPPORTED_INTERACTION_MODES = ("guided", "supervisory", "autonomous")
 SUPPORTED_CASES = ("walkability", "mobility", "all")
 
 PROVIDER_KEY_MAP = {
     "qwen": ["QWEN_API_KEY"],
     "openai": ["OPENAI_API_KEY"],
-    "deepseek": ["Deepseek_API_KEY", "DEEPSEEK_API_KEY"],
-    "kimi": ["KIMI_API_KEY", "KIMI_CODE_API_KEY"],
+    "deepseek": ["DEEPSEEK_API_KEY", "Deepseek_API_KEY"],
+    "kimi": ["KIMI_CODE_API_KEY", "KIMI_API_KEY"],
 }
 
-_AUTO_TASK_TYPE_LABEL = "adaptive"
+_WORKFLOW_ROUTING_LABEL = "planner-driven"
 
 if _RICH_AVAILABLE:
     _CONSOLE = Console(highlight=False, soft_wrap=True)
@@ -178,8 +192,88 @@ _AGENT_STYLES = {
 }
 
 
+URBAN_AGENT_LOGO = """[#FFBF00]                 ▄▄▄   ▄▄▄· ▄▄▄▄▄ ▄▄▄▄▄ ▄▄▄▄▄ ▄▄▄▄▄ ▄▄▄▄▄ ▄▄▄▄▄ ▄▄▄▄▄ ▄▄▄▄▄ ▄▄▄▄▄ ▄▄▄▄▄ ▄▄▄▄▄ ▄▄▄▄▄ ▄▄▄▄▄ ▄▄▄▄▄[/]
+[#FFBF00]                 ███▄ ███▐█ ▀█  ████▌ ████▌ ████▌ ████▌ ████▌ ████▌ ████▌ ████▌ ████▌ ████▌ ████▌ ████▌ ████▌[/]
+[#FFD700]  █    █  █    █  ▐█.▪▐█·▄█▄▀▀▀█▄▐█    ▐█    ▐█    ▐█    ▐█    ▐█    ▐█    ▐█    ▐█    ▐█    ▐█    ▐█    [/]
+[#FFD700]  █▄▄▄▄█  █▄▄▄▄█  ▐█▌·▐█▌▐█▐█▄▪▐█▐█    ▐█    ▐█    ▐█    ▐█    ▐█    ▐█    ▐█    ▐█    ▐█    ▐█    ▐█    [/]
+[#FFBF00]  █▀▀▀▀▀  █     █ ▀▀▀ ▀▀▀▀▀ ▀▀▀▀  ▀▀▀▀  ▀▀▀▀  ▀▀▀▀  ▀▀▀▀  ▀▀▀▀  ▀▀▀▀  ▀▀▀▀  ▀▀▀▀  ▀▀▀▀  ▀▀▀▀  ▀▀▀▀ [/]
+[#B8860B] ██▄▄██▌ ██▄▄██▌ ██▄▄ ██▄▄ ██▄▄▌ ██▄▄▌ ██▄▄▌ ██▄▄▌ ██▄▄▌ ██▄▄▌ ██▄▄▌ ██▄▄▌ ██▄▄▌ ██▄▄▌ ██▄▄▌ ██▄▄▌[/]
+[#B8860B] ▀▀▀▀▀▀  ▀▀▀▀▀▀  ▀▀▀▀ ▀▀▀▀ ▀▀▀▀  ▀▀▀▀  ▀▀▀▀  ▀▀▀▀  ▀▀▀▀  ▀▀▀▀  ▀▀▀▀  ▀▀▀▀  ▀▀▀▀  ▀▀▀▀  ▀▀▀▀  ▀▀▀▀ [/]"""
+
+
+@dataclass(frozen=True)
+class ShellCommandDef:
+    name: str
+    description: str
+    category: str
+    aliases: tuple[str, ...] = ()
+    args_hint: str = ""
+
+
+SHELL_COMMAND_REGISTRY: list[ShellCommandDef] = [
+    ShellCommandDef("new", "Start a fresh shell session", "Session", aliases=("reset",)),
+    ShellCommandDef("clear", "Clear the terminal display", "Session"),
+    ShellCommandDef("status", "Show shell, provider, and runtime status", "Session"),
+    ShellCommandDef("runtime", "Show the last run's Hermes-style runtime ledger summary", "Session"),
+    ShellCommandDef("plan", "Preview planner decomposition and worker assignment", "Urban Workflow", args_hint="<task>"),
+    ShellCommandDef("capabilities", "List or search method-level capabilities", "Urban Workflow", aliases=("caps", "tools"), args_hint="[query]"),
+    ShellCommandDef("doctor", "Run environment and provider checks", "Configuration"),
+    ShellCommandDef("config", "Show active config locations and provider summary", "Configuration"),
+    ShellCommandDef("mode", "Switch guided, supervisory, or autonomous mode", "Configuration", args_hint="<mode>"),
+    ShellCommandDef("bbox", "Set or clear the default study-area bounding box", "Configuration", args_hint="<bbox|clear>"),
+    ShellCommandDef("input", "Attach or clear a default task input JSON file", "Configuration", args_hint="<path|clear>"),
+    ShellCommandDef("output", "Change the run artifact output directory", "Configuration", args_hint="<path>"),
+    ShellCommandDef("commands", "Browse all slash commands grouped by category", "Info", aliases=("help",)),
+    ShellCommandDef("quit", "Exit the shell", "Exit", aliases=("exit",)),
+]
+
+
+def _build_shell_command_lookup() -> dict[str, ShellCommandDef]:
+    lookup: dict[str, ShellCommandDef] = {}
+    for command in SHELL_COMMAND_REGISTRY:
+        lookup[command.name] = command
+        for alias in command.aliases:
+            lookup[alias] = command
+    return lookup
+
+
+_SHELL_COMMAND_LOOKUP = _build_shell_command_lookup()
+
+
+def _resolve_shell_command(name: str) -> Optional[ShellCommandDef]:
+    return _SHELL_COMMAND_LOOKUP.get(name.lower().lstrip("/"))
+
+
+def _shell_command_words() -> list[str]:
+    words: list[str] = []
+    for command in SHELL_COMMAND_REGISTRY:
+        words.append(f"/{command.name}")
+        words.extend(f"/{alias}" for alias in command.aliases)
+    return sorted(words)
+
+
+def _shell_commands_by_category() -> dict[str, list[ShellCommandDef]]:
+    grouped: dict[str, list[ShellCommandDef]] = {}
+    for command in SHELL_COMMAND_REGISTRY:
+        grouped.setdefault(command.category, []).append(command)
+    return grouped
+
+
+def _looks_like_shell_command(text: str) -> bool:
+    if not text.startswith("/"):
+        return False
+    first_word = text.split()[0]
+    return "/" not in first_word[1:]
+
+
 def _rich_ui_enabled() -> bool:
-    return bool(_RICH_AVAILABLE and _CONSOLE is not None and _CONSOLE.is_terminal)
+    """Rich UI is enabled as long as the library is importable.
+    
+    We prefer Rich formatting over plain-text fallback in all environments
+    because modern terminals (VS Code, Windows Terminal, iTerm2) support
+    ANSI escapes even when Python's isatty() heuristic disagrees.
+    """
+    return bool(_RICH_AVAILABLE and _CONSOLE is not None)
 
 
 def _truncate_middle(value: str, max_length: int = 72) -> str:
@@ -194,75 +288,60 @@ def _output_dir_label(output_dir: str) -> str:
     return path.name or str(path)
 
 
-def _infer_task_type(task_text: str, input_path: Optional[str] = None) -> str:
-    text_parts = [task_text]
-    if input_path:
-        text_parts.append(Path(input_path).name)
-    text = " ".join(part for part in text_parts if part).lower()
-
-    population_terms = ("population", "demographic", "residents", "census", "人口", "居民", "人口密度")
-    forecast_terms = ("predict", "forecast", "estimate", "project", "simulate", "预测", "估计", "推演")
-    if any(term in text for term in population_terms) and any(term in text for term in forecast_terms):
-        return "population_prediction"
-
-    if any(term in text for term in ("detect", "detection", "segment", "count buildings", "count cars", "识别", "检测", "分割")):
-        return "object_detection"
-
-    if any(term in text for term in ("geolocate", "where is this", "which city", "identify location", "定位", "在哪", "识别地点")):
-        return "geolocation"
-
-    if any(term in text for term in ("trajectory", "trajectories", "mobility", "trip", "od flow", "commute", "travel demand", "轨迹", "出行", "通勤", "流量")):
-        return "mobility_prediction"
-
-    if any(term in text for term in ("traffic signal", "signal timing", "intersection phase", "traffic light", "红绿灯", "信号配时", "路口相位")):
-        return "traffic_signal"
-
-    if any(term in text for term in ("route", "routing", "navigate", "navigation", "shortest path", "wayfinding", "walk route", "路径", "导航", "路线", "最短路")):
-        return "outdoor_navigation"
-
-    if any(
-        term in text
-        for term in (
-            "compare",
-            "scenario",
-            "strategy",
-            "planning brief",
-            "recommend",
-            "walkability",
-            "accessibility",
-            "amenity",
-            "urban design",
-            "public space",
-            "street network",
-            "compare city",
-            "land use",
-            "对比",
-            "策略",
-            "建议",
-            "步行可达性",
-            "可达性",
-            "公共空间",
-            "街道网络",
-            "开放空间",
-            "规划",
-        )
-    ):
-        return "urban_exploration"
-
-    return "geoqa"
-
-
-def _resolve_task_type(task_text: str, task_type: Optional[str], input_path: Optional[str] = None) -> str:
-    if task_type in SUPPORTED_TASK_TYPES:
-        return task_type
-    return _infer_task_type(task_text, input_path)
-
-
 def _agent_style(agent_name: str) -> str:
     return _AGENT_STYLES.get(agent_name, _AGENT_STYLES["unknown"])
 
 
 def _agent_display_name(agent_name: str) -> str:
+    return {
+        "planner": "PlannerAgent",
+        "manager": "ManagerAgent",
+        "perception_worker": "PerceptionWorker",
+        "cognition_worker": "CognitionWorker",
+        "perception": "PerceptionWorker",
+        "analyst": "AnalystWorker",
+        "cartographer": "CartographerWorker",
+        "reviewer": "ReviewHub",
+        "quality_controller": "QualityController",
+        "reporter": "ReporterWorker",
+    }.get(agent_name, agent_name)
+
+
+def _get_capabilities_summary() -> dict[str, list[str]]:
+    """Return UrbanAgent capabilities grouped by family, for the welcome banner."""
+    try:
+        from .capabilities import get_default_capability_registry
+        registry = get_default_capability_registry()
+        grouped: dict[str, list[str]] = {}
+        for item in registry.list_index():
+            family = item.get("family", "general")
+            grouped.setdefault(family, []).append(item["name"])
+        return grouped
+    except Exception:
+        return {}
+
+def _get_tools_summary() -> dict[str, list[str]]:
+    """Return MCP tools grouped by category, for the welcome banner."""
+    try:
+        from .mcp_tools import UrbanMCPTools
+        tools = UrbanMCPTools()
+        grouped: dict[str, list[str]] = {}
+        for tool_name in sorted(tools.tools.keys()):
+            category = "urban analysis"
+            if "acqui" in tool_name or "fetch" in tool_name:
+                category = "data acquisition"
+            elif "connect" in tool_name or "access" in tool_name or "topol" in tool_name:
+                category = "network & topology"
+            elif "density" in tool_name or "morph" in tool_name:
+                category = "density & morphology"
+            elif "svg" in tool_name or "geo" in tool_name or "export" in tool_name:
+                category = "cartographic output"
+            elif "signal" in tool_name or "mobility" in tool_name:
+                category = "mobility & signals"
+            grouped.setdefault(category, []).append(tool_name)
+        return grouped
+    except Exception:
+        return {}
     return {
         "planner": "PlannerAgent",
         "manager": "ManagerAgent",
@@ -339,7 +418,41 @@ def _selected_provider() -> str:
     return os.getenv("LLM_PROVIDER", "qwen").strip().lower() or "qwen"
 
 
-def _build_llm_client() -> Any:
+def _build_kimi_client() -> Any:
+    from .llm.kimi_client import KimiClient, KimiFallbackClient
+
+    preference = os.getenv("KIMI_CLIENT_TYPE", "auto").strip().lower() or "auto"
+    if preference in {"standard", "moonshot"}:
+        return KimiClient(client_type="standard")
+    if preference in {"coding", "code", "kimi-coding"}:
+        try:
+            return KimiClient(client_type="coding")
+        except Exception:
+            if os.getenv("KIMI_API_KEY"):
+                return KimiClient(client_type="standard")
+            raise
+    if preference != "auto":
+        raise ValueError("KIMI_CLIENT_TYPE must be auto, coding, or standard")
+
+    if os.getenv("KIMI_CODE_API_KEY"):
+        try:
+            coding_client = KimiClient(client_type="coding")
+            if os.getenv("KIMI_API_KEY"):
+                return KimiFallbackClient(coding_client, KimiClient(client_type="standard"))
+            return coding_client
+        except Exception:
+            if not os.getenv("KIMI_API_KEY"):
+                raise
+    return KimiClient(client_type="standard")
+
+
+def _build_llm_client(role: str = "exec") -> Any:
+    """Build an LLM client for a specific agent role.
+
+    Roles:
+      - "planner": deep-reasoning model (deepseek-v4-pro + thinking)
+      - "exec":    fast model for workers/QC/review (deepseek-chat, no thinking)
+    """
     provider_name = _selected_provider()
     if not any(os.getenv(key) for key in PROVIDER_KEY_MAP.get(provider_name, [])):
         raise RuntimeError(
@@ -350,16 +463,22 @@ def _build_llm_client() -> Any:
     try:
         if provider_name == "qwen":
             from .llm.qwen_client import QwenClient
-
             return QwenClient()
         if provider_name == "deepseek":
             from .llm.deepseek_client import DeepSeekClient
-
-            return DeepSeekClient()
+            if role == "planner":
+                return DeepSeekClient(
+                    model=os.getenv("DEEPSEEK_PLANNER_MODEL", os.getenv("DEEPSEEK_MODEL", "deepseek-v4-pro")),
+                    thinking=os.getenv("DEEPSEEK_PLANNER_THINKING", "enabled"),
+                    reasoning_effort=os.getenv("DEEPSEEK_PLANNER_REASONING_EFFORT", "high"),
+                )
+            else:
+                return DeepSeekClient(
+                    model=os.getenv("DEEPSEEK_EXEC_MODEL", "deepseek-chat"),
+                    thinking=os.getenv("DEEPSEEK_EXEC_THINKING", "disabled"),
+                )
         if provider_name == "kimi":
-            from .llm.kimi_client import KimiClient
-
-            return KimiClient(client_type="standard")
+            return _build_kimi_client()
         if provider_name == "openai":
             return _OpenAICompatibleClient()
     except Exception as error:
@@ -368,6 +487,16 @@ def _build_llm_client() -> Any:
     raise RuntimeError(
         f"Unsupported provider '{provider_name}'. Supported providers: {', '.join(PROVIDER_KEY_MAP)}"
     )
+
+
+def _build_planner_llm_client() -> Any:
+    """Shortcut: deep-reasoning client for PlannerAgent."""
+    return _build_llm_client(role="planner")
+
+
+def _build_exec_llm_client() -> Any:
+    """Shortcut: fast client for execution agents."""
+    return _build_llm_client(role="exec")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -379,7 +508,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     # --- task-oriented commands ---
     p_analyze = subparsers.add_parser("analyze", help="Run an urban analysis task")
-    p_analyze.add_argument("--task-type", choices=SUPPORTED_TASK_TYPES, default=None, help=argparse.SUPPRESS)
     p_analyze.add_argument("--task", required=True, help="Natural-language task description")
     p_analyze.add_argument("--bbox", help="Bounding box: min_lon,min_lat,max_lon,max_lat")
     p_analyze.add_argument("--input", help="Task input JSON file")
@@ -391,6 +519,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Compatibility field. Use supervisory for collaborator-facing runs.",
     )
     p_analyze.add_argument("--name", help="Optional run name used in output directory naming")
+    p_plan = subparsers.add_parser("plan", help="Preview UrbanAgent planner decomposition without executing the task")
+    p_plan.add_argument("--task", required=True, help="Natural-language task description")
+    p_plan.add_argument("--bbox", help="Bounding box: min_lon,min_lat,max_lon,max_lat")
+    p_plan.add_argument("--input", help="Task input JSON file")
+    p_plan.add_argument("--output", help="Optional JSON file for the planner output")
 
     p_doctor = subparsers.add_parser("doctor", help="Check environment, config, and provider status")
     p_doctor.add_argument("--json", action="store_true", help="Print JSON report")
@@ -402,12 +535,24 @@ def build_parser() -> argparse.ArgumentParser:
     p_config = subparsers.add_parser("config", help="Show config paths and provider status")
     p_config.add_argument("--json", action="store_true", help="Print JSON report")
 
+    p_caps = subparsers.add_parser("capabilities", help="List or expand method-level capabilities")
+    p_caps.add_argument("--query", help="Search by task, method, backend, or domain term")
+    p_caps.add_argument("--level", type=int, choices=[0, 1, 2, 3], default=0, help="Disclosure level: 0 index, 1 card, 2 invocation, 3 full")
+    p_caps.add_argument("--limit", type=int, default=8, help="Maximum capabilities to return")
+    p_caps.add_argument("--json", action="store_true", help="Print JSON report")
+
     p_shell = subparsers.add_parser("shell", help="Start the interactive UrbanAgent shell")
-    p_shell.add_argument("--task-type", choices=SUPPORTED_TASK_TYPES, default=None, help=argparse.SUPPRESS)
     p_shell.add_argument("--bbox", help="Default bounding box")
     p_shell.add_argument("--input", help="Default input JSON file")
     p_shell.add_argument("--output-dir", default=str(DEFAULT_RUNS_DIR), help="Run artifact root directory")
     p_shell.add_argument("--interaction-mode", choices=SUPPORTED_INTERACTION_MODES, default="supervisory", help="Default shell mode")
+
+    # --- multi-turn guided command (RDMA Figure 13 alignment) ---
+    p_guided = subparsers.add_parser("guided", help="Run multi-turn guided analysis with human-in-the-loop (RDMA Figure 13 style)")
+    p_guided.add_argument("--task", required=True, help="Natural-language task description")
+    p_guided.add_argument("--input", help="Task input JSON file")
+    p_guided.add_argument("--name", help="Run name for output directory")
+    p_guided.add_argument("--output-dir", default=str(DEFAULT_RUNS_DIR), help="Run artifact root directory")
 
     # --- legacy pipeline commands ---
     p_perceive = subparsers.add_parser("perceive", help="Legacy: multi-source data perception")
@@ -427,7 +572,6 @@ def build_parser() -> argparse.ArgumentParser:
     p_cognize.add_argument("--output", help="Output file", default="cognition_result.json")
 
     p_reason = subparsers.add_parser("reason", help="Legacy: spatial reasoning")
-    p_reason.add_argument("--task-type", required=True, choices=SUPPORTED_TASK_TYPES[:-1], help="Task type")
     p_reason.add_argument("--input", required=True, help="Cognition result JSON file")
     p_reason.add_argument("--question", default="", help="User question")
     p_reason.add_argument("--output", help="Output file", default="reasoning_result.json")
@@ -448,7 +592,6 @@ def build_parser() -> argparse.ArgumentParser:
     p_review.add_argument("--output", help="Review report output file", default="review_report.json")
 
     p_run = subparsers.add_parser("run", help="Legacy: run the end-to-end pipeline")
-    p_run.add_argument("--task-type", default="geoqa", help="Task type")
     p_run.add_argument("--question", required=True, help="Analysis question")
     p_run.add_argument("--bbox", help="Bounding box: min_lon,min_lat,max_lon,max_lat")
     p_run.add_argument("--input", help="Input data file")
@@ -482,6 +625,7 @@ def _configure_cli_logging() -> None:
     logging.getLogger("urban_agent").setLevel(logging.ERROR)
     logging.getLogger("httpx").setLevel(logging.ERROR)
     logging.getLogger("httpcore").setLevel(logging.ERROR)
+    logging.getLogger("numexpr").setLevel(logging.WARNING)
     logging.getLogger("openai").setLevel(logging.ERROR)
 
 
@@ -556,10 +700,9 @@ def _create_run_dir(output_root: Path, label: str) -> Path:
     return run_dir
 
 
-def _build_task_payload(task_text: str, task_type: str, bbox: Optional[str], input_path: Optional[str]) -> dict[str, Any]:
+def _build_task_payload(task_text: str, bbox: Optional[str], input_path: Optional[str]) -> dict[str, Any]:
     task_payload: dict[str, Any] = {
         "question": task_text,
-        "task_type": task_type,
     }
     parsed_bbox = _parse_bbox(bbox)
     if parsed_bbox:
@@ -572,16 +715,75 @@ def _build_task_payload(task_text: str, task_type: str, bbox: Optional[str], inp
 def _build_run_summary(run_dir: Path, result: dict[str, Any]) -> dict[str, Any]:
     efficiency = result.get("efficiency", {})
     final_answer = str(result.get("final_answer") or "").strip()
+    exec_results = result.get("results", {})
+    runtime = _summarize_runtime(exec_results.get("runtime", {}))
     return {
         "run_dir": str(run_dir),
         "status": result.get("status", "unknown"),
-        "task_type": result.get("task_type", "unknown"),
+        "workflow_profile": result.get("plan", {}).get("workflow_profile", "adaptive_urban_analysis"),
         "trace_id": result.get("trace_id"),
-        "agent_plan": _summarize_plan(result.get("plan", {})),
+        "agent_plan": _summarize_plan_with_status(result.get("plan", {}), exec_results),
         "total_latency_s": efficiency.get("total_latency_s"),
         "quality_control": result.get("quality_control", {}),
+        "review": _summarize_review(result.get("review", {})),
+        "runtime": runtime,
         "final_answer_preview": final_answer[:800],
     }
+
+
+def _summarize_review(review: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(review, dict) or not review:
+        return {}
+    policy_scores = review.get("policy_scores", {})
+    policies = []
+    for name, payload in policy_scores.items():
+        if not isinstance(payload, dict):
+            continue
+        policies.append({
+            "name": name,
+            "score": payload.get("score"),
+            "applicable": payload.get("applicable", True),
+            "issue_count": len(payload.get("issues", [])),
+        })
+    return {
+        "passed": review.get("passed"),
+        "recommendation": review.get("recommendation"),
+        "quality_score": review.get("quality_score"),
+        "urban_validity_score": review.get("urban_validity_score"),
+        "warning_count": len(review.get("warnings", [])),
+        "issue_count": len(review.get("issues", [])),
+        "hard_failures": review.get("hard_failures", []),
+        "policies": policies,
+    }
+
+
+def _summarize_runtime(runtime: dict[str, Any]) -> dict[str, Any]:
+    if not runtime:
+        return {}
+    if "todo_total" in runtime and "checkpoint_count" in runtime:
+        return dict(runtime)
+    todos = runtime.get("todos", [])
+    checkpoints = runtime.get("checkpoints", [])
+    blocked = [checkpoint for checkpoint in checkpoints if checkpoint.get("approved") is False]
+    return {
+        "profile": runtime.get("runtime_profile", {}).get("name", "urban_runtime_kernel"),
+        "mode": runtime.get("interaction_mode", "autonomous"),
+        "todo_completed": sum(1 for todo in todos if todo.get("status") == "completed"),
+        "todo_total": len(todos),
+        "checkpoint_count": len(checkpoints),
+        "blocked_count": len(blocked),
+        "last_checkpoint": checkpoints[-1].get("checkpoint_id") if checkpoints else None,
+    }
+
+
+def _format_runtime_status(runtime: dict[str, Any]) -> str:
+    if not runtime:
+        return "no run yet"
+    blocked = runtime.get("blocked_count", 0)
+    status = f"{runtime.get('todo_completed', 0)}/{runtime.get('todo_total', 0)} todos, {runtime.get('checkpoint_count', 0)} checkpoints"
+    if blocked:
+        status += f", {blocked} blocked"
+    return status
 
 
 def _summarize_plan(plan: dict[str, Any]) -> list[dict[str, str]]:
@@ -593,6 +795,26 @@ def _summarize_plan(plan: dict[str, Any]) -> list[dict[str, str]]:
             "agent": _agent_display_name(raw_agent),
             "raw_agent": raw_agent,
             "objective": str(subtask.get("objective", "")),
+        })
+    return summary
+
+
+def _summarize_plan_with_status(plan: dict[str, Any], exec_results: dict[str, Any]) -> list[dict[str, str]]:
+    """Merge plan subtasks with execution status from ManagerAgent results."""
+    subtask_results = exec_results.get("subtask_results", {})
+    summary = []
+    for index, subtask in enumerate(plan.get("subtasks", []), start=1):
+        st_id = str(subtask.get("subtask_id", f"plan_st{index}"))
+        raw_agent = str(subtask.get("assigned_role", "unknown"))
+        # Find matching execution result
+        exec_status = subtask_results.get(st_id, {})
+        status = exec_status.get("status", "planned")
+        summary.append({
+            "step": str(index),
+            "agent": _agent_display_name(raw_agent),
+            "raw_agent": raw_agent,
+            "objective": str(subtask.get("objective", "")),
+            "status": status,
         })
     return summary
 
@@ -613,7 +835,7 @@ def _build_observable_summary(run_dir: Path, manifest: dict[str, Any], events: l
     return {
         "run_dir": str(run_dir),
         "status": manifest.get("status", "unknown"),
-        "task_type": "open_workflow",
+        "workflow_profile": "adaptive_urban_analysis",
         "trace_id": manifest.get("run_id"),
         "agent_plan": agent_plan,
         "total_latency_s": None,
@@ -639,10 +861,27 @@ def _print_run_report(summary: dict[str, Any]) -> None:
         qc_exec = "pass" if qc.get("exec_passed") else "revise"
         cards = [
             _make_value_panel("Status", str(summary["status"]), style="bold green" if summary["status"] == "success" else "bold yellow"),
-            _make_value_panel("Routing", _AUTO_TASK_TYPE_LABEL, style="bold cyan"),
+            _make_value_panel("Routing", _WORKFLOW_ROUTING_LABEL, style="bold cyan"),
             _make_value_panel("Latency", f"{summary['total_latency_s']:.2f} s" if summary.get("total_latency_s") is not None else "n/a", style="bold white"),
             _make_value_panel("QC", f"plan {qc_plan} | exec {qc_exec}", style="bold magenta" if "revise" in {qc_plan, qc_exec} else "bold green"),
         ]
+        if summary.get("runtime"):
+            runtime = summary["runtime"]
+            cards.append(_make_value_panel(
+                "Runtime",
+                f"{runtime.get('todo_completed', 0)}/{runtime.get('todo_total', 0)} todos | {runtime.get('checkpoint_count', 0)} checks",
+                style="bold cyan" if not runtime.get("blocked_count") else "bold yellow",
+            ))
+        if summary.get("review"):
+            review = summary["review"]
+            review_status = "pass" if review.get("passed") else "revise"
+            score = review.get("urban_validity_score") or review.get("quality_score")
+            score_text = f"{float(score):.2f}" if score is not None else "n/a"
+            cards.append(_make_value_panel(
+                "Review",
+                f"{review_status} | {score_text}",
+                style="bold green" if review.get("passed") else "bold yellow",
+            ))
         hero = _make_key_value_panel(
             "Run Complete",
             [
@@ -670,6 +909,23 @@ def _print_run_report(summary: dict[str, Any]) -> None:
                 raw_agent = str(step.get("agent", "unknown"))
                 reasoning.add_row(_agent_display_name(raw_agent), str(step.get("method", "")), str(step.get("confidence", "")))
             _CONSOLE.print(Panel(reasoning, title="Reasoning Breadcrumbs", border_style="bright_black", box=box.ASCII, padding=(0, 1)))
+        if summary.get("review", {}).get("policies"):
+            review_table = Table(box=box.ASCII, expand=True)
+            review_table.add_column("Policy", style="white")
+            review_table.add_column("Score", width=8, no_wrap=True)
+            review_table.add_column("Applies", width=8, no_wrap=True)
+            review_table.add_column("Issues", width=8, no_wrap=True)
+            for policy in summary["review"]["policies"]:
+                score = policy.get("score")
+                score_text = f"{float(score):.2f}" if score is not None else "n/a"
+                review_table.add_row(
+                    str(policy.get("name", "")),
+                    score_text,
+                    "yes" if policy.get("applicable") else "no",
+                    str(policy.get("issue_count", 0)),
+                )
+            title = f"ReviewHub ({summary['review'].get('recommendation', 'n/a')}, warnings={summary['review'].get('warning_count', 0)})"
+            _CONSOLE.print(Panel(review_table, title=title, border_style="bright_black", box=box.ASCII, padding=(0, 1)))
         if summary.get("artifacts"):
             artifact_table = Table(box=box.ASCII, expand=True)
             artifact_table.add_column("Artifact", width=26, no_wrap=True)
@@ -690,6 +946,17 @@ def _print_run_report(summary: dict[str, Any]) -> None:
         print(f"Trace ID        {summary['trace_id']}")
     if summary.get("total_latency_s") is not None:
         print(f"Latency         {summary['total_latency_s']:.2f} s")
+    if summary.get("runtime"):
+        runtime = summary["runtime"]
+        print(
+            f"Runtime         {runtime.get('todo_completed', 0)}/{runtime.get('todo_total', 0)} todos, "
+            f"{runtime.get('checkpoint_count', 0)} checkpoints, mode={runtime.get('mode', 'autonomous')}"
+        )
+    if summary.get("review"):
+        review = summary["review"]
+        score = review.get("urban_validity_score") or review.get("quality_score")
+        score_text = f"{float(score):.2f}" if score is not None else "n/a"
+        print(f"ReviewHub      {review.get('recommendation', 'n/a')} score={score_text} warnings={review.get('warning_count', 0)}")
     if summary.get("agent_plan"):
         print("\nAgent workflow")
         for item in summary["agent_plan"]:
@@ -713,11 +980,15 @@ def _print_run_report(summary: dict[str, Any]) -> None:
 def _provider_status(provider_name: str) -> dict[str, Any]:
     keys = PROVIDER_KEY_MAP.get(provider_name, [])
     present = [key for key in keys if os.getenv(key)]
-    return {
+    status = {
         "keys": keys,
         "configured": bool(present),
         "present_keys": present,
     }
+    if provider_name == "kimi":
+        status["client_type"] = os.getenv("KIMI_CLIENT_TYPE", "auto")
+        status["selection_order"] = ["coding", "standard"] if status["client_type"] == "auto" else [status["client_type"]]
+    return status
 
 
 def _build_doctor_report() -> dict[str, Any]:
@@ -842,7 +1113,6 @@ async def _run_case_studies(case_name: str, output_dir: str) -> Path:
 async def _run_pipeline_task(
     *,
     task_text: str,
-    task_type: Optional[str],
     bbox: Optional[str],
     input_path: Optional[str],
     output_dir: str,
@@ -852,52 +1122,16 @@ async def _run_pipeline_task(
 ) -> dict[str, Any]:
     from .agents.orchestrator import MultiAgentOrchestrator
     from .core import PerceptionModule, ReasoningModule
-    from .runtime_observatory import ObservableUrbanRunner, RunArtifactStore, resolve_local_case
 
-    resolved_task_type = _resolve_task_type(task_text, task_type, input_path)
-    task_payload = _build_task_payload(task_text, resolved_task_type, bbox, input_path)
-    local_case = resolve_local_case({"task": task_text, "location": task_payload.get("location", "")})
-    if local_case is not None:
-        request = {
-            "task": task_text,
-            "location": local_case.location,
-            "radius": 600,
-            "mode": interaction_mode,
-            "case_id": "ningbo_old_bund",
-            "run_name": run_name or "ningbo-old-bund-observable",
-        }
-        store = RunArtifactStore(Path(output_dir))
-        runner = ObservableUrbanRunner(store)
-        completed_run_id = None
-        if show_progress:
-            print("[plan] observable UrbanAgent runtime: PlannerAgent -> ManagerAgent -> Workers -> ReviewHub -> QualityController -> ReporterWorker")
-        async for frame in runner.run(request):
-            if frame.get("type") == "event":
-                event = frame.get("event", {})
-                payload = event.get("payload", {})
-                if show_progress and event.get("type") == "agent_started":
-                    print(f"[agent] {_agent_display_name(str(payload.get('agent', 'unknown')))} running")
-                if show_progress and event.get("type") == "artifact_created":
-                    artifact = payload.get("artifact", {})
-                    print(f"[artifact] {artifact.get('title', artifact.get('id', 'artifact'))}")
-                if event.get("type") == "run_completed":
-                    completed_run_id = event.get("run_id")
-            elif frame.get("type") == "complete":
-                completed_run_id = frame.get("run_id")
-        if completed_run_id is None:
-            raise RuntimeError("Observable run did not produce a run id")
-        manifest = store.read_manifest(completed_run_id)
-        run_dir = Path(output_dir) / completed_run_id
-        events = store.read_events(completed_run_id)
-        summary = _build_observable_summary(run_dir, manifest, events)
-        _write_json(summary, run_dir / "summary.json")
-        return {"run_dir": run_dir, "result": manifest, "summary": summary}
-
+    task_payload = _build_task_payload(task_text, bbox, input_path)
     run_dir = _create_run_dir(Path(output_dir), run_name or task_text)
+    artifact_dir = run_dir / "artifacts"
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    task_payload["artifact_dir"] = str(artifact_dir)
+    task_payload["run_dir"] = str(run_dir)
 
     request_record = {
         "timestamp": datetime.now().isoformat(),
-        "task_type": resolved_task_type,
         "task": task_text,
         "bbox": bbox,
         "input_path": input_path,
@@ -908,16 +1142,18 @@ async def _run_pipeline_task(
 
     if show_progress:
         if _rich_ui_enabled():
-            _CONSOLE.print("[bold cyan]PLAN[/] preparing multi-agent runtime")
+            _CONSOLE.print("[bold cyan]PLAN[/] preparing multi-agent runtime (planner=deep-reasoning, exec=flash)")
         else:
-            print("[plan] preparing multi-agent runtime")
-    llm_client = _build_llm_client()
-    vlm_client = llm_client if hasattr(llm_client, "analyze_image") else None
-    perception_module = PerceptionModule(llm_client=llm_client, vlm_client=vlm_client)
-    reasoning_module = ReasoningModule(llm_client=llm_client)
+            print("[plan] preparing multi-agent runtime (planner=deep, exec=flash)")
+    planner_llm_client = _build_planner_llm_client()
+    exec_llm_client = _build_exec_llm_client()
+    vlm_client = exec_llm_client if hasattr(exec_llm_client, "analyze_image") else None
+    perception_module = PerceptionModule(llm_client=exec_llm_client, vlm_client=vlm_client)
+    reasoning_module = ReasoningModule(llm_client=exec_llm_client)
 
     orchestrator = MultiAgentOrchestrator(
-        llm_client=llm_client,
+        llm_client=exec_llm_client,
+        planner_llm_client=planner_llm_client,
         vlm_client=vlm_client,
         interaction_mode=interaction_mode,
         perception_module=perception_module,
@@ -928,7 +1164,7 @@ async def _run_pipeline_task(
             _CONSOLE.print("[bold green]EXEC[/] planner -> workers -> reviewer")
         else:
             print("[execute] planner -> workers -> reviewer")
-    result = await orchestrator.run(task_payload, task_type=resolved_task_type)
+    result = await orchestrator.run(task_payload)
     _write_json(result, run_dir / "result.json")
 
     summary = _build_run_summary(run_dir, result)
@@ -943,12 +1179,11 @@ async def _run_pipeline_task(
     }
 
 
-async def _preview_plan(task_text: str, task_type: Optional[str], bbox: Optional[str], input_path: Optional[str]) -> dict[str, Any]:
+async def _preview_plan(task_text: str, bbox: Optional[str], input_path: Optional[str]) -> dict[str, Any]:
     from .agents.base import AgentMessage, AgentRole
     from .agents.planner import PlannerAgent
 
-    resolved_task_type = _resolve_task_type(task_text, task_type, input_path)
-    task_payload = _build_task_payload(task_text, resolved_task_type, bbox, input_path)
+    task_payload = _build_task_payload(task_text, bbox, input_path)
     llm_client = None
     if os.getenv("URBAN_AGENT_PLAN_LIVE", "0") == "1":
         try:
@@ -973,7 +1208,7 @@ def _print_plan(plan: dict[str, Any]) -> None:
             "Multi-Agent Plan",
             [
                 ("Plan ID", str(plan.get("plan_id", "unknown"))),
-                ("Task category", str(plan.get("task_category", "unknown"))),
+                ("Workflow", str(plan.get("workflow_profile", "adaptive_urban_analysis"))),
                 ("Complexity", str(plan.get("complexity", "unknown"))),
                 ("Steps", str(len(plan.get("subtasks", [])))),
             ],
@@ -985,27 +1220,83 @@ def _print_plan(plan: dict[str, Any]) -> None:
         for item in _summarize_plan(plan):
             table.add_row(item["step"], Text(item["agent"], style=_agent_style(item.get("raw_agent", item["agent"]))), item["objective"])
         _CONSOLE.print(Group(meta, Panel(table, title="Agent Workflow", border_style="bright_black", box=box.ASCII, padding=(0, 1))))
+        capability_names = plan.get("capability_context", {}).get("selected_names", [])
+        if capability_names:
+            _CONSOLE.print(_make_caption_panel(", ".join(capability_names), title="Selected Capabilities"))
         return
 
     _print_section("Multi-Agent Plan")
     print(f"Plan ID        {plan.get('plan_id', 'unknown')}")
-    print(f"Task category  {plan.get('task_category', 'unknown')}")
+    print(f"Workflow       {plan.get('workflow_profile', 'adaptive_urban_analysis')}")
     print(f"Complexity     {plan.get('complexity', 'unknown')}")
     print("\nAgent workflow")
     for item in _summarize_plan(plan):
         print(f"  {item['step']}. {item['agent']:<18} {item['objective']}")
+    capability_names = plan.get("capability_context", {}).get("selected_names", [])
+    if capability_names:
+        print("\nSelected capabilities")
+        for name in capability_names:
+            print(f"  - {name}")
+
+
+def _build_capability_report(query: Optional[str], level: int = 0, limit: int = 8) -> dict[str, Any]:
+    from .capabilities import get_default_capability_registry
+    from .mcp_tools import get_mcp_tools
+
+    registry = get_default_capability_registry()
+    mcp_tools = get_mcp_tools()
+    if query:
+        selected = registry.search(query, limit=limit)
+        names = [capability.name for capability in selected]
+    else:
+        names = registry.names()[:limit]
+    items = registry.disclose(names, level=level, mcp_tools=mcp_tools)
+    return {
+        "query": query,
+        "level": level,
+        "count": len(items),
+        "items": items,
+        "disclosure_policy": "progressive",
+    }
+
+
+def _print_capability_report(report: dict[str, Any]) -> None:
+    if _rich_ui_enabled():
+        table = Table(box=box.ASCII, expand=True)
+        table.add_column("Capability", style="bold cyan", no_wrap=True, width=28)
+        table.add_column("Family", width=14, no_wrap=True)
+        table.add_column("Summary", style="white")
+        for item in report["items"]:
+            table.add_row(str(item.get("name", "")), str(item.get("family", "")), str(item.get("summary", "")))
+        _CONSOLE.print(Panel(table, title=f"Capabilities (level {report['level']})", border_style="bright_black", box=box.ASCII, padding=(0, 1)))
+        return
+
+    _print_section(f"Capabilities (level {report['level']})")
+    for item in report["items"]:
+        print(f"- {item.get('name')} [{item.get('family')}] {item.get('summary')}")
+        if report["level"] >= 1:
+            backends = item.get("backend_names") or [backend.get("name") for backend in item.get("backends", [])]
+            if backends:
+                print(f"  backends: {', '.join(str(backend) for backend in backends)}")
+        if report["level"] >= 2 and item.get("invocation"):
+            invocation = item["invocation"]
+            print(f"  mcp_tool: {invocation.get('mcp_tool')}")
 
 
 class UrbanAgentShell:
     def __init__(self, args: argparse.Namespace):
-        self.task_type_override = getattr(args, "task_type", None)
         self.bbox = args.bbox
         self.input_path = args.input
         self.output_dir = args.output_dir
         self.interaction_mode = args.interaction_mode
+        self.session_started_at = datetime.now()
+        self.session_id = f"{self.session_started_at.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+        self.last_summary: Optional[dict[str, Any]] = None
+        self._history_file = USER_CONFIG_DIR / ".urban_agent_history"
 
     def run(self) -> None:
         self._print_banner()
+        self._print_welcome()
         while True:
             try:
                 line = self._prompt().strip()
@@ -1018,7 +1309,7 @@ class UrbanAgentShell:
 
             if not line:
                 continue
-            if line.startswith("/"):
+            if _looks_like_shell_command(line):
                 if self._handle_command(line):
                     return
                 continue
@@ -1032,7 +1323,6 @@ class UrbanAgentShell:
                 report = asyncio.run(
                     _run_pipeline_task(
                         task_text=line,
-                        task_type=self.task_type_override,
                         bbox=self.bbox,
                         input_path=self.input_path,
                         output_dir=self.output_dir,
@@ -1043,60 +1333,141 @@ class UrbanAgentShell:
             except RuntimeError as error:
                 print(f"Run failed: {error}")
                 continue
+            self.last_summary = report["summary"]
             _print_run_report(report["summary"])
 
-    def _print_banner(self) -> None:
-        if _rich_ui_enabled():
-            hero_text = Text()
-            hero_text.append("UrbanAgent CLI\n", style="bold white")
-            hero_text.append("Multi-agent urban analysis shell\n", style="dim")
-            hero_text.append("Planning | Execution | Review | Quality", style="bold cyan")
+    def _print_welcome(self) -> None:
+        """Hermes-style post-banner welcome message, curator status, and tip."""
+        accent = "#FFD700"
+        dim_color = "#B8860B"
+        text_color = "#FFF8DC"
 
-            cards = [
-                _make_value_panel("Provider", _selected_provider(), style="bold cyan"),
-                _make_value_panel("Routing", _AUTO_TASK_TYPE_LABEL, style="bold white"),
-                _make_value_panel("Mode", self.interaction_mode, style="bold magenta"),
-                _make_value_panel("Runs", _output_dir_label(self.output_dir), style="bold green"),
-            ]
-            context = _make_key_value_panel(
-                "Session",
-                [
-                    ("Runtime root", _truncate_middle(str(PROJECT_ROOT))),
-                    ("Config file", _truncate_middle(str(ENV_FILE or "not found"))),
-                    ("Input file", _truncate_middle(self.input_path or "none")),
-                    ("BBox", self.bbox or "none"),
-                ],
-            )
-            hint = _make_caption_panel(
-                "Enter any city-analysis task. Routing is automatic.\nUse /plan, /status, /config, /doctor, or /help.",
-                title="Quick Start",
-            )
-            _CONSOLE.print(Group(
-                Panel(hero_text, border_style="cyan", box=box.ASCII, padding=(0, 1)),
-                Columns(cards, equal=True, expand=True),
-                context,
-                hint,
-            ))
+        if _rich_ui_enabled():
+            _CONSOLE.print()
+            _CONSOLE.print(f"[{text_color}]Welcome to UrbanAgent! Type a city-analysis task or /commands for help.[/]")
+            _CONSOLE.print(f"[dim {dim_color}]✦ Tip: Enter any urban question directly — routing, data, and methods are inferred from your task.[/]")
+
+            # Runtime readiness summary
+            provider = _selected_provider()
+            caps_by_family = _get_capabilities_summary()
+            total_caps = sum(len(v) for v in caps_by_family.values())
+            tools_by_category = _get_tools_summary()
+            total_tools = sum(len(v) for v in tools_by_category.values())
+
+            _CONSOLE.print(f"[dim {dim_color}]💾 runtime: provider={provider}  ·  mode={self.interaction_mode}  ·  routing={_WORKFLOW_ROUTING_LABEL}[/]")
+            _CONSOLE.print(f"[dim {dim_color}]   {total_tools} tools registered  ·  {total_caps} capabilities  ·  use /doctor to verify[/]")
+
+            # Warning if no env file
+            if ENV_FILE is None:
+                _CONSOLE.print(f"[yellow]⚠ No .env file found — run 'urban-agent init' to configure API keys[/]")
             return
 
+        # Plain text fallback
         print()
-        print("UrbanAgent CLI")
-        print("Multi-agent urban analysis shell")
-        print("-" * 48)
+        print("Welcome to UrbanAgent! Type a city-analysis task or /commands for help.")
+        print("✦ Tip: Enter any urban question directly — routing, data, and methods are inferred.")
+        print(f"💾 runtime: provider={_selected_provider()}  ·  mode={self.interaction_mode}")
+        if ENV_FILE is None:
+            print("⚠ No .env file found — run 'urban-agent init' to configure API keys")
+
+    def _print_banner(self) -> None:
+        provider = _selected_provider()
+        if _rich_ui_enabled():
+            # ── Hermes-style two-column banner ──
+            accent = "#FFD700"
+            dim_color = "#B8860B"
+            text_color = "#FFF8DC"
+            border_color = "#CD7F32"
+            session_color = "#8B8682"
+
+            # Build capability index
+            caps_by_family = _get_capabilities_summary()
+            total_caps = sum(len(v) for v in caps_by_family.values())
+
+            # Build tool index
+            tools_by_category = _get_tools_summary()
+            total_tools = sum(len(v) for v in tools_by_category.values())
+
+            # ── Right column: tools + capabilities ──
+            right_lines: list[str] = []
+            right_lines.append(f"[bold {accent}]Available Tools[/]")
+            sorted_cats = sorted(tools_by_category.keys())
+            for cat in sorted_cats:
+                names = sorted(tools_by_category[cat])
+                tools_str = ", ".join(f"[{text_color}]{n}[/]" for n in names)
+                right_lines.append(f"[dim {dim_color}]{cat}:[/] {tools_str}")
+            if not sorted_cats:
+                right_lines.append(f"[dim {dim_color}]No tools registered[/]")
+
+            right_lines.append("")
+            right_lines.append(f"[bold {accent}]Available Capabilities[/]")
+            sorted_families = sorted(caps_by_family.keys())
+            for family in sorted_families[:8]:
+                names = sorted(caps_by_family[family])
+                caps_str = ", ".join(f"[{text_color}]{n}[/]" for n in names)
+                if len(caps_str) > 55:
+                    caps_str = caps_str[:52] + "..."
+                right_lines.append(f"[dim {dim_color}]{family}:[/] {caps_str}")
+            remaining = len(sorted_families) - 8
+            if remaining > 0:
+                right_lines.append(f"[dim {dim_color}](and {remaining} more families...)[/]")
+            if not sorted_families:
+                right_lines.append(f"[dim {dim_color}]No capabilities registered[/]")
+
+            right_lines.append("")
+            summary_parts = [f"{total_tools} tools", f"{total_caps} capabilities", "/commands for help"]
+            right_lines.append(f"[dim {dim_color}]{' · '.join(summary_parts)}[/]")
+
+            # ── Left column: hero + meta ──
+            model_label = provider
+            left_lines = [URBAN_AGENT_LOGO, "", f"[bold {accent}]{model_label}[/] [dim {dim_color}]· urban-mobility runtime[/]"]
+            left_lines.append(f"[dim {session_color}]Session: {self.session_id}[/]")
+            left_lines.append(f"[dim {dim_color}]{_truncate_middle(str(PROJECT_ROOT))}[/]")
+            left_lines.append(f"[dim {dim_color}]Mode: {self.interaction_mode}  ·  Routing: {_WORKFLOW_ROUTING_LABEL}[/]")
+            left_content = "\n".join(left_lines)
+            right_content = "\n".join(right_lines)
+
+            layout_table = Table.grid(padding=(0, 2))
+            layout_table.add_column("left", justify="center", width=42, no_wrap=True)
+            layout_table.add_column("right", justify="left")
+            layout_table.add_row(left_content, right_content)
+
+            version_label = f"UrbanAgent v0.1.0 · Hermes-runtime branch"
+            outer_panel = Panel(
+                layout_table,
+                title=f"[bold {accent}]{version_label}[/]",
+                border_style=border_color,
+                padding=(0, 2),
+            )
+
+            term_width = shutil.get_terminal_size().columns
+            _CONSOLE.print()
+            if term_width >= 95:
+                _CONSOLE.print(URBAN_AGENT_LOGO)
+                _CONSOLE.print()
+            _CONSOLE.print(outer_panel)
+            return
+
+        # Fallback plain-text banner
+        print()
+        print("┌─────────────────────────────────────────────────────────┐")
+        print("│       UrbanAgent - City Science Agent Framework         │")
+        print("└─────────────────────────────────────────────────────────┘")
+        print(f"Session ID    {self.session_id}")
         print(f"Runtime root  {PROJECT_ROOT}")
         print(f"Config file   {ENV_FILE or 'not found'}")
         print(f"Provider      {_selected_provider()}")
-        print(f"Routing       {_AUTO_TASK_TYPE_LABEL}")
+        print(f"Routing       {_WORKFLOW_ROUTING_LABEL}")
         print(f"Mode          {self.interaction_mode}")
-        print("-" * 48)
-        print("Enter any city-analysis task. Routing is automatic. Use /plan, /status, /doctor, or /help.")
+        print("-" * 57)
+        print("Enter any city-analysis task. Use /commands, /plan, /tools, /runtime, /status, /doctor, or /quit.")
 
     def _confirm_task(self, task_text: str) -> bool:
         if _rich_ui_enabled():
             panel = _make_key_value_panel(
                 "Confirm Run",
                 [
-                    ("Routing", _AUTO_TASK_TYPE_LABEL),
+                    ("Routing", _WORKFLOW_ROUTING_LABEL),
                     ("Mode", self.interaction_mode),
                     ("Input", self.input_path or "none"),
                     ("BBox", self.bbox or "none"),
@@ -1109,7 +1480,7 @@ class UrbanAgentShell:
             return reply in {"y", "yes"}
 
         print("\nRun summary:")
-        print(f"- routing: {_AUTO_TASK_TYPE_LABEL}")
+        print(f"- routing: {_WORKFLOW_ROUTING_LABEL}")
         print(f"- mode: {self.interaction_mode}")
         print(f"- input: {self.input_path or 'none'}")
         print(f"- bbox: {self.bbox or 'none'}")
@@ -1119,27 +1490,81 @@ class UrbanAgentShell:
         return reply in {"y", "yes"}
 
     def _prompt(self) -> str:
-        if _rich_ui_enabled():
-            prompt = (
-                f"[bold cyan]urban-agent[/]"
-                f"[dim] ({self.interaction_mode})[/]"
-                f" [bold white]>[/] "
+        hr = "─" * min(shutil.get_terminal_size().columns, 80)
+        hr_dim = f"[dim #8B8682]{hr}[/]"
+        if _PROMPT_TOOLKIT_AVAILABLE:
+            USER_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+            if _rich_ui_enabled():
+                _CONSOLE.print(hr_dim)
+            style = PromptStyle.from_dict({
+                "brand": "#FFBF00 bold",
+                "mode": "#CD7F32",
+                "separator": "#B8860B",
+                "prompt": "#FFD700 bold",
+                "": "#FFF8DC",
+            })
+            result = _pt_prompt(
+                [
+                    ("class:brand", "urban-agent"),
+                    ("class:separator", " · "),
+                    ("class:mode", self.interaction_mode),
+                    ("class:prompt", " ❯ "),
+                ],
+                history=FileHistory(str(self._history_file)),
+                completer=WordCompleter(_shell_command_words(), ignore_case=True, sentence=True),
+                auto_suggest=AutoSuggestFromHistory(),
+                style=style,
+                placeholder=(
+                    lambda: [("class:separator", "Enter a city-analysis task or /command...")]
+                ) if hasattr(_pt_prompt, "__code__") or True else None,
             )
-            return _CONSOLE.input(prompt)
-        return input("urban-agent> ")
+            if _rich_ui_enabled():
+                _CONSOLE.print(hr_dim)
+            return result
+        if _rich_ui_enabled():
+            _CONSOLE.print(hr_dim)
+            prompt = (
+                f"[bold #FFBF00]urban-agent[/]"
+                f"[#CD7F32] · {self.interaction_mode}[/]"
+                f" [bold #FFD700]❯[/] "
+            )
+            result = _CONSOLE.input(prompt)
+            _CONSOLE.print(hr_dim)
+            return result
+        print(hr)
+        result = input("urban-agent ❯ ")
+        print(hr)
+        return result
 
     def _handle_command(self, line: str) -> bool:
         parts = shlex.split(line)
-        command = parts[0].lower()
+        command_def = _resolve_shell_command(parts[0])
+        if command_def is None:
+            print(f"Unknown command: {parts[0].lower()}. Use /commands.")
+            return False
+        command = f"/{command_def.name}"
         args = parts[1:]
 
-        if command in {"/exit", "/quit"}:
+        if command == "/quit":
             return True
-        if command == "/help":
+        if command == "/commands":
             self._print_help()
+            return False
+        if command == "/new":
+            self.session_started_at = datetime.now()
+            self.session_id = f"{self.session_started_at.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+            self.last_summary = None
+            print(f"Started new UrbanAgent session: {self.session_id}")
+            return False
+        if command == "/clear":
+            os.system("cls" if os.name == "nt" else "clear")
+            self._print_banner()
             return False
         if command == "/status":
             self._print_status()
+            return False
+        if command == "/runtime":
+            self._print_runtime()
             return False
         if command == "/doctor":
             _print_doctor_report(_build_doctor_report())
@@ -1147,12 +1572,16 @@ class UrbanAgentShell:
         if command == "/config":
             _cmd_config(argparse.Namespace(json=False))
             return False
+        if command == "/capabilities":
+            query = " ".join(args).strip() or None
+            _print_capability_report(_build_capability_report(query, level=1 if query else 0))
+            return False
         if command == "/plan":
             task_text = " ".join(args).strip()
             if not task_text:
                 print("Usage: /plan <natural-language city-analysis task>")
                 return False
-            plan = asyncio.run(_preview_plan(task_text, self.task_type_override, self.bbox, self.input_path))
+            plan = asyncio.run(_preview_plan(task_text, self.bbox, self.input_path))
             _print_plan(plan)
             return False
         if command == "/mode":
@@ -1195,24 +1624,23 @@ class UrbanAgentShell:
                 self.output_dir = args[0]
                 print(f"Output dir set to {self.output_dir}")
             return False
-        print(f"Unknown command: {command}. Use /help.")
+        print(f"Command is registered but has no handler yet: {command}")
         return False
 
     def _print_help(self) -> None:
         if _rich_ui_enabled():
-            table = Table(box=box.ASCII, expand=True)
-            table.add_column("Command", style="bold cyan", no_wrap=True, width=20)
-            table.add_column("Purpose", style="white")
-            table.add_row("/plan <task>", "Preview planner decomposition and agent assignment")
-            table.add_row("/status", "Show active shell state and runtime profile")
-            table.add_row("/doctor", "Run environment and provider checks")
-            table.add_row("/config", "Show active config locations and provider summary")
-            table.add_row("/mode <mode>", "Switch guided, supervisory, or autonomous mode")
-            table.add_row("/bbox <bbox|clear>", "Set or clear the default study-area bounding box")
-            table.add_row("/input <path|clear>", "Attach or clear a default task input JSON file")
-            table.add_row("/output <path>", "Change the run artifact output directory")
-            table.add_row("/exit", "Exit the shell")
-            _CONSOLE.print(Panel(table, title="Slash Commands", border_style="bright_black", box=box.ASCII, padding=(0, 1)))
+            accent = "#FFD700"
+            panels = []
+            for category, commands in _shell_commands_by_category().items():
+                table = Table(box=box.SIMPLE_HEAVY, expand=True, show_header=False)
+                table.add_column("Command", style=f"bold {accent}", no_wrap=True, width=24)
+                table.add_column("Purpose", style="#FFF8DC")
+                for item in commands:
+                    aliases = f" aliases: {', '.join('/' + alias for alias in item.aliases)}" if item.aliases else ""
+                    usage = f" /{item.name} {item.args_hint}" if item.args_hint else f" /{item.name}"
+                    table.add_row(usage, f"{item.description}{aliases}")
+                panels.append(Panel(table, title=category, border_style="#CD7F32", box=box.SQUARE, padding=(0, 1)))
+            _CONSOLE.print(Group(*panels))
             _CONSOLE.print(_make_caption_panel(
                 "Direct task entry is the primary interaction path.\nRouting is inferred from the task text instead of being selected up front.",
                 title="Interaction Model",
@@ -1220,39 +1648,80 @@ class UrbanAgentShell:
             return
 
         _print_section("Shell Commands")
-        print("/plan <task>        Preview planner + worker assignment")
-        print("/status             Show current shell state")
-        print("/doctor             Run environment checks")
-        print("/config             Show config file locations")
-        print("/mode <mode>        Set shell mode")
-        print("/bbox <bbox|clear>  Set or clear default bbox")
-        print("/input <path|clear> Set or clear default input JSON")
-        print("/output <path>      Set output directory")
-        print("/exit               Exit shell")
+        for category, commands in _shell_commands_by_category().items():
+            print(f"\n◆ {category}")
+            for item in commands:
+                aliases = f" ({', '.join('/' + alias for alias in item.aliases)})" if item.aliases else ""
+                usage = f"/{item.name} {item.args_hint}" if item.args_hint else f"/{item.name}"
+                print(f"  {usage:<24} {item.description}{aliases}")
 
     def _print_status(self) -> None:
+        runtime = self.last_summary.get("runtime", {}) if self.last_summary else {}
+        accent = "#FFD700"
         if _rich_ui_enabled():
             _CONSOLE.print(_make_key_value_panel(
-                "Shell Status",
+                "UrbanAgent Status",
                 [
-                    ("Routing", _AUTO_TASK_TYPE_LABEL),
+                    ("Session ID", self.session_id),
+                    ("Started", self.session_started_at.strftime("%Y-%m-%d %H:%M:%S")),
+                    ("Routing", _WORKFLOW_ROUTING_LABEL),
                     ("Mode", self.interaction_mode),
                     ("Provider", _selected_provider()),
                     ("BBox", self.bbox or "none"),
                     ("Input", _truncate_middle(self.input_path or "none")),
                     ("Output dir", _truncate_middle(self.output_dir)),
                     ("Config", _truncate_middle(str(ENV_FILE or "not found"))),
+                    ("Last runtime", _format_runtime_status(runtime)),
                 ],
             ))
             return
 
-        _print_section("Shell Status")
-        print(f"routing     {_AUTO_TASK_TYPE_LABEL}")
-        print(f"mode        {self.interaction_mode}")
-        print(f"bbox        {self.bbox or 'none'}")
-        print(f"input       {self.input_path or 'none'}")
-        print(f"output dir  {self.output_dir}")
-        print(f"config      {ENV_FILE or 'not found'}")
+        print()
+        print("┌─────────────────────────────────────────────────────────┐")
+        print("│                  UrbanAgent CLI Status                 │")
+        print("└─────────────────────────────────────────────────────────┘")
+        print("◆ Session")
+        print(f"  Session ID:   {self.session_id}")
+        print(f"  Started:      {self.session_started_at.strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"  Routing:      {_WORKFLOW_ROUTING_LABEL}")
+        print(f"  Mode:         {self.interaction_mode}")
+        print(f"  Provider:     {_selected_provider()}")
+        print("◆ Context")
+        print(f"  BBox:         {self.bbox or 'none'}")
+        print(f"  Input:        {self.input_path or 'none'}")
+        print(f"  Output dir:   {self.output_dir}")
+        print(f"  Config:       {ENV_FILE or 'not found'}")
+        print("◆ Runtime")
+        print(f"  Last run:     {_format_runtime_status(runtime)}")
+
+    def _print_runtime(self) -> None:
+        if not self.last_summary:
+            print("No completed run in this shell session yet.")
+            return
+        runtime = self.last_summary.get("runtime", {})
+        if not runtime:
+            print("Last run did not include a runtime ledger summary.")
+            return
+        if _rich_ui_enabled():
+            _CONSOLE.print(_make_key_value_panel(
+                "Last Runtime Ledger",
+                [
+                    ("Profile", str(runtime.get("profile", "urban_runtime_kernel"))),
+                    ("Mode", str(runtime.get("mode", "autonomous"))),
+                    ("Todos", f"{runtime.get('todo_completed', 0)}/{runtime.get('todo_total', 0)}"),
+                    ("Checkpoints", str(runtime.get("checkpoint_count", 0))),
+                    ("Blocked", str(runtime.get("blocked_count", 0))),
+                    ("Last checkpoint", str(runtime.get("last_checkpoint") or "none")),
+                ],
+            ))
+            return
+        print("\n◆ Last Runtime Ledger")
+        print(f"  Profile:          {runtime.get('profile', 'urban_runtime_kernel')}")
+        print(f"  Mode:             {runtime.get('mode', 'autonomous')}")
+        print(f"  Todos:            {runtime.get('todo_completed', 0)}/{runtime.get('todo_total', 0)}")
+        print(f"  Checkpoints:      {runtime.get('checkpoint_count', 0)}")
+        print(f"  Blocked:          {runtime.get('blocked_count', 0)}")
+        print(f"  Last checkpoint:  {runtime.get('last_checkpoint') or 'none'}")
 
 
 # ── Command implementations ──────────────────────────────────────
@@ -1305,7 +1774,7 @@ async def _cmd_reason(args):
     with open(args.input, encoding="utf-8") as f:
         input_data = json.load(f)
 
-    task = {"task_type": args.task_type, "question": args.question}
+    task = {"question": args.question}
     module = ReasoningModule()
     result = await module.infer(input_data, {}, task)
     _write_json(result, args.output)
@@ -1428,7 +1897,6 @@ async def _cmd_run(args):
     """兼容旧入口，转发到新的 task-oriented runner。"""
     report = await _run_pipeline_task(
         task_text=args.question,
-        task_type=args.task_type,
         bbox=args.bbox,
         input_path=args.input,
         output_dir=args.output_dir,
@@ -1441,7 +1909,6 @@ async def _cmd_run(args):
 async def _cmd_analyze(args):
     report = await _run_pipeline_task(
         task_text=args.task,
-        task_type=args.task_type,
         bbox=args.bbox,
         input_path=args.input,
         output_dir=args.output_dir,
@@ -1514,8 +1981,39 @@ def _cmd_config(args):
     print(f"Configured  {', '.join(report['environment']['configured_providers']) if report['environment']['configured_providers'] else 'none'}")
 
 
+def _cmd_capabilities(args):
+    report = _build_capability_report(args.query, level=args.level, limit=args.limit)
+    if args.json:
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return
+    _print_capability_report(report)
+
+
+def _cmd_plan(args):
+    plan = asyncio.run(_preview_plan(args.task, args.bbox, args.input))
+    if args.output:
+        _write_json(plan, args.output)
+    _print_plan(plan)
+
+
 def _cmd_shell(args):
     UrbanAgentShell(args).run()
+
+
+async def _cmd_guided(args) -> None:
+    """Run multi-turn guided analysis with human-in-the-loop."""
+    from .cli_multiturn import run_multiturn
+
+    task_text = args.task
+    if args.input:
+        input_path = Path(args.input)
+        if input_path.exists():
+            task_text = input_path.read_text(encoding="utf-8")
+    output_root = Path(args.output_dir) / (args.name or f"guided_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+    print(f"\nStarting multi-turn guided session...")
+    print(f"Task: {task_text[:200]}...")
+    print(f"Output: {output_root}\n")
+    await run_multiturn(task_text, run_name=args.name, output_root=output_root)
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -1526,7 +2024,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     if not raw_args:
         shell_args = argparse.Namespace(
-            task_type=None,
             bbox=None,
             input=None,
             output_dir=str(DEFAULT_RUNS_DIR),
@@ -1551,8 +2048,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             _cmd_init(args)
         elif args.command == "config":
             _cmd_config(args)
+        elif args.command == "capabilities":
+            _cmd_capabilities(args)
+        elif args.command == "plan":
+            _cmd_plan(args)
         elif args.command == "shell":
             _cmd_shell(args)
+        elif args.command == "guided":
+            asyncio.run(_cmd_guided(args))
         elif args.command == "perceive":
             asyncio.run(_cmd_perceive(args))
         elif args.command == "cognize":

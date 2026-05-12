@@ -44,20 +44,21 @@ def test_memory_retrieval_and_reasoning_transfer():
         memory = MemoryModule(config={"short_term_size": 5})
         await memory.store(
             {
-                "task": {"task_type": "outdoor_navigation", "start": "A", "end": "B"},
+                "task": {"workflow_profile": "adaptive_urban_analysis", "start": "A", "end": "B"},
                 "perception": {"type": "text", "city": "Beijing"},
                 "action": {"route_actions": ["forward", "left", "stop"]},
             }
         )
-        memory_context = await memory.retrieve({"task_type": "outdoor_navigation", "start": "A", "end": "B"})
+        memory_context = await memory.retrieve({"workflow_profile": "adaptive_urban_analysis", "start": "A", "end": "B"})
 
         reasoning = ReasoningModule(config={"mode": "enhanced"})
         result = await reasoning.infer(
             {"road_network": {}, "topology": {}},
             memory_context,
-            {"task_type": "outdoor_navigation", "start": "A", "end": "B", "steps": []},
+            {"workflow_profile": "adaptive_urban_analysis", "start": "A", "end": "B", "steps": []},
         )
         return result
 
     result = asyncio.run(_run())
-    assert result["route_actions"] == ["forward", "left", "stop"]
+    assert result["workflow_profile"] == "adaptive_urban_analysis"
+    assert result["reasoning_chain"]

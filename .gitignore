@@ -16,6 +16,11 @@ artifacts/
 cache/
 outputs/
 results/
+case_studies/
+case_studies/**/runs/
+figures/case1_*
+figures/rdma_style_*
+figures/*_current.png
 
 # ── IDE / Editor / Agent configs ──
 .vscode/

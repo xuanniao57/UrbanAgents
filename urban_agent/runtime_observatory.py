@@ -27,34 +27,6 @@ from .decision import SpatialMeasurement
 from .qgis_bridge import QgisBridgeClient, QgisCommand, qgis_bridge_status
 
 
-TASK_TYPE_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("traffic_signal", ("traffic signal", "signal timing", "intersection phase", "红绿灯", "信号配时")),
-    ("mobility_prediction", ("mobility", "trajectory", "commute", "od flow", "出行", "轨迹", "通勤")),
-    ("outdoor_navigation", ("route", "routing", "navigation", "shortest path", "路径", "导航", "路线")),
-    ("population_prediction", ("population", "demographic", "census", "人口", "居民")),
-    ("object_detection", ("detect", "detection", "segment", "识别", "检测", "分割")),
-    ("geolocation", ("geolocate", "where is", "which city", "定位", "在哪")),
-    (
-        "urban_exploration",
-        (
-            "walkability",
-            "accessibility",
-            "public space",
-            "street network",
-            "planning brief",
-            "compare",
-            "scenario",
-            "步行",
-            "可达性",
-            "公共空间",
-            "街道网络",
-            "规划",
-            "对比",
-        ),
-    ),
-)
-
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 NINGBO_OLD_BUND_ROOT = REPO_ROOT / "artifacts" / "ningbo_old_bund"
 
@@ -71,6 +43,7 @@ class LocalCaseStudy:
     data_resources: list[dict[str, Any]]
     parameters: dict[str, Any]
     paths: dict[str, Path]
+    case_kind: str = "generic"
 
     def public_summary(self) -> dict[str, Any]:
         return {
@@ -126,14 +99,6 @@ class ArtifactRecord:
 def default_observatory_root() -> Path:
     home = Path(os.getenv("URBAN_AGENT_HOME", Path.home() / ".urban-agent"))
     return home / "runs" / "web"
-
-
-def infer_task_type(task_text: str) -> str:
-    text = task_text.lower()
-    for task_type, keywords in TASK_TYPE_KEYWORDS:
-        if any(keyword in text for keyword in keywords):
-            return task_type
-    return "geoqa"
 
 
 def probe_qgis() -> dict[str, Any]:
@@ -217,18 +182,27 @@ def ningbo_old_bund_case() -> Optional[LocalCaseStudy]:
             "qgis_live_sync": True,
         },
         paths=paths,
+        case_kind="ningbo_old_bund",
     )
 
 
 def resolve_local_case(request: dict[str, Any]) -> Optional[LocalCaseStudy]:
     case_id = str(request.get("case_id") or "").lower()
-    text = f"{request.get('location', '')} {request.get('task', '')}".lower()
-    if case_id == "ningbo_old_bund" or any(keyword in text for keyword in ("宁波", "老外滩", "old bund", "heritage", "历史街区", "保护")):
+    text = " ".join(str(part) for part in [
+        request.get("location", ""),
+        request.get("task", ""),
+        request.get("question", ""),
+        request.get("problem_statement", ""),
+        json.dumps(request.get("data_resources", {}), ensure_ascii=False, default=str),
+    ]).lower()
+    if case_id == "ningbo_old_bund" or any(keyword in text for keyword in ("宁波", "老外滩", "old bund")):
         return ningbo_old_bund_case()
     return None
 
 
 def qgis_commands_for_case(case_study: LocalCaseStudy) -> list[dict[str, Any]]:
+    if case_study.case_kind != "ningbo_old_bund":
+        return []
     gpkg = case_study.paths["gpkg"].as_posix()
     commands = [
         QgisCommand("set_project_title", {"title": f"UrbanAgent Live - {case_study.title}"}, "Set project title"),
@@ -246,8 +220,49 @@ def qgis_commands_for_case(case_study: LocalCaseStudy) -> list[dict[str, Any]]:
     return [command.to_dict() for command in commands]
 
 
+def qgis_commands_for_layer_stack(
+    layer_metadata: dict[str, Any],
+    geojson_path: Path,
+    *,
+    title: str = "UrbanAgent Live Layer Stack",
+) -> list[dict[str, Any]]:
+    commands = [QgisCommand("set_project_title", {"title": title}, "Set project title")]
+    resolved_paths: list[tuple[Path, str]] = []
+    for layer in layer_metadata.get("layers", []):
+        raw_path = layer.get("path") or layer.get("source_path")
+        if not raw_path:
+            continue
+        layer_path = Path(str(raw_path))
+        if not layer_path.is_absolute():
+            layer_path = geojson_path.parent / layer_path
+        if layer_path.exists():
+            resolved_paths.append((layer_path, str(layer.get("name") or layer.get("id") or layer_path.stem)))
+    if not resolved_paths and geojson_path.exists():
+        resolved_paths.append((geojson_path, "UrbanAgent GIS layer stack"))
+    seen: set[str] = set()
+    for layer_path, layer_name in resolved_paths:
+        key = layer_path.as_posix()
+        if key in seen:
+            continue
+        seen.add(key)
+        commands.append(QgisCommand("add_vector_layer", {"path": key, "name": layer_name}, f"Add {layer_name}"))
+    commands.extend([
+        QgisCommand("zoom_to_full_extent", {}, "Zoom to full extent"),
+        QgisCommand("refresh_canvas", {}, "Refresh canvas"),
+    ])
+    return [command.to_dict() for command in commands]
+
+
+def sync_layer_stack_to_qgis(layer_metadata: dict[str, Any], geojson_path: Path, *, title: str) -> dict[str, Any]:
+    commands = qgis_commands_for_layer_stack(layer_metadata, geojson_path, title=title)
+    return QgisBridgeClient(timeout=3.0).send_commands(commands)
+
+
 def sync_case_to_qgis(case_study: LocalCaseStudy) -> dict[str, Any]:
-    return QgisBridgeClient(timeout=3.0).send_commands(qgis_commands_for_case(case_study))
+    commands = qgis_commands_for_case(case_study)
+    if not commands:
+        return {"sent": False, "queued": [], "message": "No live QGIS command template is registered for this case.", "status": qgis_bridge_status()}
+    return QgisBridgeClient(timeout=3.0).send_commands(commands)
 
 
 class RunArtifactStore:
@@ -337,7 +352,7 @@ class ObservableUrbanRunner:
         location = str(request.get("location") or "Urban area")
         radius = int(request.get("radius") or 500)
         mode = str(request.get("mode") or "supervisory")
-        task_type = infer_task_type(task)
+        stage = str(request.get("stage") or request.get("input_payload", {}).get("stage") or "")
         case_study = resolve_local_case(request)
         if case_study:
             location = case_study.location
@@ -358,12 +373,12 @@ class ObservableUrbanRunner:
             "location": location,
             "radius_m": radius,
             "mode": mode,
-            "routing": {"mode": "adaptive", "internal_task_type": task_type},
+            "routing": {"mode": "planner_driven", "workflow_profile": "adaptive_urban_analysis"},
             "qgis": manifest["qgis"],
             "case_study": case_study.public_summary() if case_study else None,
         })
 
-        todos = await self._build_todos(task, task_type, run_id, case_study)
+        todos = await self._build_todos(task, run_id, case_study, stage=stage)
         manifest["todos"] = [todo.to_dict() for todo in todos]
         self.store.write_manifest(run_dir, manifest)
         yield await emit("todo_created", {"todos": manifest["todos"]})
@@ -382,9 +397,9 @@ class ObservableUrbanRunner:
             if case_study and todo.agent == "quality_controller":
                 new_artifacts.append(self._write_case_configuration_artifact(run_dir, case_study))
             if todo.agent == "analyst":
-                new_artifacts.extend(self._write_measurement_artifacts(run_dir, run_id, location, radius, case_study))
+                new_artifacts.extend(self._write_measurement_artifacts(run_dir, run_id, location, radius, case_study, stage=stage))
             if todo.agent == "cartographer":
-                new_artifacts.extend(self._write_spatial_artifacts(run_dir, run_id, location, radius, manifest["qgis"], case_study))
+                new_artifacts.extend(self._write_spatial_artifacts(run_dir, run_id, location, radius, manifest["qgis"], case_study, stage=stage))
             if todo.agent == "reporter":
                 new_artifacts.append(self._write_report_artifact(run_dir, run_id, task, location, manifest, case_study))
 
@@ -428,7 +443,7 @@ class ObservableUrbanRunner:
         })
         yield {"type": "complete", "run_id": run_id, "summary": manifest, "artifacts": manifest["artifacts"]}
 
-    async def _build_todos(self, task: str, task_type: str, run_id: str, case_study: Optional[LocalCaseStudy] = None) -> list[TodoItem]:
+    async def _build_todos(self, task: str, run_id: str, case_study: Optional[LocalCaseStudy] = None, *, stage: str = "") -> list[TodoItem]:
         if case_study:
             rdma_steps = [
                 ("planner_intent", "PlannerAgent decomposes the heritage-district decision task", "planner", []),
@@ -452,7 +467,7 @@ class ObservableUrbanRunner:
                 for step_id, title, agent, dependencies in rdma_steps
             ]
 
-        payload = {"question": task, "task_type": task_type}
+        payload = {"question": task}
         try:
             planner = PlannerAgent()
             message = AgentMessage(
@@ -546,6 +561,7 @@ class ObservableUrbanRunner:
         }
 
     def _write_case_configuration_artifact(self, run_dir: Path, case_study: LocalCaseStudy) -> ArtifactRecord:
+        policy_caveat = "candidate heritage list needs official verification"
         configuration = {
             "case_study": case_study.public_summary(),
             "urbanagent_workflow": {
@@ -559,7 +575,7 @@ class ObservableUrbanRunner:
                 "quality_controller": {
                     "syntax_valid": True,
                     "resources_available": all(path.exists() for path in case_study.paths.values() if isinstance(path, Path)),
-                    "policy_caveat": "candidate heritage list needs official verification",
+                    "policy_caveat": policy_caveat,
                 },
                 "parameters": case_study.parameters,
             },
@@ -575,9 +591,9 @@ class ObservableUrbanRunner:
             preview={"model": case_study.model_name, "resource_count": len(case_study.data_resources), "qc": configuration["urbanagent_workflow"]["quality_controller"]},
         )
 
-    def _write_measurement_artifacts(self, run_dir: Path, run_id: str, location: str, radius: int, case_study: Optional[LocalCaseStudy] = None) -> list[ArtifactRecord]:
+    def _write_measurement_artifacts(self, run_dir: Path, run_id: str, location: str, radius: int, case_study: Optional[LocalCaseStudy] = None, *, stage: str = "") -> list[ArtifactRecord]:
         if case_study:
-            return self._write_case_measurement_artifacts(run_dir, case_study)
+            return self._write_case_measurement_artifacts(run_dir, case_study, stage=stage)
 
         graph_nodes = {
             "n1": {"connections": ["n2", "n3", "n4"]},
@@ -664,7 +680,7 @@ class ObservableUrbanRunner:
             ),
         ]
 
-    def _write_case_measurement_artifacts(self, run_dir: Path, case_study: LocalCaseStudy) -> list[ArtifactRecord]:
+    def _write_case_measurement_artifacts(self, run_dir: Path, case_study: LocalCaseStudy, *, stage: str = "") -> list[ArtifactRecord]:
         metrics = _read_csv_dicts(case_study.paths["metrics_csv"])
         metric_lookup = {row["metric"]: float(row["value"]) for row in metrics if row.get("value")}
         protected_rows = _read_csv_dicts(case_study.paths["protected_csv"])
@@ -746,9 +762,9 @@ class ObservableUrbanRunner:
             ),
         ]
 
-    def _write_spatial_artifacts(self, run_dir: Path, run_id: str, location: str, radius: int, qgis_status: dict[str, Any], case_study: Optional[LocalCaseStudy] = None) -> list[ArtifactRecord]:
+    def _write_spatial_artifacts(self, run_dir: Path, run_id: str, location: str, radius: int, qgis_status: dict[str, Any], case_study: Optional[LocalCaseStudy] = None, *, stage: str = "") -> list[ArtifactRecord]:
         if case_study:
-            return self._write_case_spatial_artifacts(run_dir, case_study, qgis_status)
+            return self._write_case_spatial_artifacts(run_dir, case_study, qgis_status, stage=stage)
 
         bbox = _synthetic_bbox(radius)
         geojson = _layer_geojson(location, bbox)
@@ -768,6 +784,10 @@ class ObservableUrbanRunner:
         layer_path.write_text(json.dumps(layer_metadata, ensure_ascii=False, indent=2), encoding="utf-8")
         qgis_path = artifacts_dir / "urbanagent_project.qgs"
         qgis_path.write_text(_qgis_project_xml("urban_layers.geojson"), encoding="utf-8")
+        qgis_commands = qgis_commands_for_layer_stack(layer_metadata, geojson_path, title=f"UrbanAgent Live - {location}")
+        qgis_result = QgisBridgeClient(timeout=3.0).send_commands(qgis_commands)
+        qgis_command_path = artifacts_dir / "qgis_live_commands.json"
+        qgis_command_path.write_text(json.dumps({"commands": qgis_commands, "dispatch": qgis_result}, ensure_ascii=False, indent=2), encoding="utf-8")
 
         table_rows = _feature_rows(geojson)
         table_path = artifacts_dir / "feature_fields.csv"
@@ -807,9 +827,17 @@ class ObservableUrbanRunner:
                 mime_type="application/xml",
                 preview={"available": qgis_status.get("available", False), "opens_geojson": "urban_layers.geojson"},
             ),
+            ArtifactRecord(
+                id="qgis_live_commands",
+                type="qgis_live_commands",
+                title="QGIS Live Control Dispatch",
+                path="artifacts/qgis_live_commands.json",
+                mime_type="application/json",
+                preview={"sent": qgis_result.get("sent", False), "queued": len(qgis_result.get("queued", [])), "message": qgis_result.get("message", "")},
+            ),
         ]
 
-    def _write_case_spatial_artifacts(self, run_dir: Path, case_study: LocalCaseStudy, qgis_status: dict[str, Any]) -> list[ArtifactRecord]:
+    def _write_case_spatial_artifacts(self, run_dir: Path, case_study: LocalCaseStudy, qgis_status: dict[str, Any], *, stage: str = "") -> list[ArtifactRecord]:
         geojson = _combined_case_geojson(case_study)
         artifacts_dir = run_dir / "artifacts"
         geojson_path = artifacts_dir / "urban_layers.geojson"
@@ -943,8 +971,8 @@ def _method_for_agent(agent: str) -> str:
         "cognition_worker": "Build dual-space cognition: topological relations plus vector-layer evidence.",
         "quality_controller": "Check schema completeness, resource availability, and policy-grade caveats.",
         "perception": "Gather evidence manifest and establish spatial scope.",
-        "analyst": "Run four-operator measurement preview and inspect spatial assumptions.",
-        "cartographer": "Create GIS layer stack, chart artifacts, table schema, and live QGIS commands.",
+        "analyst": "Run stage-relevant measurements and inspect spatial assumptions.",
+        "cartographer": "Create GIS layer stack, chart artifacts, table schema, and optional live-GIS commands.",
         "reviewer": "Review spatial evidence, uncertainty, scale assumptions, and stakeholder caveats.",
         "reporter": "Synthesize validated findings, caveats, and artifact links.",
     }.get(agent, "Perform assigned urban-analysis step with audit breadcrumbs.")

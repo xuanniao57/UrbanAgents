@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -39,6 +40,26 @@ DEFAULT_WEIGHTS = {
 
 CONFIDENCE_THRESHOLD = 0.75  # recommender acceptance threshold
 MAX_RETRY = 2  # max retries before rejection
+
+ANSWER_LIKE_FIELDS = (
+    "answer",
+    "analysis",
+    "findings",
+    "report",
+    "recommendations",
+    "summary",
+    "llm_analysis",
+    "conclusion",
+)
+
+GENERIC_PLACEHOLDERS = {
+    "general reasoning completed",
+    "processing perception data",
+    "applying general spatial reasoning",
+    "generating response",
+    "rule-based fallback",
+    "llm enrichment skipped",
+}
 
 
 @dataclass
@@ -163,9 +184,17 @@ class QualityController(BaseAgent):
         # Optional LLM-enhanced assessment
         if self.llm_client is not None:
             llm_adjustment = await self._llm_confidence_check(output, task_context)
-            # Blend LLM score with rule-based (70% rule / 30% LLM)
+            # Blend LLM score with rule-based checks. Metadata completeness is
+            # deterministic, so the LLM may raise other confidence signals but
+            # must not down-grade populated required fields.
             for dim in scores:
-                scores[dim] = 0.7 * scores[dim] + 0.3 * llm_adjustment.get(dim, scores[dim])
+                llm_score = llm_adjustment.get(dim)
+                if llm_score is None:
+                    continue
+                if dim in {"metadata_completeness", "historical_reliability"}:
+                    scores[dim] = scores[dim]
+                else:
+                    scores[dim] = 0.75 * scores[dim] + 0.25 * float(llm_score)
 
         # Weighted sum
         confidence = sum(self.weights.get(dim, 0) * scores[dim] for dim in scores)
@@ -229,27 +258,38 @@ class QualityController(BaseAgent):
 
     @staticmethod
     def _score_semantic_relevance(output: Dict, task_context: Dict) -> float:
-        """Rule-based semantic relevance: check task_type alignment and key fields."""
-        task_type = task_context.get("task_type", "")
+        """Rule-based semantic relevance for planner-driven urban analysis outputs."""
         if not output:
             return 0.0
 
         score = 0.5  # base
-        # Check if output contains expected answer fields
-        expected_keys = {
-            "geoqa": ["answer", "analysis"],
-            "population_prediction": ["predicted_population", "answer"],
-            "object_detection": ["detected_objects"],
-            "geolocation": ["predicted_city", "predicted_location"],
-            "mobility_prediction": ["predicted_location", "answer"],
-            "traffic_signal": ["selected_phase", "answer"],
-            "outdoor_navigation": ["route_actions", "answer"],
-            "urban_exploration": ["selected_option", "answer"],
-        }
-        for key in expected_keys.get(task_type, ["answer"]):
-            if key in output or key in output.get("action", {}):
-                score += 0.15
-        return min(1.0, score)
+        output_str = json.dumps(output, ensure_ascii=False, default=str).lower()
+        task_text = json.dumps(task_context, ensure_ascii=False, default=str).lower()
+        expected_markers = [
+            "answer",
+            "analysis",
+            "results",
+            "report",
+            "recommendations",
+            "artifacts",
+            "execution_plan",
+            "subtasks",
+            "confidence",
+            "limitations",
+            "evidence",
+        ]
+        score += min(0.3, 0.075 * sum(1 for marker in expected_markers if marker in output_str))
+        task_terms = [term for term in re.findall(r"[a-z0-9_\-]+|[\u4e00-\u9fff]+", task_text) if len(term) > 1]
+        if task_terms:
+            overlap = sum(1 for term in set(task_terms[:80]) if term in output_str)
+            score += min(0.2, overlap / max(len(set(task_terms[:80])), 1) * 0.4)
+        if QualityController._has_execution_results(output):
+            score += 0.05
+        if not QualityController._extract_answer_like(output):
+            score -= 0.20
+        if QualityController._contains_placeholder(output):
+            score -= 0.20
+        return max(0.0, min(1.0, score))
 
     def _score_historical_reliability(self, agent_role: str) -> float:
         """Historical success rate for this agent role."""
@@ -260,11 +300,24 @@ class QualityController(BaseAgent):
 
     @staticmethod
     def _score_metadata_completeness(output: Dict, task_context: Dict) -> float:
-        """Ratio of populated required fields."""
+        """Ratio of populated required fields, including nested execution results."""
         required = task_context.get("required_fields", ["status", "answer"])
         if not required:
             return 1.0
-        populated = sum(1 for f in required if output.get(f) is not None)
+
+        populated = 0
+        for field in required:
+            if field == "status":
+                value = output.get("status")
+                if value is None and QualityController._has_execution_results(output):
+                    value = "completed"
+                populated += int(QualityController._has_value(value))
+            elif field == "answer":
+                populated += int(bool(QualityController._extract_answer_like(output)))
+            elif field == "results":
+                populated += int(QualityController._has_execution_results(output))
+            else:
+                populated += int(QualityController._has_value(output.get(field)))
         return populated / len(required)
 
     @staticmethod
@@ -313,7 +366,10 @@ class QualityController(BaseAgent):
         """Validate output structure against expected schema."""
         if not isinstance(output, dict):
             return False
-        # Must have at least status or answer
+        # Planner output: must have subtasks or execution_plan
+        if output.get("subtasks") or output.get("execution_order") or output.get("execution_plan"):
+            return True
+        # General task output: must have at least status or answer
         return bool(output.get("status") or output.get("answer") or output.get("results"))
 
     @staticmethod
@@ -349,13 +405,93 @@ class QualityController(BaseAgent):
         issues = []
         if scores.get("semantic_relevance", 1) < 0.5:
             issues.append("Low semantic relevance: output may not address the query")
-        if scores.get("metadata_completeness", 1) < 0.5:
+        if scores.get("metadata_completeness", 1) < 0.75:
             issues.append("Missing required output fields")
+        required = task_context.get("required_fields", [])
+        if "answer" in required and not self._extract_answer_like(output):
+            issues.append("Missing usable answer or analysis")
         if scores.get("context_alignment", 1) < 0.5:
             issues.append("Spatial/temporal context mismatch")
         if scores.get("historical_reliability", 1) < 0.3:
-            issues.append("Agent has low historical reliability for this task type")
+            issues.append("Agent has low historical reliability for this workflow")
         return issues
+
+    @staticmethod
+    def _has_execution_results(output: Dict[str, Any]) -> bool:
+        results = output.get("results", output)
+        if not isinstance(results, dict):
+            return False
+        subtask_results = results.get("subtask_results", {})
+        completed = results.get("completed", 0)
+        return bool(subtask_results) and int(completed or 0) > 0
+
+    @staticmethod
+    def _has_value(value: Any) -> bool:
+        if value is None:
+            return False
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return False
+            lowered = stripped.lower()
+            return not any(marker in lowered for marker in GENERIC_PLACEHOLDERS)
+        if isinstance(value, (list, tuple, set, dict)):
+            return len(value) > 0
+        return True
+
+    @staticmethod
+    def _extract_answer_like(payload: Any, *, _depth: int = 0) -> str:
+        if _depth > 5 or payload is None:
+            return ""
+        if isinstance(payload, str):
+            return payload.strip() if QualityController._has_value(payload) else ""
+        if isinstance(payload, list):
+            for item in payload:
+                found = QualityController._extract_answer_like(item, _depth=_depth + 1)
+                if found:
+                    return found
+            return ""
+        if not isinstance(payload, dict):
+            return ""
+
+        for field in ANSWER_LIKE_FIELDS:
+            value = payload.get(field)
+            if field == "conclusion" and isinstance(value, str):
+                if not QualityController._has_value(value) or len(value.strip()) < 20:
+                    continue
+            if QualityController._has_value(value):
+                if isinstance(value, str):
+                    return value.strip()
+                if isinstance(value, list):
+                    return json.dumps(value, ensure_ascii=False, default=str)
+                if isinstance(value, dict):
+                    nested = QualityController._extract_answer_like(value, _depth=_depth + 1)
+                    if nested:
+                        return nested
+                    return json.dumps(value, ensure_ascii=False, default=str)
+
+        results = payload.get("results")
+        if isinstance(results, dict):
+            found = QualityController._extract_answer_like(results, _depth=_depth + 1)
+            if found:
+                return found
+
+        subtask_results = payload.get("subtask_results")
+        if isinstance(subtask_results, dict):
+            for st_data in subtask_results.values():
+                result = st_data.get("result", st_data) if isinstance(st_data, dict) else st_data
+                found = QualityController._extract_answer_like(result, _depth=_depth + 1)
+                if found:
+                    return found
+        return ""
+
+    @staticmethod
+    def _contains_placeholder(payload: Any) -> bool:
+        try:
+            text = json.dumps(payload, ensure_ascii=False, default=str).lower()
+        except Exception:
+            text = str(payload).lower()
+        return any(marker in text for marker in GENERIC_PLACEHOLDERS)
 
     def _record_history(self, agent_role: str, success: bool):
         if agent_role not in self._success_history:

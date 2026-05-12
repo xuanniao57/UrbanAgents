@@ -9,11 +9,12 @@ def test_task_agent_execute_unknown_task_without_external_services():
     result = asyncio.run(
         agent.execute_task(
             task={"data_type": "text", "text": "Analyze the spatial structure near the Bund."},
-            task_type="unknown",
+            workflow_profile="adaptive_urban_analysis",
             city_data=None,
         )
     )
 
     assert result["status"] == "success"
-    assert result["reasoning"]["task_type"] == "general"
+    assert result["workflow_profile"] == "adaptive_urban_analysis"
+    assert result["reasoning"]["workflow_profile"] == "adaptive_urban_analysis"
     assert result["action"]["action_type"] == "general"

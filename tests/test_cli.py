@@ -1,5 +1,6 @@
 from pathlib import Path
 import asyncio
+import json
 
 import pytest
 
@@ -17,17 +18,27 @@ def test_parser_supports_task_oriented_analyze_command():
 
     assert args.command == "analyze"
     assert args.task == "inspect the district"
-    assert args.task_type is None
+    assert not hasattr(args, "task_type")
 
 
-def test_auto_task_routing_infers_open_ended_urban_exploration():
-    inferred = cli._resolve_task_type(
-        "Compare the street network and public-space accessibility of two historic districts and suggest map layers for a planning brief",
-        None,
-        None,
-    )
+def test_parser_supports_plan_command():
+    parser = cli.build_parser()
 
-    assert inferred == "urban_exploration"
+    args = parser.parse_args(["plan", "--task", "inspect the district", "--output", "plan.json"])
+
+    assert args.command == "plan"
+    assert args.task == "inspect the district"
+    assert args.output == "plan.json"
+
+
+def test_analyze_help_does_not_expose_task_type(capsys):
+    parser = cli.build_parser()
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(["analyze", "--help"])
+
+    help_text = capsys.readouterr().out
+    assert "--task-type" not in help_text
 
 
 def test_create_run_dir_slugifies_label(tmp_path: Path):
@@ -72,8 +83,19 @@ def test_public_help_hides_source_only_case_command():
     assert "doctor" in help_text
     assert "init" in help_text
     assert "config" in help_text
+    assert "plan" in help_text
+    assert "capabilities" in help_text
     assert "shell" in help_text
     assert "case" not in help_text
+
+
+def test_capability_report_supports_progressive_disclosure():
+    report = cli._build_capability_report("walkability accessibility", level=2, limit=4)
+    names = [item["name"] for item in report["items"]]
+
+    assert "network_accessibility" in names
+    capability = next(item for item in report["items"] if item["name"] == "network_accessibility")
+    assert capability["invocation"]["mcp_tool"] == "measure_accessibility"
 
 
 def test_shell_help_hides_task_type_option(capsys):
@@ -86,6 +108,32 @@ def test_shell_help_hides_task_type_option(capsys):
     assert "--task-type" not in help_text
 
 
+def test_shell_command_registry_supports_hermes_style_aliases():
+    assert cli._resolve_shell_command("/help").name == "commands"
+    assert cli._resolve_shell_command("/tools").name == "capabilities"
+    assert cli._resolve_shell_command("/reset").name == "new"
+    assert "/runtime" in cli._shell_command_words()
+
+
+def test_shell_slash_command_detection_does_not_hijack_absolute_paths():
+    assert cli._looks_like_shell_command("/status") is True
+    assert cli._looks_like_shell_command("/commands") is True
+    assert cli._looks_like_shell_command("/Users/me/aoi.geojson please inspect") is False
+
+
+def test_runtime_status_formatter_reports_checkpoint_counts():
+    summary = cli._format_runtime_status({
+        "todo_completed": 2,
+        "todo_total": 3,
+        "checkpoint_count": 4,
+        "blocked_count": 1,
+    })
+
+    assert "2/3 todos" in summary
+    assert "4 checkpoints" in summary
+    assert "1 blocked" in summary
+
+
 def test_build_llm_client_requires_provider_key(monkeypatch):
     monkeypatch.setenv("LLM_PROVIDER", "qwen")
     for key in ("QWEN_API_KEY", "OPENAI_API_KEY", "Deepseek_API_KEY", "DEEPSEEK_API_KEY", "KIMI_API_KEY", "KIMI_CODE_API_KEY"):
@@ -95,6 +143,40 @@ def test_build_llm_client_requires_provider_key(monkeypatch):
         cli._build_llm_client()
 
 
+def test_build_llm_client_prefers_kimi_coding(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "kimi")
+    monkeypatch.setenv("KIMI_CLIENT_TYPE", "auto")
+    monkeypatch.setenv("KIMI_CODE_API_KEY", "dummy-code-key")
+    monkeypatch.delenv("KIMI_API_KEY", raising=False)
+
+    client = cli._build_llm_client()
+
+    assert client.client_type == "coding"
+
+
+def test_build_llm_client_can_force_kimi_standard(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "kimi")
+    monkeypatch.setenv("KIMI_CLIENT_TYPE", "standard")
+    monkeypatch.setenv("KIMI_API_KEY", "dummy-standard-key")
+    monkeypatch.setenv("KIMI_CODE_API_KEY", "dummy-code-key")
+
+    client = cli._build_llm_client()
+
+    assert client.client_type == "standard"
+
+
+def test_build_llm_client_wraps_kimi_auto_fallback(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "kimi")
+    monkeypatch.setenv("KIMI_CLIENT_TYPE", "auto")
+    monkeypatch.setenv("KIMI_CODE_API_KEY", "dummy-code-key")
+    monkeypatch.setenv("KIMI_API_KEY", "dummy-standard-key")
+
+    client = cli._build_llm_client()
+
+    assert client.client_type == "coding"
+    assert client.fallback_client_type == "standard"
+
+
 def test_planner_keeps_task_context_for_all_subtasks():
     planner = PlannerAgent()
     message = AgentMessage(
@@ -102,7 +184,6 @@ def test_planner_keeps_task_context_for_all_subtasks():
         receiver=AgentRole.PLANNER,
         msg_type="plan",
         payload={
-            "task_type": "geoqa",
             "question": "What is the capital of France?",
         },
         trace_id="trace_test",
@@ -112,7 +193,29 @@ def test_planner_keeps_task_context_for_all_subtasks():
     subtasks = result.payload["execution_plan"]["subtasks"]
 
     assert subtasks
-    assert all(item["input_data"].get("task_type") == "geoqa" for item in subtasks)
+    assert all(item["input_data"].get("question") == "What is the capital of France?" for item in subtasks)
+    assert result.payload["execution_plan"]["workflow_profile"] == "adaptive_urban_analysis"
+    assert result.payload["execution_plan"]["capability_context"]["disclosure_policy"] == "progressive"
+
+
+def test_planner_injects_generic_feedback_lessons_for_spatial_validation():
+    planner = PlannerAgent()
+    message = AgentMessage(
+        sender=AgentRole.MANAGER,
+        receiver=AgentRole.PLANNER,
+        msg_type="plan",
+        payload={
+            "question": "Validate an AOI boundary GeoJSON against cached layers, then export GIS overlay layers for review.",
+        },
+        trace_id="trace_feedback",
+    )
+
+    result = asyncio.run(planner.execute(message))
+    lessons = result.payload["execution_plan"]["feedback_context"]["lessons"]
+    lesson_ids = {lesson["lesson_id"] for lesson in lessons}
+
+    assert "source_authority_before_cache" in lesson_ids
+    assert "layered_gis_for_spatial_audit" in lesson_ids
 
 
 def test_manager_restores_subtask_input_data():
@@ -122,14 +225,14 @@ def test_manager_restores_subtask_input_data():
                 "subtask_id": "st0",
                 "objective": "answer question",
                 "assigned_role": "analyst",
-                "input_data": {"task_type": "geoqa", "question": "What is the capital of France?"},
+                "input_data": {"question": "What is the capital of France?"},
                 "dependencies": [],
                 "expected_output": "answer",
             }
         ]
     })
 
-    assert subtasks[0].input_data["task_type"] == "geoqa"
+    assert subtasks[0].input_data["question"] == "What is the capital of France?"
 
 
 def test_preview_plan_shows_multi_agent_roles_for_city_analysis(monkeypatch):
@@ -137,7 +240,6 @@ def test_preview_plan_shows_multi_agent_roles_for_city_analysis(monkeypatch):
 
     plan = asyncio.run(cli._preview_plan(
         "分析宁波老外滩滨水街区的步行可达性、开放空间短板，并提出可视化输出建议",
-        "geoqa",
         None,
         None,
     ))
@@ -147,6 +249,44 @@ def test_preview_plan_shows_multi_agent_roles_for_city_analysis(monkeypatch):
     assert "analyst" in roles
     assert "cartographer" in roles
     assert "reporter" in roles
+
+
+def test_preview_plan_selects_multiple_method_capabilities(monkeypatch):
+    monkeypatch.delenv("URBAN_AGENT_PLAN_LIVE", raising=False)
+
+    plan = asyncio.run(cli._preview_plan(
+        "分析老城区步行可达性、开放空间短板，并用PyTorch训练一个土地利用分类模型",
+        None,
+        None,
+    ))
+    selected = plan["capability_context"]["selected_names"]
+
+    assert plan["complexity"] == "advanced"
+    assert "network_accessibility" in selected
+    assert "urban_ml_modeling" in selected
+
+
+def test_preview_plan_respects_generic_stage_ladder(monkeypatch, tmp_path):
+    monkeypatch.delenv("URBAN_AGENT_PLAN_LIVE", raising=False)
+    task_input = tmp_path / "staged_metric_task.json"
+    task_input.write_text(json.dumps({
+        "stage": "single_district_single_indicator",
+        "data_resources": {
+            "predicted_building_function_poi": "machine-learning-predicted building function POI dataset",
+            "osm_or_osm_cache": "OSM 道路和建筑轮廓数据",
+        },
+    }, ensure_ascii=False), encoding="utf-8")
+
+    plan = asyncio.run(cli._preview_plan(
+        "Use the declared raw data to construct one built-environment indicator for one district before scaling up.",
+        None,
+        str(task_input),
+    ))
+    selected = plan["capability_context"]["selected_names"]
+
+    assert plan["complexity"] == "basic"
+    assert len(plan["subtasks"]) == 4
+    assert "urban_ml_modeling" not in selected
 
 
 def test_planner_does_not_treat_dataset_mentions_as_perception():

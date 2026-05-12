@@ -13,7 +13,9 @@ import math
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from ..core import CorrectionModuleRegistry
+from ..capabilities import CapabilityRegistry, get_default_capability_registry
+from ..feedback_memory import get_default_feedback_memory
+from ..core import CorrectionModuleRegistry, MemoryModule
 from .efficiency import MODEL_PRICING
 from .base import AgentMessage, AgentRole, ExecutionPlan
 from .planner import PlannerAgent
@@ -42,7 +44,7 @@ class MultiAgentOrchestrator:
 
     Usage:
         orchestrator = MultiAgentOrchestrator(llm_client=my_llm)
-        result = await orchestrator.run(task, task_type)
+        result = await orchestrator.run(task)
     """
 
     def __init__(
@@ -59,16 +61,30 @@ class MultiAgentOrchestrator:
         enable_quality_control: bool = True,
         enable_dual_space: bool = True,
         enable_memory: bool = True,
+        disable_capabilities: bool = False,
         # 可选注入已有模块 (向后兼容)
         perception_module: Optional[Any] = None,
         reasoning_module: Optional[Any] = None,
         visualization_module: Optional[Any] = None,
         memory_module: Optional[Any] = None,
         correction_registry: Optional[CorrectionModuleRegistry] = None,
+        capability_registry: Optional[CapabilityRegistry] = None,
+        # Multi-model: separate clients for planner vs execution
+        planner_llm_client: Optional[Any] = None,
     ):
         self.config = config or {}
-        self.memory_module = memory_module if enable_memory else None
+        self.capability_registry = capability_registry or get_default_capability_registry()
         self.correction_registry = correction_registry or CorrectionModuleRegistry()
+
+        # Resolve clients: planner uses deep reasoning, others use fast
+        _planner_client = planner_llm_client or llm_client
+        _exec_client = llm_client
+        self.feedback_memory = get_default_feedback_memory()
+        self.memory_module = (
+            memory_module
+            if memory_module is not None
+            else (MemoryModule(config=self.config.get("memory", {}), llm_client=_exec_client) if enable_memory else None)
+        )
 
         # Feature flags
         self.enable_planning = enable_planning
@@ -76,49 +92,61 @@ class MultiAgentOrchestrator:
         self.enable_quality_control = enable_quality_control
         self.enable_dual_space = enable_dual_space
         self.enable_memory = enable_memory
+        self.disable_capabilities = disable_capabilities
         self.model_name = getattr(llm_client, "model", "default") if llm_client is not None else "default"
+        self.planner_model_name = getattr(_planner_client, "model", self.model_name) if _planner_client is not None else self.model_name
 
         # — Efficiency tracking —
         self._token_log: list[Dict[str, Any]] = []
         self._start_times: Dict[str, float] = {}
 
-        # — Planning Layer —
-        self.planner = PlannerAgent(llm_client=llm_client, config=self.config)
+        # — Planning Layer (deep reasoning) —
+        self.planner = PlannerAgent(
+            llm_client=_planner_client,
+            config=self.config,
+            capability_registry=self.capability_registry,
+            feedback_memory=self.feedback_memory,
+        )
 
         # — Quality Controller (RMDA-style cross-cutting) —
-        self.quality_controller = QualityController(llm_client=llm_client) if enable_quality_control else None
+        self.quality_controller = QualityController(llm_client=_exec_client) if enable_quality_control else None
 
-        # — Execution Layer: Workers —
+        # — Execution Layer: Workers (fast) —
         workers = {
             AgentRole.PERCEPTION: PerceptionWorker(
                 perception_module=perception_module,
-                llm_client=llm_client,
+                llm_client=_exec_client,
             ),
             AgentRole.ANALYST: AnalystWorker(
                 reasoning_module=reasoning_module,
-                llm_client=llm_client,
+                llm_client=_exec_client,
+                capability_registry=self.capability_registry,
+                disable_capabilities=disable_capabilities,
             ),
             AgentRole.CARTOGRAPHER: CartographerWorker(
                 visualization_module=visualization_module,
-                llm_client=llm_client,
+                llm_client=_exec_client,
+                capability_registry=self.capability_registry,
+                disable_capabilities=disable_capabilities,
             ),
-            AgentRole.REPORTER: ReporterWorker(llm_client=llm_client),
+            AgentRole.REPORTER: ReporterWorker(llm_client=_exec_client),
         }
 
-        # — Review Layer —
+        # — Review Layer (fast) —
         reviewers = {
-            AgentRole.SPATIAL_REVIEWER: SpatialReviewerAgent(llm_client=llm_client),
             AgentRole.HUMAN_CHECKPOINT: HumanCheckpointAgent(
                 interaction_mode=interaction_mode,
                 human_callback=human_callback,
             ),
         }
+        if enable_review:
+            reviewers[AgentRole.SPATIAL_REVIEWER] = SpatialReviewerAgent(llm_client=_exec_client, feedback_memory=self.feedback_memory)
 
-        # — Manager —
+        # — Manager (fast) —
         self.manager = ManagerAgent(
             workers=workers,
             reviewers=reviewers,
-            llm_client=llm_client,
+            llm_client=_exec_client,
         )
 
     # ------------------------------------------------------------------
@@ -227,7 +255,6 @@ class MultiAgentOrchestrator:
     async def run(
         self,
         task: Dict[str, Any],
-        task_type: str = "geoqa",
         city_data: Optional[Dict] = None,
     ) -> Dict[str, Any]:
         """
@@ -241,9 +268,8 @@ class MultiAgentOrchestrator:
 
         兼容原 UrbanAgent.execute_task() 参数签名
         """
-        trace_id = f"trace_{task_type}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
+        trace_id = f"trace_urban_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
         task_payload = dict(task)
-        task_payload["task_type"] = task_type
         if city_data:
             task_payload["city_data"] = city_data
 
@@ -277,13 +303,27 @@ class MultiAgentOrchestrator:
             plan_result = await self.planner.execute(plan_msg)
         else:
             # Ablation: skip planner — pass task directly as a single-step plan
+            direct_subtask = {
+                "subtask_id": f"direct_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}",
+                "objective": task_payload.get("question", str(task_payload))[:240],
+                "assigned_role": "analyst",
+                "input_data": task_payload,
+                "dependencies": [],
+                "expected_output": "Direct analyst output without planner decomposition",
+            }
             plan_result = AgentMessage(
                 sender=AgentRole.PLANNER,
                 receiver=AgentRole.MANAGER,
                 msg_type="plan_result",
                 payload={
-                    "execution_plan": {"steps": [{"description": task_payload.get("question", str(task_payload))}]},
-                    "subtasks": [task_payload],
+                    "execution_plan": {
+                        "plan_id": f"direct_plan_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                        "original_task": task_payload,
+                        "complexity": "direct",
+                        "workflow_profile": "planner_ablation_direct_execution",
+                        "subtasks": [direct_subtask],
+                        "execution_order": [direct_subtask["subtask_id"]],
+                    },
                 },
                 trace_id=trace_id,
             )
@@ -330,18 +370,24 @@ class MultiAgentOrchestrator:
                 ),
             })
 
-        # QC gate: validate execution output
+        # QC gate: validate execution output (normalize for completeness check)
+        raw_exec_output = exec_result.payload
+        exec_output_for_qc = dict(raw_exec_output)
+        results = raw_exec_output.get("results", {})
+        # Inject top-level status/answer fields that QC completeness checker expects
+        exec_output_for_qc.setdefault("status", "completed" if results.get("completed", 0) > 0 else "partial")
+        exec_output_for_qc.setdefault("answer", self._extract_answer(results))
         exec_qc_payload = {
             "source_role": "execution",
-            "output": exec_result.payload,
-            "task_context": task_payload,
+            "output": exec_output_for_qc,
+            "task_context": {"required_fields": ["status", "results", "answer"], **task_payload},
             "qc_mode": "recommender",
         }
         self._tick("quality_control_exec")
         exec_passed, exec_qc = await self._qc_check(
             source_role="execution",
-            output=exec_result.payload,
-            task_context=task_payload,
+            output=exec_output_for_qc,
+            task_context=exec_qc_payload["task_context"],
             mode="recommender",
             trace_id=trace_id,
         )
@@ -373,7 +419,6 @@ class MultiAgentOrchestrator:
         results = exec_result.payload.get("results", {})
         return {
             "trace_id": trace_id,
-            "task_type": task_type,
             "status": "success" if results.get("completed", 0) > 0 else "partial",
             "plan": plan_result.payload.get("execution_plan", {}),
             "results": results,
@@ -389,6 +434,8 @@ class MultiAgentOrchestrator:
             "alignment_support": {
                 "correction_modules": self.correction_registry.list_modules(),
                 "memory_snapshot": self.memory_module.inspect_state() if self.memory_module is not None and hasattr(self.memory_module, "inspect_state") else {},
+                "feedback_memory_root": str(self.feedback_memory.memory_store.root),
+                "review_feedback_memory_path": review_memory_path,
             },
             "efficiency": {
                 "plan_latency_s": plan_latency,
@@ -425,6 +472,18 @@ class MultiAgentOrchestrator:
             result = st_data.get("result", {})
             if isinstance(result, dict) and result.get("answer"):
                 return str(result["answer"])
+
+        for st_data in subtask_results.values():
+            if st_data.get("status") != "completed":
+                continue
+            result = st_data.get("result", {})
+            if isinstance(result, dict):
+                for key in ("analysis", "findings", "summary", "llm_analysis"):
+                    value = result.get(key)
+                    if isinstance(value, str) and value.strip():
+                        return value.strip()
+                    if value:
+                        return json.dumps(value, ensure_ascii=False, default=str)
 
         for st_data in subtask_results.values():
             if st_data.get("status") != "completed":

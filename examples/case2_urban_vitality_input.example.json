@@ -1,0 +1,81 @@
+{
+  "case_id": "case2_urban_vitality_example",
+  "task_type": "urban_vitality",
+  "study_area": {
+    "name": "REPLACE_WITH_DISTRICT_OR_CORRIDOR_NAME",
+    "city": "REPLACE_WITH_CITY",
+    "country": "China",
+    "scale": "district_or_corridor"
+  },
+  "data_resources": {
+    "aoi_boundary": {
+      "path": "REPLACE_WITH_LOCAL_PATH/study_area_boundary.geojson",
+      "type": "GeoJSON Polygon",
+      "role": "authoritative_aoi",
+      "preferred_uses": ["metric denominator", "spatial clipping", "map extent"],
+      "known_limits": ["Replace this with boundary provenance and uncertainty."]
+    },
+    "osm_roads": {
+      "path": "",
+      "type": "GeoJSON LineString",
+      "role": "road_network",
+      "fetch_if_missing": true,
+      "fetch_tool": "fetch_osm_overpass",
+      "preferred_uses": ["street connectivity", "road density", "network accessibility"],
+      "known_limits": ["OSM completeness varies by city and road class."]
+    },
+    "osm_buildings": {
+      "path": "",
+      "type": "GeoJSON Polygon",
+      "role": "building_footprints",
+      "fetch_if_missing": true,
+      "fetch_tool": "fetch_osm_overpass",
+      "preferred_uses": ["building density", "building coverage", "built-form proxy"],
+      "known_limits": ["Building footprints do not provide occupancy or opening hours."]
+    },
+    "poi": {
+      "path": "REPLACE_WITH_LOCAL_PATH/poi.geojson",
+      "type": "GeoJSON Point or CSV",
+      "role": "activity_facilities",
+      "preferred_uses": ["facility mix", "amenity density", "functional diversity proxy"],
+      "known_limits": ["POI is a facility supply proxy, not direct observed human activity."]
+    },
+    "streetview_images": {
+      "path": "",
+      "type": "image directory",
+      "role": "street_level_visual_evidence",
+      "preferred_uses": ["street interface proxy", "visual enclosure proxy", "public-realm quality proxy"],
+      "known_limits": ["Visual metrics depend on platform, date, weather, and sampling."]
+    },
+    "human_activity": {
+      "path": "",
+      "type": "optional CSV/GeoJSON",
+      "role": "observed_activity",
+      "preferred_uses": ["visitor density", "temporal vitality", "validation target"],
+      "known_limits": ["Leave empty if no mobile, check-in, pedestrian-count, or review data are available."]
+    }
+  },
+  "input_grounding_policy": {
+    "dataset_cards_required": true,
+    "authoritative_aoi_required": true,
+    "source_coverage_check_required": true,
+    "allow_overpass_repair": true,
+    "allow_proxy_indicators": true,
+    "require_missing_evidence_disclosure": true,
+    "forbidden_claims": [
+      "Do not claim observed human activity from POI-only data.",
+      "Do not claim temporal vitality without timestamped activity data.",
+      "Do not claim causal impact without a study design or comparison group."
+    ],
+    "literature_grounding": "reserved_interface_only"
+  },
+  "expected_outputs": [
+    "dataset_cards",
+    "evidence_manifest",
+    "resource_coverage_table",
+    "direct_proxy_missing_indicator_table",
+    "reviewer_findings",
+    "map_or_geojson_artifacts",
+    "short_case_report"
+  ]
+}

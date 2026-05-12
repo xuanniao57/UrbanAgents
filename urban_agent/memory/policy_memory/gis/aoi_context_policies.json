@@ -1,0 +1,260 @@
+{
+  "records": [
+    {
+      "policy_id": "aoi_centered_context_buffer",
+      "lesson_id": "aoi_centered_context_buffer",
+      "summary": "For spatial analysis, distinguish the authoritative AOI from its context buffer. Use an AOI-centered rectangular context buffer with width and height 3x the AOI bounding box unless the user specifies otherwise, yielding about 9x AOI bounding-box area. Load context layers at buffer scale, while computing AOI indicators on AOI-clipped layers.",
+      "scope": "spatial_diagnostics.context_buffer",
+      "triggers": [
+        "aoi",
+        "boundary",
+        "buffer",
+        "context",
+        "context buffer",
+        "3x",
+        "9x",
+        "roads",
+        "buildings",
+        "poi",
+        "osm"
+      ],
+      "validation_checks": [
+        "Derive the context buffer from the AOI center; width_factor=3 and height_factor=3 unless the user specifies otherwise.",
+        "Keep the AOI centered in the context buffer and report the buffer/AOI bounding-box area ratio.",
+        "Load roads, buildings, POIs, and street-view points to the context buffer, then create separate AOI-clipped analysis layers.",
+        "Label context layers separately from AOI analysis layers in GIS outputs and reports."
+      ],
+      "expected_outputs": [
+        "context_buffer_layer",
+        "context_layer_stack",
+        "aoi_analysis_layers",
+        "buffer_alignment_diagnostics"
+      ],
+      "checks": [
+        {
+          "check_id": "context_buffer_centered",
+          "target": "context_buffer",
+          "metric_path": "context_buffer.centered_on_aoi",
+          "operator": "is_true",
+          "severity": "warning",
+          "score_penalty": 0.12,
+          "message": "context buffer is not centered on the AOI",
+          "repair_action": "rebuild_context_buffer_from_aoi_center"
+        },
+        {
+          "check_id": "context_buffer_soft_min_width",
+          "target": "context_buffer",
+          "metric_path": "context_buffer.width_factor",
+          "operator": ">=",
+          "value": 2.0,
+          "severity": "warning",
+          "score_penalty": 0.08,
+          "message": "context buffer width factor {value} is below configured soft minimum {threshold}",
+          "repair_action": "increase_context_buffer_width"
+        },
+        {
+          "check_id": "context_buffer_soft_min_height",
+          "target": "context_buffer",
+          "metric_path": "context_buffer.height_factor",
+          "operator": ">=",
+          "value": 2.0,
+          "severity": "warning",
+          "score_penalty": 0.08,
+          "message": "context buffer height factor {value} is below configured soft minimum {threshold}",
+          "repair_action": "increase_context_buffer_height"
+        }
+      ]
+    },
+    {
+      "policy_id": "diagnose_source_extent_vs_context_buffer",
+      "lesson_id": "diagnose_source_extent_vs_context_buffer",
+      "summary": "Before treating a context buffer as meaningfully populated, compare source acquisition/query extent with the context buffer extent in the same metric CRS. If acquisition extent is unavailable, fall back to feature bounds and mark that basis. If the evaluated extent covers less than 60% of the buffer width or height, the source data was likely pre-clipped at AOI scale and does not represent the buffer area.",
+      "scope": "spatial_diagnostics.layer_extent",
+      "triggers": [
+        "buffer",
+        "context",
+        "context buffer",
+        "extent",
+        "coverage",
+        "osm",
+        "osm cache",
+        "pre-clipped",
+        "clip",
+        "fetch",
+        "source extent"
+      ],
+      "validation_checks": [
+        "For each source layer, compute acquisition/query extent width and height vs context buffer width and height; when acquisition extent is unavailable, compute feature-bounds coverage and report source_extent_basis.",
+        "When evaluated source extent coverage of the buffer is below 60% in either dimension, flag it as possible pre-clipped source data.",
+        "Report the coverage ratio, recommend buffer-scale OSM re-fetch, and distinguish from genuine AOI misalignment."
+      ],
+      "expected_outputs": [
+        "buffer_source_coverage_ratio",
+        "source_extent_basis",
+        "pre_clipped_source_warnings",
+        "osm_refetch_recommendation"
+      ],
+      "checks": [
+        {
+          "check_id": "source_context_width_coverage",
+          "target": "layers.*",
+          "layer_roles": [
+            "roads",
+            "buildings"
+          ],
+          "metric_path": "source_to_context_width_ratio",
+          "operator": ">=",
+          "value": 0.6,
+          "severity": "warning",
+          "score_penalty": 0.1,
+          "message": "{layer}: source extent covers only {value_pct} of context buffer width; data appears pre-clipped, re-fetch from OSM at buffer scale",
+          "repair_action": "refetch_osm_at_context_buffer"
+        },
+        {
+          "check_id": "source_context_height_coverage",
+          "target": "layers.*",
+          "layer_roles": [
+            "roads",
+            "buildings"
+          ],
+          "metric_path": "source_to_context_height_ratio",
+          "operator": ">=",
+          "value": 0.6,
+          "severity": "warning",
+          "score_penalty": 0.1,
+          "message": "{layer}: source extent covers only {value_pct} of context buffer height; data appears pre-clipped, re-fetch from OSM at buffer scale",
+          "repair_action": "refetch_osm_at_context_buffer"
+        }
+      ]
+    },
+    {
+      "policy_id": "source_authority_before_cache",
+      "lesson_id": "source_authority_before_cache",
+      "summary": "When a task provides authoritative spatial data and derived/cache data, identify the authority first, treat cache layers as secondary evidence, and do not let cache AOIs silently define the analysis scope.",
+      "scope": "data_governance.source_authority",
+      "triggers": [
+        "aoi",
+        "boundary",
+        "boundaries",
+        "geojson",
+        "cache",
+        "authority",
+        "source"
+      ],
+      "validation_checks": [
+        "Record which source is authoritative for the analysis geometry.",
+        "Compare cache geometry with the authoritative geometry before using cache-derived metrics.",
+        "Flag missing, mismatched, or low-overlap cache layers instead of treating them as valid evidence."
+      ],
+      "expected_outputs": [
+        "data_authority_note",
+        "source_alignment_checks",
+        "mismatch_warnings"
+      ],
+      "checks": []
+    },
+    {
+      "policy_id": "layered_gis_for_spatial_audit",
+      "lesson_id": "layered_gis_for_spatial_audit",
+      "summary": "Spatial results should be auditable as layered GIS outputs, with base/context layers, analysis layers, computed result layers, feature counts, styles, and source paths. Computed intermediate values and result metrics should be spatialized into GIS layers whenever they can be tied to an AOI, zone, grid, segment, building, POI, or street-view sample.",
+      "scope": "artifact_review.gis_layers",
+      "triggers": [
+        "gis",
+        "qgis",
+        "map",
+        "layer",
+        "overlay",
+        "visualization",
+        "audit"
+      ],
+      "validation_checks": [
+        "Export vector layers with explicit layer identifiers and source paths.",
+        "Render maps from the same layer stack used for GIS export.",
+        "Clip or label context layers when they extend beyond the authoritative analysis boundary.",
+        "Do not leave computed metrics only in CSV/chart form; add a spatial metric/result layer or explain why the metric is non-spatial."
+      ],
+      "expected_outputs": [
+        "layer_stack",
+        "geojson_layer",
+        "feature_fields",
+        "metric_result_layers",
+        "map_preview"
+      ],
+      "checks": [
+        {
+          "check_id": "metric_spatialization_required",
+          "target": "metric_spatialization",
+          "metric_path": "metric_spatialization.status",
+          "operator": "in",
+          "value": [
+            "spatialized",
+            "not_applicable",
+            "no_numeric_metrics"
+          ],
+          "when_output_contains": "metric_csv",
+          "severity": "warning",
+          "score_penalty": 0.12,
+          "message": "metrics exported as CSV/chart but not spatialized as GIS result layers",
+          "repair_action": "create_spatial_metric_result_layer"
+        }
+      ]
+    },
+    {
+      "policy_id": "aoi_layer_clipping_required",
+      "lesson_id": "aoi_layer_clipping_required",
+      "summary": "Formal GIS outputs must distinguish AOI-clipped analysis layers from broader context layers. Layers with substantial outside-AOI source features must either be clipped for analysis or explicitly labeled as context layers.",
+      "scope": "spatial_diagnostics.layer_clipping",
+      "triggers": [
+        "gis",
+        "aoi",
+        "clip",
+        "clipping",
+        "layer"
+      ],
+      "validation_checks": [
+        "If a formal analysis layer has more than 10% source features outside the AOI, require AOI clipping or context-layer labeling."
+      ],
+      "expected_outputs": [
+        "aoi_analysis_layers",
+        "context_layer_stack",
+        "layer_clipping_diagnostics"
+      ],
+      "checks": [
+        {
+          "check_id": "outside_aoi_without_clipping",
+          "target": "layers.*",
+          "metric_path": "source_outside_aoi_feature_ratio",
+          "operator": "<=",
+          "value": 0.1,
+          "unless_path": "output_clipped_to_aoi",
+          "severity": "warning",
+          "score_penalty": 0.2,
+          "message": "{layer}: {value_pct} features outside AOI without clipping",
+          "repair_action": "clip_analysis_layer_to_aoi"
+        }
+      ]
+    },
+    {
+      "policy_id": "human_feedback_to_rerun_queue",
+      "lesson_id": "human_feedback_to_rerun_queue",
+      "summary": "Human corrections should become persistent memory and concrete rerun instructions instead of remaining only in prose.",
+      "scope": "runtime_revision.feedback",
+      "triggers": [
+        "feedback",
+        "correction",
+        "rerun",
+        "human",
+        "review"
+      ],
+      "validation_checks": [
+        "Persist correction records with affected field, evidence, reviewer, and rerun_required status.",
+        "Separate ready-for-rerun items from items awaiting human evidence."
+      ],
+      "expected_outputs": [
+        "correction_memory",
+        "rerun_queue"
+      ],
+      "checks": []
+    }
+  ]
+}

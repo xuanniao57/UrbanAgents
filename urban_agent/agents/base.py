@@ -75,7 +75,7 @@ class ExecutionPlan:
     plan_id: str
     original_task: Dict[str, Any]
     complexity: str  # "basic", "intermediate", "advanced"
-    task_category: str
+    workflow_profile: str
     subtasks: List[SubTask] = field(default_factory=list)
     execution_order: List[str] = field(default_factory=list)  # ordered subtask_ids
 

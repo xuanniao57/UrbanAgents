@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 class AgentState:
     """智能体状态"""
     task_id: str
-    task_type: str
+    workflow_profile: str
     current_step: int = 0
     perception_data: Dict = field(default_factory=dict)
     reasoning_results: Dict = field(default_factory=dict)
@@ -82,7 +82,7 @@ class UrbanAgent:
     async def execute_task(
         self,
         task: Dict[str, Any],
-        task_type: str,
+        workflow_profile: str = "adaptive_urban_analysis",
         city_data: Optional[Dict] = None
     ) -> Dict[str, Any]:
         """
@@ -90,21 +90,20 @@ class UrbanAgent:
         
         Args:
             task: 任务定义
-            task_type: 任务类型 (population_prediction, object_detection, geolocation, 
-                     geoqa, mobility_prediction, traffic_signal, outdoor_navigation, urban_exploration)
+            workflow_profile: planner/runtime workflow profile label
             city_data: 城市数据
             
         Returns:
             任务执行结果
         """
         task_payload = dict(task)
-        task_payload["task_type"] = task_type
-        task_id = f"{task_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        task_payload["workflow_profile"] = workflow_profile
+        task_id = f"urban_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         
         # 初始化状态
         self.current_state = AgentState(
             task_id=task_id,
-            task_type=task_type
+            workflow_profile=workflow_profile,
         )
         
         logger.info(f"开始执行任务: {task_id}")
@@ -145,7 +144,7 @@ class UrbanAgent:
             
             return {
                 "task_id": task_id,
-                "task_type": task_type,
+                "workflow_profile": workflow_profile,
                 "status": "success",
                 "input_task": task_payload,
                 "perception": perception_result,
@@ -160,7 +159,7 @@ class UrbanAgent:
             self.current_state.status = "error"
             return {
                 "task_id": task_id,
-                "task_type": task_type,
+                "workflow_profile": workflow_profile,
                 "status": "error",
                 "error": str(e)
             }

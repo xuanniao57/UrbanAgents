@@ -66,29 +66,8 @@ class ActionModule:
         Returns:
             行动结果
         """
-        task_type = task.get("task_type", "unknown")
-        
-        logger.info(f"行动模块执行任务类型: {task_type}")
-        
-        # 根据任务类型执行相应行动
-        if task_type == "population_prediction":
-            return await self._action_population(reasoning_result, task)
-        elif task_type == "object_detection":
-            return await self._action_objects(reasoning_result, task)
-        elif task_type == "geolocation":
-            return await self._action_geolocation(reasoning_result, task)
-        elif task_type == "geoqa":
-            return await self._action_geoqa(reasoning_result, task)
-        elif task_type == "mobility_prediction":
-            return await self._action_mobility(reasoning_result, task)
-        elif task_type == "traffic_signal":
-            return await self._action_traffic(reasoning_result, task)
-        elif task_type == "outdoor_navigation":
-            return await self._action_navigation(reasoning_result, task)
-        elif task_type == "urban_exploration":
-            return await self._action_exploration(reasoning_result, task)
-        else:
-            return await self._action_general(reasoning_result, task)
+        logger.info("行动模块使用通用 planner-driven 路径")
+        return await self._action_general(reasoning_result, task)
     
     async def _action_population(
         self,
@@ -147,23 +126,6 @@ class ActionModule:
             "action_type": "geolocation",
             "answer": answer,
             "identified_city": city,
-            "confidence": confidence
-        }
-    
-    async def _action_geoqa(
-        self,
-        reasoning_result: Dict,
-        task: Dict
-    ) -> Dict[str, Any]:
-        """执行地理问答行动"""
-        answer = reasoning_result.get("answer", "")
-        confidence = reasoning_result.get("confidence", 0.65)
-        
-        return {
-            "action_type": "geoqa",
-            "answer": answer,
-            "question": reasoning_result.get("question", ""),
-            "selected_option": reasoning_result.get("selected_option"),
             "confidence": confidence
         }
     
