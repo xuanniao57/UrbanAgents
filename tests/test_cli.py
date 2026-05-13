@@ -7,6 +7,7 @@ import pytest
 from urban_agent import cli
 from urban_agent.agents.base import AgentMessage, AgentRole
 from urban_agent.agents.manager import ManagerAgent
+from urban_agent.agents.main_agent import MainAgent
 from urban_agent.agents.orchestrator import MultiAgentOrchestrator
 from urban_agent.agents.prompt_builder import UrbanAgentPromptBuilder
 from urban_agent.agents.planner import PlannerAgent
@@ -21,7 +22,18 @@ def test_parser_supports_task_oriented_analyze_command():
 
     assert args.command == "analyze"
     assert args.task == "inspect the district"
+    assert args.task_file is None
     assert not hasattr(args, "task_type")
+
+
+def test_parser_supports_task_file_for_analyze_command():
+    parser = cli.build_parser()
+
+    args = parser.parse_args(["analyze", "--task-file", "task.txt"])
+
+    assert args.command == "analyze"
+    assert args.task is None
+    assert args.task_file == "task.txt"
 
 
 def test_parser_supports_plan_command():
@@ -204,6 +216,73 @@ def test_planner_keeps_task_context_for_all_subtasks():
     assert result.payload["execution_plan"]["capability_context"]["disclosure_policy"] == "progressive"
 
 
+def test_main_agent_answers_open_research_question_without_workers():
+    agent = MainAgent()
+    message = AgentMessage(
+        sender=AgentRole.MANAGER,
+        receiver=AgentRole.MAIN,
+        msg_type="interpret",
+        payload={
+            "question": "我希望研究城市活力受到哪些建成环境因素影响",
+            "capability_context": {"level1_cards": [], "selected_names": []},
+            "feedback_context": {"lessons": []},
+            "research_context": {"lessons": []},
+            "memory_context": {},
+        },
+        trace_id="trace_main_direct",
+    )
+
+    result = asyncio.run(agent.execute(message)).payload
+
+    assert result["should_execute"] is False
+    assert result["response_mode"] == "research_design"
+    assert "城市活力" in result["answer"]
+
+
+def test_orchestrator_routes_open_research_question_to_main_agent_directly():
+    orchestrator = MultiAgentOrchestrator(
+        enable_memory=False,
+        enable_review=False,
+        enable_quality_control=False,
+    )
+
+    result = asyncio.run(orchestrator.run({
+        "question": "我希望研究城市活力受到哪些建成环境因素影响",
+    }))
+
+    assert result["status"] == "answered"
+    assert result["quality_control"]["skipped_worker_execution"] is True
+    assert result["plan"]["subtasks"] == []
+    assert result["review"] == {}
+    assert "城市活力" in result["final_answer"]
+
+
+def test_research_memory_retrieves_historic_perception_unit_lesson():
+    from urban_agent.research_memory import select_research_lessons
+
+    result = select_research_lessons(
+        {"question": "我希望研究历史街区风貌与游客历史感认知，小红书数据之后会补充"},
+        limit=5,
+    )
+    lesson_ids = {lesson["lesson_id"] for lesson in result["lessons"]}
+
+    assert "grid_units_for_historic_perception_modeling" in lesson_ids
+
+
+def test_preview_plan_uses_main_agent_for_open_research_question(monkeypatch):
+    monkeypatch.delenv("URBAN_AGENT_PLAN_LIVE", raising=False)
+
+    plan = asyncio.run(cli._preview_plan(
+        "我希望研究历史街区风貌与游客的历史感认知",
+        None,
+        None,
+    ))
+
+    assert plan["complexity"] == "direct"
+    assert plan["subtasks"] == []
+    assert plan["main_decision"]["response_mode"] == "research_design"
+
+
 def test_planner_injects_generic_feedback_lessons_for_spatial_validation():
     planner = PlannerAgent()
     message = AgentMessage(
@@ -379,6 +458,21 @@ def test_default_urban_home_is_project_local_not_windows_profile(monkeypatch, tm
     assert str(get_urban_home()).lower() != str(tmp_path / "localappdata" / "urban-agent").lower()
 
 
+def test_legacy_appdata_runs_dir_is_not_used_as_default(monkeypatch, tmp_path: Path):
+    from urban_agent.config_store import configured_runs_dir
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("URBAN_AGENT_HOME", raising=False)
+    monkeypatch.delenv("URBAN_AGENT_CONFIG_DIR", raising=False)
+    monkeypatch.delenv("URBAN_AGENT_RUNS_DIR", raising=False)
+    local_appdata = tmp_path / "localappdata"
+    monkeypatch.setenv("LOCALAPPDATA", str(local_appdata))
+
+    config = {"runs": {"dir": str(local_appdata / "urban-agent" / "runs")}}
+
+    assert configured_runs_dir(config) == (tmp_path / ".urban-agent" / "runs").resolve()
+
+
 def test_config_yaml_supports_dotted_updates(tmp_path: Path):
     config_path = tmp_path / "config.yaml"
     write_default_config(config_path, force=True)
@@ -430,7 +524,12 @@ def test_prompt_snapshot_hash_is_stable_for_same_session(monkeypatch, tmp_path: 
 
     assert first.prompt_hashes["planner"] == second.prompt_hashes["planner"]
     assert first.project_context_source and first.project_context_source.endswith(".urbanagent.md")
-    assert first.tool_surfaces["planner"] == ["capability_index", "feedback_lessons", "project_context"]
+    assert first.tool_surfaces["planner"] == [
+        "capability_index",
+        "research_design_memory",
+        "feedback_lessons",
+        "project_context",
+    ]
 
 
 def test_prompt_snapshot_reuses_same_session_and_refreshes_new_session(monkeypatch, tmp_path: Path):

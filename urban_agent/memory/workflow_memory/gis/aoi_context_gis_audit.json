@@ -1,6 +1,6 @@
 ﻿{
   "workflow_id": "aoi_context_gis_audit",
-  "summary": "Reusable workflow for AOI-centered formal GIS auditing: discover data, build a context buffer, validate source extent, compute AOI metrics, export GIS layers, and run policy review.",
+  "summary": "Reusable workflow for formal GIS auditing after an authoritative AOI is available: discover data, decide whether a context buffer is needed, validate source extent, compute AOI metrics, export GIS layers, and run policy review. This is not the default path for open-ended research-design questions.",
   "scope": "workflow.gis_audit",
   "triggers": ["aoi", "context", "buffer", "gis", "qgis", "heritage", "历史街区"],
   "steps": [

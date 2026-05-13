@@ -3,7 +3,7 @@
     {
       "policy_id": "aoi_centered_context_buffer",
       "lesson_id": "aoi_centered_context_buffer",
-      "summary": "For spatial analysis, distinguish the authoritative AOI from its context buffer. Use an AOI-centered rectangular context buffer with width and height 3x the AOI bounding box unless the user specifies otherwise, yielding about 9x AOI bounding-box area. Load context layers at buffer scale, while computing AOI indicators on AOI-clipped layers.",
+      "summary": "For formal spatial analysis with a declared study boundary, distinguish the authoritative AOI from any larger context buffer. An AOI-centered rectangular context buffer with width and height around 3x the AOI bounding box is a reusable convention for some case audits, not a universal rule. If no AOI is declared, do not fabricate a formal AOI; degrade to research-design guidance or ask for the boundary before GIS execution. Load context layers at buffer scale, while computing AOI indicators on AOI-clipped layers.",
       "scope": "spatial_diagnostics.context_buffer",
       "triggers": [
         "aoi",
@@ -19,8 +19,9 @@
         "osm"
       ],
       "validation_checks": [
-        "Derive the context buffer from the AOI center; width_factor=3 and height_factor=3 unless the user specifies otherwise.",
-        "Keep the AOI centered in the context buffer and report the buffer/AOI bounding-box area ratio.",
+        "Use a formal context buffer only after an AOI is declared or derived from an authoritative input.",
+        "When a context buffer is needed, derive it from the AOI center; width_factor=3 and height_factor=3 may be used as a configurable convention unless task evidence suggests another scale.",
+        "Keep the AOI centered in the context buffer when that convention is selected and report the buffer/AOI bounding-box area ratio.",
         "Load roads, buildings, POIs, and street-view points to the context buffer, then create separate AOI-clipped analysis layers.",
         "Label context layers separately from AOI analysis layers in GIS outputs and reports."
       ],

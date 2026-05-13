@@ -10,6 +10,7 @@ Architecture:
 """
 
 from .base import BaseAgent, AgentMessage, AgentRole
+from .main_agent import MainAgent
 from .planner import PlannerAgent
 from .manager import ManagerAgent
 from .workers import PerceptionWorker, AnalystWorker, CartographerWorker, ReporterWorker
@@ -22,6 +23,7 @@ __all__ = [
     "BaseAgent",
     "AgentMessage",
     "AgentRole",
+    "MainAgent",
     "PlannerAgent",
     "ManagerAgent",
     "PerceptionWorker",

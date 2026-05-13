@@ -24,7 +24,8 @@ PROJECT_CONTEXT_FILES = (
 )
 
 ROLE_TOOL_SURFACES: dict[str, list[str]] = {
-    "planner": ["capability_index", "feedback_lessons", "project_context"],
+    "main": ["worker_contracts", "capability_index", "research_design_memory", "feedback_lessons", "memory_recall", "project_context"],
+    "planner": ["capability_index", "research_design_memory", "feedback_lessons", "project_context"],
     "manager": ["worker_dispatch", "runtime_ledger", "checkpoint_summary"],
     "perception": ["data_inventory", "osm", "geojson", "remote_sensing", "street_view"],
     "analyst": ["spatial_metrics", "network_analysis", "memory_recall", "capability_invocation"],

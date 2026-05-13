@@ -83,6 +83,7 @@ class FileMemoryStore:
         "workflow": "workflow_memory",
         "experience": "experience_memory",
         "knowledge": "knowledge_memory",
+        "research": "research_memory",
     }
 
     def __init__(self, root: str | Path | None = None):

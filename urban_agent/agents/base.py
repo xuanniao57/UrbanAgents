@@ -12,6 +12,7 @@ Base Agent Protocol — 所有 Agent 的统一接口
 from __future__ import annotations
 
 import logging
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -21,8 +22,57 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 
+DEFAULT_LLM_PROMPT_CHAR_LIMIT = 90000
+
+
+def _compact_text_for_llm(text: str, limit: int) -> str:
+    if limit <= 0 or len(text) <= limit:
+        return text
+    head_len = max(1, int(limit * 0.7))
+    tail_len = max(1, int(limit * 0.2))
+    omitted = len(text) - head_len - tail_len
+    return text[:head_len] + f"\n\n[... {omitted} characters omitted for LLM input budget ...]\n\n" + text[-tail_len:]
+
+
+def _compact_message_content(content: Any, limit: int) -> Any:
+    if isinstance(content, str):
+        return _compact_text_for_llm(content, limit)
+    if isinstance(content, list):
+        remaining = limit
+        compacted = []
+        for part in content:
+            if isinstance(part, dict) and isinstance(part.get("text"), str):
+                item = dict(part)
+                item["text"] = _compact_text_for_llm(item["text"], max(1, remaining))
+                remaining -= len(item["text"])
+                compacted.append(item)
+            else:
+                compacted.append(part)
+        return compacted
+    return content
+
+
+def _compact_messages_for_llm(messages: Any, limit: int) -> Any:
+    if not isinstance(messages, list) or limit <= 0:
+        return messages
+    remaining = limit
+    compacted = []
+    for message in messages:
+        if not isinstance(message, dict):
+            compacted.append(message)
+            continue
+        item = dict(message)
+        content = item.get("content")
+        item["content"] = _compact_message_content(content, max(1, remaining))
+        if isinstance(item["content"], str):
+            remaining -= len(item["content"])
+        compacted.append(item)
+    return compacted
+
+
 class AgentRole(Enum):
     """Agent 角色类型"""
+    MAIN = "main"
     PLANNER = "planner"
     MANAGER = "manager"
     PERCEPTION = "perception"
@@ -135,6 +185,7 @@ class BaseAgent(ABC):
         """调用 LLM 的统一接口"""
         if self.llm_client is None:
             raise RuntimeError(f"{self.role.value} agent: llm_client not configured")
+        prompt_limit = int(os.getenv("URBAN_AGENT_LLM_PROMPT_CHAR_LIMIT", self.config.get("llm_prompt_char_limit", DEFAULT_LLM_PROMPT_CHAR_LIMIT)))
         # 适配不同 LLM 客户端
         if hasattr(self.llm_client, "chat"):
             messages = prompt
@@ -143,8 +194,11 @@ class BaseAgent(ABC):
                 if self.system_prompt:
                     messages.append({"role": "system", "content": self.system_prompt})
                 messages.append({"role": "user", "content": prompt})
+            messages = _compact_messages_for_llm(messages, prompt_limit)
             return await self.llm_client.chat(messages, **kwargs)
         if hasattr(self.llm_client, "generate"):
+            if isinstance(prompt, str):
+                prompt = _compact_text_for_llm(prompt, prompt_limit)
             return await self.llm_client.generate(prompt, **kwargs)
         raise RuntimeError(f"Unsupported LLM client type: {type(self.llm_client)}")
 

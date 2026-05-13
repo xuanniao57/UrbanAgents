@@ -1,0 +1,52 @@
+{
+  "records": [
+    {
+      "lesson_id": "aoi_context_buffer_as_design_cue",
+      "summary": "In many urban spatial studies, keep the formal study area (AOI) separate from a larger surrounding context buffer. Treat the buffer size as a research-design choice tied to the phenomenon and data, not as a universal hard rule. If no AOI is declared, do not fabricate one; answer at the research-design level or ask for the study boundary before formal GIS execution.",
+      "domain": "spatial_research_design",
+      "triggers": ["aoi", "study area", "context buffer", "buffer", "研究范围", "缓冲区", "历史街区", "街区"],
+      "method_hint": "Use AOI-clipped layers for formal indicators; use larger context layers to diagnose surrounding accessibility, network continuity, competing functions, and edge effects.",
+      "caveats": [
+        "A 3x AOI-centered context window can be a useful convention for case auditing, but should remain configurable.",
+        "When the task is only an open research question, discuss AOI/context logic without launching GIS."
+      ],
+      "evidence_scope": "Reusable design memory from prior urban GIS case work."
+    },
+    {
+      "lesson_id": "grid_units_for_historic_perception_modeling",
+      "summary": "For studies linking historic district built environment to tourists' perceived historic sense, consider converting large heterogeneous districts into comparable small spatial units, such as 200m x 200m grids, street segments, or blocks. This increases sample size and helps align built-environment X variables with social-media or survey Y variables.",
+      "domain": "historic_district_perception",
+      "triggers": ["历史街区", "历史感", "游客", "主观感知", "social media", "小红书", "perception", "historic sense"],
+      "method_hint": "Aggregate built-form, function, street-view, POI, heritage, and accessibility indicators by grid/unit; assign posts, images, or perception scores to the same units before modeling.",
+      "caveats": [
+        "Do not run machine learning on only a few district-level observations unless the research question is explicitly qualitative or comparative.",
+        "Test whether 200m grids are appropriate for walking perception, data density, and heritage morphology; compare with street segments or blocks when needed."
+      ],
+      "evidence_scope": "Expert research-design lesson for paper/course case refinement."
+    },
+    {
+      "lesson_id": "social_media_perception_y_alignment",
+      "summary": "When social-media posts are used to represent subjective perception, define the Y variable carefully: sentiment, topic probability, image/text historicity score, check-in intensity, or engagement are different constructs. Spatially and temporally align posts with the built-environment unit and report platform/user bias.",
+      "domain": "social_media_perception_measurement",
+      "triggers": ["小红书", "社交媒体", "评论", "游客感知", "历史感", "sentiment", "topic", "posts"],
+      "method_hint": "Extract perception labels with a transparent coding scheme or model, then aggregate by grid/segment/block with counts, uncertainty, and minimum-sample diagnostics.",
+      "caveats": [
+        "High post density may indicate popularity rather than perceived historicity.",
+        "Tourist posts are biased by route, platform demographics, and photo-worthy locations."
+      ],
+      "evidence_scope": "Reusable measurement caution for perception-oriented urban studies."
+    },
+    {
+      "lesson_id": "paper_gap_variable_verifiability",
+      "summary": "A strong urban-analysis agent should turn a broad city question into verifiable variables, units, data requirements, and testable hypotheses. The gap is not only answering what factors may matter, but helping the researcher make the design measurable and scientifically defensible.",
+      "domain": "research_agent_gap",
+      "triggers": ["research gap", "variable", "可验证", "研究设计", "变量", "假设", "方法", "论文"],
+      "method_hint": "Return candidate X/Y variables, spatial units, data sources, identification risks, and next-step execution options instead of prematurely running a fixed workflow.",
+      "caveats": [
+        "Memories should guide the MainAgent's reasoning but must not override user intent.",
+        "Execution workers should be invoked only after the needed boundary, data, and product requirements are sufficiently clear."
+      ],
+      "evidence_scope": "Project-level design principle for UrbanAgent/Hermes-Urban comparison."
+    }
+  ]
+}

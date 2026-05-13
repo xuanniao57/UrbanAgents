@@ -251,9 +251,25 @@ def write_urban_config(config: Mapping[str, Any], path: Optional[Path] = None) -
     return config_path
 
 
+def _is_legacy_appdata_runs_dir(value: Any) -> bool:
+    if not value:
+        return False
+    local_appdata = os.getenv("LOCALAPPDATA")
+    if not local_appdata:
+        return False
+    try:
+        configured = Path(str(value)).expanduser().resolve()
+        legacy = (Path(local_appdata) / "urban-agent" / "runs").expanduser().resolve()
+    except OSError:
+        return False
+    return configured == legacy
+
+
 def configured_runs_dir(config: Mapping[str, Any]) -> Path:
     runs = config.get("runs", {}) if isinstance(config, Mapping) else {}
     configured = runs.get("dir") if isinstance(runs, Mapping) else None
+    if _is_legacy_appdata_runs_dir(configured):
+        configured = None
     return get_runs_dir(str(configured) if configured else None)
 
 

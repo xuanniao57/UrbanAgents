@@ -16,6 +16,7 @@ from typing import Any, Dict, Optional
 
 from ..capabilities import CapabilityRegistry, get_default_capability_registry
 from ..feedback_memory import get_default_feedback_memory
+from ..research_memory import get_default_research_memory
 
 from .base import (
     AgentMessage,
@@ -44,6 +45,24 @@ def _declared_data_names(task: Optional[Dict[str, Any]]) -> list[str]:
     return ["declared_data_sources"]
 
 
+def _task_without_bulk_context(task: Dict[str, Any]) -> Dict[str, Any]:
+    bulky_keys = {
+        "main_context",
+        "memory_context",
+        "feedback_context",
+        "research_context",
+        "capability_context",
+        "city_data",
+    }
+    compact = {key: value for key, value in task.items() if key not in bulky_keys}
+    for key in ("data_resources", "dataset_cards", "layers"):
+        if key in compact:
+            text = json.dumps(compact[key], ensure_ascii=False, default=str)
+            if len(text) > 4000:
+                compact[key] = {"_truncated": True, "preview": text[:4000]}
+    return compact
+
+
 class PlannerAgent(BaseAgent):
     """
     规划层 Agent
@@ -57,11 +76,13 @@ class PlannerAgent(BaseAgent):
         llm_client: Optional[Any] = None,
         capability_registry: Optional[CapabilityRegistry] = None,
         feedback_memory: Optional[Any] = None,
+        research_memory: Optional[Any] = None,
         **kwargs,
     ):
         super().__init__(role=AgentRole.PLANNER, llm_client=llm_client, **kwargs)
         self.capability_registry = capability_registry or get_default_capability_registry()
         self.feedback_memory = feedback_memory or get_default_feedback_memory()
+        self.research_memory = research_memory or get_default_research_memory()
 
     @property
     def role_prompt(self) -> str:
@@ -80,6 +101,7 @@ class PlannerAgent(BaseAgent):
             "- REPORTER: Result integration, narrative generation, report formatting\n\n"
             "Capabilities are disclosed progressively: use the compact capability cards for planning, "
             "and request full invocation schemas only for selected methods. "
+            "Research-design memories are reusable cues, not mandatory workflow scripts. "
             "Output a structured JSON execution plan."
         )
 
@@ -116,15 +138,29 @@ class PlannerAgent(BaseAgent):
     async def _parse_task(self, task: Dict[str, Any]) -> Dict[str, Any]:
         """Stage 1: 任务解析"""
         task_description = task.get("description", task.get("question", str(task)))
-        capability_context = self.capability_registry.select_for_task(task)
-        feedback_context = self.feedback_memory.select_for_task(task)
+        capability_context = task.get("capability_context") if isinstance(task.get("capability_context"), dict) else None
+        if not capability_context:
+            capability_context = self.capability_registry.select_for_task(task)
+        feedback_context = task.get("feedback_context") if isinstance(task.get("feedback_context"), dict) else None
+        if not feedback_context:
+            feedback_context = self.feedback_memory.select_for_task(task)
+        research_context = task.get("research_context") if isinstance(task.get("research_context"), dict) else None
+        if not research_context:
+            research_context = self.research_memory.select_for_task(task)
+        main_decision = task.get("main_decision") if isinstance(task.get("main_decision"), dict) else {}
 
         # 如果有 LLM，用 LLM 做智能解析
         if self.llm_client is not None:
+            prompt_task = _task_without_bulk_context(task)
+            capability_cards = capability_context.get("level1_cards", []) if isinstance(capability_context, dict) else []
+            feedback_lessons = feedback_context.get("lessons", []) if isinstance(feedback_context, dict) else []
+            research_lessons = research_context.get("lessons", []) if isinstance(research_context, dict) else []
             prompt = (
-                f"--- TASK ---\n{json.dumps(task, ensure_ascii=False, default=str)}\n\n"
-                f"--- CAPABILITY CARDS (LEVEL 1) ---\n{json.dumps(capability_context['level1_cards'], ensure_ascii=False, default=str)}\n\n"
-                f"--- REUSABLE FEEDBACK LESSONS ---\n{json.dumps(feedback_context['lessons'], ensure_ascii=False, default=str)}\n\n"
+                f"--- TASK ---\n{json.dumps(prompt_task, ensure_ascii=False, default=str)}\n\n"
+                f"--- MAIN AGENT DECISION ---\n{json.dumps(main_decision, ensure_ascii=False, default=str)}\n\n"
+                f"--- CAPABILITY CARDS (LEVEL 1) ---\n{json.dumps(capability_cards, ensure_ascii=False, default=str)[:12000]}\n\n"
+                f"--- REUSABLE FEEDBACK LESSONS ---\n{json.dumps(feedback_lessons, ensure_ascii=False, default=str)[:12000]}\n\n"
+                f"--- RESEARCH-DESIGN MEMORY CUES ---\n{json.dumps(research_lessons, ensure_ascii=False, default=str)[:12000]}\n\n"
                 "Analyze this task and output JSON with keys:\n"
                 '  "complexity": "basic"|"intermediate"|"advanced",\n'
                 '  "workflow_profile": a short adaptive workflow label,\n'
@@ -133,8 +169,10 @@ class PlannerAgent(BaseAgent):
                 '  "subtasks": list of objects, each with:\n'
                 '    "objective": task description string,\n'
                 '    "assigned_role": "perception"|"analyst"|"cartographer"|"reporter"\n'
-                'Choose the number of subtasks and their roles based on task complexity.\n'
-                'A typical urban analysis uses 3-5 subtasks: data perception → spatial analysis → cartographic output → report synthesis.\n'
+                'Choose the number of subtasks and their roles based on the MainAgent decision and task complexity.\n'
+                'The MainAgent decision is authoritative: if it narrowed execution to one bounded worker action, do not expand it into a full GIS/report pipeline.\n'
+                'Use research-design memory to improve unit choice, variables, and missing-input handling, but do not treat it as a fixed case script.\n'
+                'Use the smallest worker plan that satisfies the user request.\n'
             )
             try:
                 response = await self.call_llm(prompt)
@@ -150,6 +188,7 @@ class PlannerAgent(BaseAgent):
                 parsed.setdefault("selected_capabilities", capability_context["selected_names"])
                 parsed["capability_context"] = capability_context
                 parsed["feedback_context"] = feedback_context
+                parsed["research_context"] = research_context
                 return parsed
             except Exception:
                 logger.warning("LLM task parsing failed, falling back to rule-based")
@@ -158,6 +197,7 @@ class PlannerAgent(BaseAgent):
         analysis = self._rule_based_parse(task_description, task)
         analysis["capability_context"] = capability_context
         analysis["feedback_context"] = feedback_context
+        analysis["research_context"] = research_context
         analysis.setdefault("selected_capabilities", capability_context["selected_names"])
         return analysis
 
@@ -253,11 +293,14 @@ class PlannerAgent(BaseAgent):
         ]
         capability_context = analysis.get("capability_context", {})
         feedback_context = analysis.get("feedback_context", {})
+        research_context = analysis.get("research_context", {})
         task_with_capabilities = dict(task)
         if capability_context:
             task_with_capabilities["capability_context"] = capability_context
         if feedback_context:
             task_with_capabilities["feedback_context"] = feedback_context
+        if research_context:
+            task_with_capabilities["research_context"] = research_context
 
         subtasks: list[SubTask] = []
         prev_id: Optional[str] = None
@@ -334,6 +377,7 @@ class PlannerAgent(BaseAgent):
             "workflow_profile": plan.workflow_profile,
             "capability_context": plan.original_task.get("capability_context", {}),
             "feedback_context": plan.original_task.get("feedback_context", {}),
+            "research_context": plan.original_task.get("research_context", {}),
             "subtasks": [
                 {
                     "subtask_id": st.subtask_id,

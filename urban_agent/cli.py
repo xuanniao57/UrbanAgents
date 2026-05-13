@@ -22,6 +22,7 @@ import argparse
 import asyncio
 from contextlib import nullcontext
 from dataclasses import dataclass
+import inspect
 import importlib.util
 import json
 import logging
@@ -392,6 +393,37 @@ class _OpenAICompatibleClient:
         return response.choices[0].message.content
 
 
+async def _close_async_resource(resource: Any, seen: Optional[set[int]] = None) -> None:
+    if resource is None:
+        return
+    seen = seen if seen is not None else set()
+    resource_id = id(resource)
+    if resource_id in seen:
+        return
+    seen.add(resource_id)
+
+    for attr in ("aclose", "close"):
+        close = getattr(resource, attr, None)
+        if callable(close):
+            try:
+                result = close()
+                if inspect.isawaitable(result):
+                    await result
+            except Exception as error:
+                logging.getLogger(__name__).debug("Failed to close async resource %s: %s", type(resource), error)
+            break
+
+    inner_client = getattr(resource, "client", None)
+    if inner_client is not None and inner_client is not resource:
+        await _close_async_resource(inner_client, seen)
+
+
+async def _close_llm_clients(*clients: Any) -> None:
+    seen: set[int] = set()
+    for client in clients:
+        await _close_async_resource(client, seen)
+
+
 def _selected_provider() -> str:
     model_config = URBAN_CONFIG.get("model", {}) if isinstance(URBAN_CONFIG, dict) else {}
     default_provider = model_config.get("provider", "qwen") if isinstance(model_config, dict) else "qwen"
@@ -488,7 +520,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     # --- task-oriented commands ---
     p_analyze = subparsers.add_parser("analyze", help="Run an urban analysis task")
-    p_analyze.add_argument("--task", required=True, help="Natural-language task description")
+    p_analyze.add_argument("--task", help="Natural-language task description")
+    p_analyze.add_argument("--task-file", help="UTF-8 text file containing the task description")
     p_analyze.add_argument("--bbox", help="Bounding box: min_lon,min_lat,max_lon,max_lat")
     p_analyze.add_argument("--input", help="Task input JSON file")
     p_analyze.add_argument("--output-dir", default=str(DEFAULT_RUNS_DIR), help="Run artifact root directory")
@@ -500,7 +533,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_analyze.add_argument("--name", help="Optional run name used in output directory naming")
     p_plan = subparsers.add_parser("plan", help="Preview UrbanAgent planner decomposition without executing the task")
-    p_plan.add_argument("--task", required=True, help="Natural-language task description")
+    p_plan.add_argument("--task", help="Natural-language task description")
+    p_plan.add_argument("--task-file", help="UTF-8 text file containing the task description")
     p_plan.add_argument("--bbox", help="Bounding box: min_lon,min_lat,max_lon,max_lat")
     p_plan.add_argument("--input", help="Task input JSON file")
     p_plan.add_argument("--output", help="Optional JSON file for the planner output")
@@ -875,7 +909,7 @@ def _print_run_report(summary: dict[str, Any]) -> None:
         qc_plan = "pass" if qc.get("plan_passed") else "revise"
         qc_exec = "pass" if qc.get("exec_passed") else "revise"
         cards = [
-            _make_value_panel("Status", str(summary["status"]), style="bold green" if summary["status"] == "success" else "bold yellow"),
+            _make_value_panel("Status", str(summary["status"]), style="bold green" if summary["status"] in {"success", "answered"} else "bold yellow"),
             _make_value_panel("Routing", _WORKFLOW_ROUTING_LABEL, style="bold cyan"),
             _make_value_panel("Latency", f"{summary['total_latency_s']:.2f} s" if summary.get("total_latency_s") is not None else "n/a", style="bold white"),
             _make_value_panel("QC", f"plan {qc_plan} | exec {qc_exec}", style="bold magenta" if "revise" in {qc_plan, qc_exec} else "bold green"),
@@ -1189,9 +1223,9 @@ async def _run_pipeline_task(
 
     if show_progress:
         if _rich_ui_enabled():
-            _CONSOLE.print("[bold cyan]PLAN[/] preparing multi-agent runtime (planner=deep-reasoning, exec=flash)")
+            _CONSOLE.print("[bold cyan]PLAN[/] preparing MainAgent runtime (main/planner=deep-reasoning, exec=flash)")
         else:
-            print("[plan] preparing multi-agent runtime (planner=deep, exec=flash)")
+            print("[plan] preparing MainAgent runtime (main/planner=deep, exec=flash)")
     planner_llm_client = _build_planner_llm_client()
     exec_llm_client = _build_exec_llm_client()
     vlm_client = exec_llm_client if hasattr(exec_llm_client, "analyze_image") else None
@@ -1215,16 +1249,19 @@ async def _run_pipeline_task(
     )
     if show_progress:
         if _rich_ui_enabled():
-            _CONSOLE.print("[bold green]EXEC[/] planner -> workers -> reviewer")
+            _CONSOLE.print("[bold green]EXEC[/] main -> planner/workers/reviewer as needed")
         else:
-            print("[execute] planner -> workers -> reviewer")
-    result = await orchestrator.run(task_payload)
+            print("[execute] main -> planner/workers/reviewer as needed")
+    try:
+        result = await orchestrator.run(task_payload)
+    finally:
+        await _close_llm_clients(planner_llm_client, exec_llm_client)
     _write_json(result, run_dir / "result.json")
 
     summary = _build_run_summary(run_dir, result)
     _write_json(summary, run_dir / "summary.json")
-    if summary.get("final_answer_preview"):
-        _write_text(summary["final_answer_preview"], run_dir / "final_answer.txt")
+    if result.get("final_answer"):
+        _write_text(str(result["final_answer"]), run_dir / "final_answer.txt")
 
     return {
         "run_dir": run_dir,
@@ -1235,7 +1272,11 @@ async def _run_pipeline_task(
 
 async def _preview_plan(task_text: str, bbox: Optional[str], input_path: Optional[str]) -> dict[str, Any]:
     from .agents.base import AgentMessage, AgentRole
+    from .agents.main_agent import MainAgent
     from .agents.planner import PlannerAgent
+    from .capabilities import get_default_capability_registry
+    from .feedback_memory import get_default_feedback_memory
+    from .research_memory import get_default_research_memory
 
     task_payload = _build_task_payload(task_text, bbox, input_path)
     llm_client = None
@@ -1244,16 +1285,55 @@ async def _preview_plan(task_text: str, bbox: Optional[str], input_path: Optiona
             llm_client = _build_llm_client()
         except RuntimeError:
             pass
-    planner = PlannerAgent(llm_client=llm_client)
-    message = AgentMessage(
-        sender=AgentRole.MANAGER,
-        receiver=AgentRole.PLANNER,
-        msg_type="plan",
-        payload=task_payload,
-        trace_id=f"preview_{_timestamp()}",
-    )
-    result = await planner.execute(message)
-    return result.payload["execution_plan"]
+    trace_id = f"preview_{_timestamp()}"
+    capability_registry = get_default_capability_registry()
+    feedback_memory = get_default_feedback_memory()
+    research_memory = get_default_research_memory()
+    task_payload["capability_context"] = capability_registry.select_for_task(task_payload)
+    task_payload["feedback_context"] = feedback_memory.select_for_task(task_payload)
+    task_payload["research_context"] = research_memory.select_for_task(task_payload)
+    try:
+        main_agent = MainAgent(llm_client=llm_client)
+        main_result = await main_agent.execute(AgentMessage(
+            sender=AgentRole.MANAGER,
+            receiver=AgentRole.MAIN,
+            msg_type="interpret",
+            payload=task_payload,
+            trace_id=trace_id,
+        ))
+        main_decision = dict(main_result.payload or {})
+        task_payload["main_decision"] = main_decision
+        if not main_decision.get("should_execute"):
+            return {
+                "plan_id": f"main_direct_{_timestamp()}",
+                "original_task": task_payload,
+                "complexity": "direct",
+                "workflow_profile": main_decision.get("response_mode", "chat_advice"),
+                "subtasks": [],
+                "execution_order": [],
+                "main_decision": main_decision,
+                "capability_context": task_payload.get("capability_context", {}),
+                "feedback_context": task_payload.get("feedback_context", {}),
+                "research_context": task_payload.get("research_context", {}),
+            }
+
+        planner = PlannerAgent(
+            llm_client=llm_client,
+            capability_registry=capability_registry,
+            feedback_memory=feedback_memory,
+            research_memory=research_memory,
+        )
+        message = AgentMessage(
+            sender=AgentRole.MANAGER,
+            receiver=AgentRole.PLANNER,
+            msg_type="plan",
+            payload=task_payload,
+            trace_id=trace_id,
+        )
+        result = await planner.execute(message)
+        return result.payload["execution_plan"]
+    finally:
+        await _close_llm_clients(llm_client)
 
 
 def _print_plan(plan: dict[str, Any]) -> None:
@@ -1976,8 +2056,9 @@ async def _cmd_run(args):
 
 
 async def _cmd_analyze(args):
+    task_text = _resolve_task_text_arg(args)
     report = await _run_pipeline_task(
-        task_text=args.task,
+        task_text=task_text,
         bbox=args.bbox,
         input_path=args.input,
         output_dir=args.output_dir,
@@ -2339,8 +2420,19 @@ def _cmd_capabilities(args):
     _print_capability_report(report)
 
 
+def _resolve_task_text_arg(args) -> str:
+    task_text = (getattr(args, "task", None) or "").strip()
+    task_file = getattr(args, "task_file", None)
+    if task_file:
+        task_text = Path(task_file).read_text(encoding="utf-8-sig").strip()
+    if not task_text:
+        raise SystemExit("Provide --task or --task-file.")
+    return task_text
+
+
 def _cmd_plan(args):
-    plan = asyncio.run(_preview_plan(args.task, args.bbox, args.input))
+    task_text = _resolve_task_text_arg(args)
+    plan = asyncio.run(_preview_plan(task_text, args.bbox, args.input))
     if args.output:
         _write_json(plan, args.output)
     _print_plan(plan)

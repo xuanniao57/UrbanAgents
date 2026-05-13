@@ -16,9 +16,11 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ..capabilities import CapabilityRegistry, get_default_capability_registry
 from ..feedback_memory import get_default_feedback_memory
+from ..research_memory import get_default_research_memory
 from ..core import CorrectionModuleRegistry, MemoryModule
 from .efficiency import MODEL_PRICING
 from .base import AgentMessage, AgentRole, ExecutionPlan
+from .main_agent import MainAgent
 from .planner import PlannerAgent
 from .manager import ManagerAgent
 from .workers import (
@@ -71,6 +73,7 @@ class MultiAgentOrchestrator:
         memory_module: Optional[Any] = None,
         correction_registry: Optional[CorrectionModuleRegistry] = None,
         capability_registry: Optional[CapabilityRegistry] = None,
+        research_memory: Optional[Any] = None,
         # Multi-model: separate clients for planner vs execution
         planner_llm_client: Optional[Any] = None,
     ):
@@ -83,6 +86,7 @@ class MultiAgentOrchestrator:
         _planner_client = planner_llm_client or llm_client
         _exec_client = llm_client
         self.feedback_memory = get_default_feedback_memory()
+        self.research_memory = research_memory or get_default_research_memory()
         self.memory_module = (
             memory_module
             if memory_module is not None
@@ -104,11 +108,16 @@ class MultiAgentOrchestrator:
         self._start_times: Dict[str, float] = {}
 
         # — Planning Layer (deep reasoning) —
+        self.main_agent = MainAgent(
+            llm_client=_planner_client,
+            config=self.config,
+        )
         self.planner = PlannerAgent(
             llm_client=_planner_client,
             config=self.config,
             capability_registry=self.capability_registry,
             feedback_memory=self.feedback_memory,
+            research_memory=self.research_memory,
         )
 
         # — Quality Controller (RMDA-style cross-cutting) —
@@ -170,6 +179,7 @@ class MultiAgentOrchestrator:
 
     def _build_prompt_snapshot(self, *, workers: Dict[AgentRole, Any], reviewers: Dict[AgentRole, Any]) -> Any:
         role_prompts: Dict[str, str] = {
+            "main": self.main_agent.role_prompt,
             "planner": self.planner.role_prompt,
             "manager": self.manager.role_prompt,
         }
@@ -197,6 +207,7 @@ class MultiAgentOrchestrator:
 
     def _apply_prompt_snapshot(self, *, workers: Dict[AgentRole, Any], reviewers: Dict[AgentRole, Any]) -> None:
         agents = {
+            "main": self.main_agent,
             "planner": self.planner,
             "manager": self.manager,
         }
@@ -348,9 +359,119 @@ class MultiAgentOrchestrator:
                 logger.warning(f"Memory retrieval failed: {e}")
             memory_retrieve_latency = self._tock("memory_retrieve")
             self._record_efficiency("memory_retrieve", memory_retrieve_latency, task_payload, memory_context)
-        task_payload["memory_context"] = memory_context
+        capability_context = self.capability_registry.select_for_task(task_payload)
+        feedback_context = self.feedback_memory.select_for_task(task_payload)
+        research_context = self.research_memory.select_for_task(task_payload)
+        main_capability_index = _capability_index_for_main(capability_context)
+        main_feedback_index = _feedback_index_for_main(feedback_context)
+        main_research_index = _research_index_for_main(research_context)
+        main_memory_index = _memory_index_for_main(memory_context)
+        task_payload["memory_context"] = main_memory_index
+        task_payload["capability_context"] = main_capability_index
+        task_payload["feedback_context"] = main_feedback_index
+        task_payload["research_context"] = main_research_index
+        task_payload["main_context"] = {
+            "capability_index": main_capability_index,
+            "feedback_index": main_feedback_index,
+            "research_index": main_research_index,
+            "memory_index": main_memory_index,
+        }
+
+        # MainAgent owns task interpretation before planner/workers run.
+        self._tick("main_agent")
+        main_msg = AgentMessage(
+            sender=AgentRole.MANAGER,
+            receiver=AgentRole.MAIN,
+            msg_type="interpret",
+            payload=task_payload,
+            trace_id=trace_id,
+        )
+        main_result = await self.main_agent.execute(main_msg)
+        main_decision = dict(main_result.payload or {})
+        main_latency = self._tock("main_agent")
+        self._record_efficiency("main_agent", main_latency, task_payload, main_decision)
+        task_payload["main_decision"] = main_decision
+
+        if not main_decision.get("should_execute"):
+            total_latency = self._tock("total")
+            answer = str(main_decision.get("answer") or "").strip()
+            self._record_efficiency("total", total_latency, task_payload, main_decision)
+            return {
+                "trace_id": trace_id,
+                "status": "answered",
+                "plan": {
+                    "plan_id": f"main_direct_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                    "complexity": "direct",
+                    "workflow_profile": main_decision.get("response_mode", "chat_advice"),
+                    "subtasks": [],
+                    "execution_order": [],
+                    "main_decision": main_decision,
+                },
+                "results": {
+                    "direct_answer": answer,
+                    "main_decision": main_decision,
+                    "completed": 1 if answer else 0,
+                    "total": 1,
+                    "runtime": {
+                        "profile": "main_agent_direct_response",
+                        "mode": self.manager._checkpoint_mode(),
+                        "todo_completed": 1 if answer else 0,
+                        "todo_total": 1,
+                        "checkpoint_count": 0,
+                        "blocked_count": 0,
+                    },
+                },
+                "final_answer": answer,
+                "review": {},
+                "quality_control": {
+                    "plan_passed": True,
+                    "exec_passed": True,
+                    "main_agent_decision": main_decision,
+                    "skipped_worker_execution": True,
+                },
+                "alignment_support": {
+                    "correction_modules": self.correction_registry.list_modules(),
+                    "memory_snapshot": self.memory_module.inspect_state() if self.memory_module is not None and hasattr(self.memory_module, "inspect_state") else {},
+                    "feedback_memory_root": str(self.feedback_memory.memory_store.root),
+                    "research_memory_root": str(self.research_memory.memory_store.root),
+                    "review_feedback_memory_path": None,
+                },
+                "context_kernel": {
+                    "session_id": self.session_id,
+                    "prompt_snapshot_path": self.prompt_snapshot_path,
+                    "prompt_hashes": self.prompt_snapshot.prompt_hashes,
+                    "tool_surfaces": self.prompt_snapshot.tool_surfaces,
+                    "project_context_source": self.prompt_snapshot.project_context_source,
+                },
+                "efficiency": {
+                    "main_agent_latency_s": main_latency,
+                    "plan_latency_s": 0.0,
+                    "exec_latency_s": 0.0,
+                    "review_latency_s": 0.0,
+                    "quality_control_latency_s": 0.0,
+                    "total_latency_s": total_latency,
+                    "detail": self.get_efficiency_report(),
+                    "summary": self.get_efficiency_summary(),
+                },
+                "ablation_config": {
+                    "planning": self.enable_planning,
+                    "review": self.enable_review,
+                    "quality_control": self.enable_quality_control,
+                    "dual_space": self.enable_dual_space,
+                    "memory": self.enable_memory,
+                },
+            }
 
         # ── Step 2: Planning Layer ──
+        selected_capabilities = main_decision.get("selected_capabilities") or capability_context.get("selected_names", [])
+        task_payload["capability_context"] = _capability_context_for_planner(
+            self.capability_registry,
+            [str(name) for name in selected_capabilities],
+        )
+        task_payload["feedback_context"] = _feedback_context_for_planner(feedback_context)
+        task_payload["research_context"] = _research_context_for_planner(research_context)
+        task_payload["memory_context"] = _memory_index_for_main(memory_context, preview_limit=3000)
+
         self._tick("planning")
         if self.enable_planning:
             plan_msg = AgentMessage(
@@ -480,6 +601,12 @@ class MultiAgentOrchestrator:
         # ── Step 5: Assemble output ──
         results = exec_result.payload.get("results", {})
         review_payload = results.get("review", {})
+        final_status = "success" if results.get("completed", 0) > 0 else "partial"
+        if results.get("completed", 0) > 0 and (
+            exec_passed is False
+            or (isinstance(review_payload, dict) and review_payload and review_payload.get("passed") is False)
+        ):
+            final_status = "needs_revision"
         if self.enable_memory and review_payload:
             try:
                 review_memory_path = self.feedback_memory.store_review_feedback(
@@ -491,7 +618,7 @@ class MultiAgentOrchestrator:
                 logger.warning(f"Review feedback memory update failed: {e}")
         return {
             "trace_id": trace_id,
-            "status": "success" if results.get("completed", 0) > 0 else "partial",
+            "status": final_status,
             "plan": plan_result.payload.get("execution_plan", {}),
             "results": results,
             "final_answer": self._extract_answer(results),
@@ -583,3 +710,113 @@ class MultiAgentOrchestrator:
                     if content:
                         return str(content)
         return ""
+
+
+def _capability_index_for_main(capability_context: Dict[str, Any], *, limit: int = 8) -> Dict[str, Any]:
+    """Expose only capability names and level-0 summaries to MainAgent."""
+    selected_names = list(capability_context.get("selected_names", []) or [])[:limit]
+    level0 = list(capability_context.get("selected_level0", []) or [])[:limit]
+    return {
+        "disclosure_policy": "progressive",
+        "level": 0,
+        "level0_index_size": capability_context.get("level0_index_size"),
+        "selected_names": selected_names,
+        "selected_level0": level0,
+        "note": "MainAgent sees capability summaries only; Planner/Worker may request details for selected names.",
+    }
+
+
+def _capability_context_for_planner(registry: Any, names: List[str], *, limit: int = 8) -> Dict[str, Any]:
+    """Open level-1 cards only for capabilities selected by MainAgent."""
+    clean_names = [name for name in dict.fromkeys(names) if registry.get(name) is not None][:limit]
+    return {
+        "disclosure_policy": "progressive",
+        "level": 1,
+        "selected_names": clean_names,
+        "selected_level0": registry.disclose(clean_names, level=0),
+        "level1_cards": registry.disclose(clean_names, level=1),
+        "note": "Planner receives level-1 cards only for selected capabilities.",
+    }
+
+
+def _feedback_index_for_main(feedback_context: Dict[str, Any], *, limit: int = 6) -> Dict[str, Any]:
+    """Expose memory lesson summaries without workflow/check payloads."""
+    lessons = []
+    for lesson in list(feedback_context.get("lessons", []) or [])[:limit]:
+        if not isinstance(lesson, dict):
+            continue
+        lessons.append({
+            "lesson_id": lesson.get("lesson_id"),
+            "summary": lesson.get("summary"),
+            "triggers": list(lesson.get("triggers", []) or [])[:8],
+            "scope": lesson.get("scope"),
+            "memory_type": lesson.get("memory_type"),
+        })
+    return {
+        "disclosure_policy": "progressive",
+        "selected_count": len(lessons),
+        "memory_root": feedback_context.get("memory_root"),
+        "lessons": lessons,
+        "note": "MainAgent sees memory summaries only; detailed checks/workflow steps stay hidden until execution/review.",
+    }
+
+
+def _feedback_context_for_planner(feedback_context: Dict[str, Any], *, limit: int = 6) -> Dict[str, Any]:
+    """Planner gets concise lessons, not raw memory_pack records."""
+    index = _feedback_index_for_main(feedback_context, limit=limit)
+    index["level"] = "planner_summary"
+    return index
+
+
+def _research_index_for_main(research_context: Dict[str, Any], *, limit: int = 6) -> Dict[str, Any]:
+    """Expose research-design memories as summaries, not as a fixed workflow."""
+    lessons = []
+    for lesson in list(research_context.get("lessons", []) or [])[:limit]:
+        if not isinstance(lesson, dict):
+            continue
+        lessons.append({
+            "lesson_id": lesson.get("lesson_id"),
+            "summary": lesson.get("summary"),
+            "triggers": list(lesson.get("triggers", []) or [])[:8],
+            "domain": lesson.get("domain"),
+            "method_hint": lesson.get("method_hint"),
+            "evidence_scope": lesson.get("evidence_scope"),
+        })
+    return {
+        "disclosure_policy": "progressive",
+        "selected_count": len(lessons),
+        "memory_root": research_context.get("memory_root"),
+        "lessons": lessons,
+        "note": "MainAgent sees research-design cues only; they should guide, not override, user intent.",
+    }
+
+
+def _research_context_for_planner(research_context: Dict[str, Any], *, limit: int = 6) -> Dict[str, Any]:
+    """Planner receives concise research-design lessons plus caveats for selected tasks."""
+    index = _research_index_for_main(research_context, limit=limit)
+    indexed_by_id = {lesson.get("lesson_id"): lesson for lesson in index.get("lessons", []) if isinstance(lesson, dict)}
+    for lesson in list(research_context.get("lessons", []) or [])[:limit]:
+        if not isinstance(lesson, dict):
+            continue
+        target = indexed_by_id.get(lesson.get("lesson_id"))
+        if target is not None:
+            target["caveats"] = list(lesson.get("caveats", []) or [])
+    index["level"] = "planner_summary"
+    return index
+
+
+def _memory_index_for_main(memory_context: Dict[str, Any], *, preview_limit: int = 1500) -> Dict[str, Any]:
+    if not memory_context:
+        return {"disclosure_policy": "progressive", "available": False, "keys": [], "preview": ""}
+    keys = list(memory_context.keys()) if isinstance(memory_context, dict) else []
+    try:
+        preview = json.dumps(memory_context, ensure_ascii=False, default=str)
+    except Exception:
+        preview = str(memory_context)
+    return {
+        "disclosure_policy": "progressive",
+        "available": True,
+        "keys": keys[:20],
+        "preview": preview[:preview_limit],
+        "truncated": len(preview) > preview_limit,
+    }
