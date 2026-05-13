@@ -1,31 +1,22 @@
 """
 Quality Controller Agent — 输出可靠性保障
 
-参考 RMDA 的 QualityController 设计:
-1. 置信度评分 (Confidence Self-Assessment)
-2. 知识增强 RAG 验证 (Knowledge-Enhanced RAG)
-3. 系统透明性 (Transparency)
-
-评估维度 (加权投票):
-- 语义相关性 (w1): 输出与任务描述的对齐度
-- 历史可靠性 (w2): 该工具/agent 在同类任务上的成功率
-- 元数据完整性 (w3): 必填字段的填充率
-- 上下文对齐 (w4): 时空约束的匹配度
-
-置信度阈值和维度权重从 policy memory 加载；controller 只执行评分机制。
+Recommender-mode quality control is reflection-driven: deterministic checks
+provide guardrails, while MemoryReflector judges contextual trustworthiness.
+Configurator-mode validation remains deterministic for syntax/resource/parameter
+constraints.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import math
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from .base import AgentMessage, AgentRole, BaseAgent
-from ..memory_store import FileMemoryStore
+from ..core.memory import MemoryReflector
 
 logger = logging.getLogger(__name__)
 
@@ -57,18 +48,6 @@ GENERIC_PLACEHOLDERS = {
 }
 
 
-def _load_quality_policy() -> Dict[str, Any]:
-    try:
-        store = FileMemoryStore.default()
-        for record in store.records("policy"):
-            payload = record.to_dict()
-            if payload.get("policy_id") == "quality_confidence_policy":
-                return payload
-    except Exception:
-        return {}
-    return {}
-
-
 def _neutral_weights() -> Dict[str, float]:
     value = 1.0 / len(QUALITY_DIMENSIONS)
     return {dimension: value for dimension in QUALITY_DIMENSIONS}
@@ -84,14 +63,15 @@ class QualityReport:
     issues: List[str] = field(default_factory=list)
     recommendation: str = ""  # "accept", "retry", "reject"
     retry_count: int = 0
+    reflection: Dict[str, Any] = field(default_factory=dict)
 
 
 class QualityController(BaseAgent):
     """
     Quality Controller — 跨层输出验证
 
-    RMDA-style 双模式评估:
-    1. Recommender 评估 (加权投票 → 置信度分数)
+    双模式评估:
+    1. Recommender 评估 (MemoryReflector targeted reflection)
     2. Configurator 评估 (三元可执行性检验: 语法 ∧ 资源可用 ∧ 参数约束)
 
     每次评估生成 QualityReport, 不满足阈值则触发重试或拒绝.
@@ -103,13 +83,14 @@ class QualityController(BaseAgent):
         weights: Optional[Dict[str, float]] = None,
         threshold: Optional[float] = None,
         max_retry: Optional[int] = None,
+        reflector: Optional[Any] = None,
         **kwargs,
     ):
         super().__init__(role=AgentRole.QUALITY_CONTROLLER, llm_client=llm_client, **kwargs)
-        policy = _load_quality_policy()
-        self.weights = weights or dict(policy.get("weights") or _neutral_weights())
-        self.threshold = float(threshold if threshold is not None else policy.get("confidence_threshold", 0.0))
-        self.max_retry = int(max_retry if max_retry is not None else policy.get("max_retry", 0))
+        self.weights = weights or _neutral_weights()
+        self.threshold = float(threshold if threshold is not None else 0.5)
+        self.max_retry = int(max_retry if max_retry is not None else 0)
+        self.reflector = reflector or MemoryReflector(llm_client=llm_client)
         # Historical success tracking
         self._success_history: Dict[str, List[bool]] = {}
         self._assessment_log: List[QualityReport] = []
@@ -117,13 +98,13 @@ class QualityController(BaseAgent):
     @property
     def role_prompt(self) -> str:
         return (
-            "You are the Quality Controller Agent. For each upstream agent output you:\n"
-            "1. Score semantic relevance (does it answer the original query?)\n"
-            "2. Check metadata completeness (are required fields populated?)\n"
-            "3. Validate context alignment (spatial/temporal constraints met?)\n"
-            "4. Assess overall confidence.\n\n"
-            "Return a JSON: {\"confidence\": 0.0-1.0, \"issues\": [...], "
-            "\"recommendation\": \"accept|retry|reject\"}"
+            "You are the Quality Controller Agent. For each upstream agent output, "
+            "perform contextual reflection rather than applying a fixed weighted rubric. "
+            "Judge whether the output is trustworthy for this urban-analysis task, "
+            "including data authority, evidence sufficiency, spatial/temporal coverage, "
+            "uncertainty, and user/task alignment. Preserve deterministic schema/resource "
+            "checks for configurator mode. Return JSON with confidence, issues, risks, "
+            "reflection, and recommendation=accept|retry|reject."
         )
 
     # ------------------------------------------------------------------
@@ -157,6 +138,7 @@ class QualityController(BaseAgent):
                 "issues": report.issues,
                 "recommendation": report.recommendation,
                 "dimension_scores": report.dimension_scores,
+                "reflection": report.reflection,
             },
             trace_id=message.trace_id,
         )
@@ -174,59 +156,35 @@ class QualityController(BaseAgent):
         return await self._assess_recommender(agent_role, output, task_context)
 
     # ------------------------------------------------------------------
-    # Recommender assessment (RMDA Eq.1: C(R) = Σ wi · vi(R))
+    # Recommender assessment: targeted reflection, not a weighted rubric
     # ------------------------------------------------------------------
 
     async def _assess_recommender(
         self, agent_role: str, output: Dict, task_context: Dict
     ) -> QualityReport:
-        scores: Dict[str, float] = {}
-
-        # v1: semantic relevance (rule-based + optional LLM)
-        scores["semantic_relevance"] = self._score_semantic_relevance(output, task_context)
-
-        # v2: historical reliability
-        scores["historical_reliability"] = self._score_historical_reliability(agent_role)
-
-        # v3: metadata completeness
-        scores["metadata_completeness"] = self._score_metadata_completeness(output, task_context)
-
-        # v4: context alignment (spatial / temporal)
-        scores["context_alignment"] = self._score_context_alignment(output, task_context)
-
-        # Optional LLM-enhanced assessment
-        if self.llm_client is not None:
-            llm_adjustment = await self._llm_confidence_check(output, task_context)
-            # Blend LLM score with rule-based checks. Metadata completeness is
-            # deterministic, so the LLM may raise other confidence signals but
-            # must not down-grade populated required fields.
-            for dim in scores:
-                llm_score = llm_adjustment.get(dim)
-                if llm_score is None:
-                    continue
-                if dim in {"metadata_completeness", "historical_reliability"}:
-                    scores[dim] = scores[dim]
-                else:
-                    scores[dim] = 0.75 * scores[dim] + 0.25 * float(llm_score)
-
-        # Weighted sum
-        confidence = sum(self.weights.get(dim, 0) * scores[dim] for dim in scores)
-        confidence = max(0.0, min(1.0, confidence))
-
-        passed = confidence >= self.threshold
-        issues = self._collect_issues(scores, output, task_context)
-
-        if not passed and len(issues) == 0:
-            issues.append(f"Confidence {confidence:.3f} below threshold {self.threshold}")
-
-        recommendation = "accept" if passed else "retry"
+        guardrail_scores = {
+            "metadata_completeness": self._score_metadata_completeness(output, task_context),
+            "context_alignment": self._score_context_alignment(output, task_context),
+        }
+        deterministic_issues = self._collect_guardrail_issues(guardrail_scores, output, task_context)
+        reflection = await self.reflector.reflect_quality(
+            agent_role=agent_role,
+            output=output,
+            task_context=task_context,
+            deterministic_issues=deterministic_issues,
+        )
+        confidence = float(reflection.get("confidence", 0.0))
+        recommendation = str(reflection.get("recommendation") or "retry")
+        issues = [str(item) for item in reflection.get("issues", [])]
+        passed = bool(reflection.get("passed")) and recommendation == "accept" and confidence >= self.threshold
         return QualityReport(
             agent_role=agent_role,
             confidence_score=confidence,
             passed=passed,
-            dimension_scores=scores,
+            dimension_scores={**guardrail_scores, "reflection_confidence": confidence},
             issues=issues,
             recommendation=recommendation,
+            reflection=reflection,
         )
 
     # ------------------------------------------------------------------
@@ -349,27 +307,6 @@ class QualityController(BaseAgent):
     # LLM-enhanced confidence check
     # ------------------------------------------------------------------
 
-    async def _llm_confidence_check(self, output: Dict, task_context: Dict) -> Dict[str, float]:
-        """Use LLM to provide additional confidence scoring."""
-        prompt = (
-            f"{self.role_prompt}\n\n"
-            f"Task context: {json.dumps(task_context, ensure_ascii=False, default=str)[:1500]}\n\n"
-            f"Agent output: {json.dumps(output, ensure_ascii=False, default=str)[:2000]}\n\n"
-            "Assess the output quality. Return JSON:\n"
-            '{"semantic_relevance": 0.0-1.0, "metadata_completeness": 0.0-1.0, '
-            '"context_alignment": 0.0-1.0, "historical_reliability": 0.7}'
-        )
-        try:
-            response = await self.call_llm(prompt)
-            # Extract JSON from response
-            start = response.find("{")
-            end = response.rfind("}") + 1
-            if start >= 0 and end > start:
-                return json.loads(response[start:end])
-        except Exception as e:
-            logger.warning(f"LLM confidence check failed: {e}")
-        return {}
-
     # ------------------------------------------------------------------
     # Syntax / resource / constraint checks (configurator path)
     # ------------------------------------------------------------------
@@ -414,10 +351,8 @@ class QualityController(BaseAgent):
     # Helpers
     # ------------------------------------------------------------------
 
-    def _collect_issues(self, scores: Dict[str, float], output: Dict, task_context: Dict) -> List[str]:
+    def _collect_guardrail_issues(self, scores: Dict[str, float], output: Dict, task_context: Dict) -> List[str]:
         issues = []
-        if scores.get("semantic_relevance", 1) < 0.5:
-            issues.append("Low semantic relevance: output may not address the query")
         if scores.get("metadata_completeness", 1) < 0.75:
             issues.append("Missing required output fields")
         required = task_context.get("required_fields", [])
@@ -425,8 +360,8 @@ class QualityController(BaseAgent):
             issues.append("Missing usable answer or analysis")
         if scores.get("context_alignment", 1) < 0.5:
             issues.append("Spatial/temporal context mismatch")
-        if scores.get("historical_reliability", 1) < 0.3:
-            issues.append("Agent has low historical reliability for this workflow")
+        if self._contains_placeholder(output):
+            issues.append("Output contains placeholder text")
         return issues
 
     @staticmethod

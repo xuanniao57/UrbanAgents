@@ -102,6 +102,8 @@ class BaseAgent(ABC):
         self.tools = tools or {}
         self.config = config or {}
         self._message_log: List[AgentMessage] = []
+        self.system_prompt: Optional[str] = None
+        self.tool_surface: List[str] = []
 
     @property
     @abstractmethod
@@ -137,11 +139,21 @@ class BaseAgent(ABC):
         if hasattr(self.llm_client, "chat"):
             messages = prompt
             if isinstance(prompt, str):
-                messages = [{"role": "user", "content": prompt}]
+                messages = []
+                if self.system_prompt:
+                    messages.append({"role": "system", "content": self.system_prompt})
+                messages.append({"role": "user", "content": prompt})
             return await self.llm_client.chat(messages, **kwargs)
         if hasattr(self.llm_client, "generate"):
             return await self.llm_client.generate(prompt, **kwargs)
         raise RuntimeError(f"Unsupported LLM client type: {type(self.llm_client)}")
+
+    def set_prompt_context(self, system_prompt: str, tool_surface: Optional[List[str]] = None) -> None:
+        self.system_prompt = system_prompt
+        self.tool_surface = list(tool_surface or [])
+
+    def stable_role_prompt(self) -> str:
+        return self.system_prompt or self.role_prompt
 
     async def call_tool(self, tool_name: str, **kwargs) -> Any:
         """调用工具的统一接口"""

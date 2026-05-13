@@ -312,6 +312,7 @@ class AnalystWorker(BaseAgent):
         task_data = payload.get("input_data", {})
         dep_results = payload.get("dependency_results", {})
         capability_context = payload.get("capability_context") or task_data.get("capability_context", {})
+        memory_context = payload.get("memory_context") or task_data.get("memory_context", {})
 
         # 合并上游感知数据
         perception_data = {}
@@ -321,7 +322,7 @@ class AnalystWorker(BaseAgent):
 
         if self.reasoning_module is not None:
             result = await self.reasoning_module.infer(
-                perception_data, {}, task_data
+                perception_data, memory_context, task_data
             )
         else:
             result = {
@@ -329,6 +330,7 @@ class AnalystWorker(BaseAgent):
                 "reasoning": "rule-based fallback",
                 "input_summary": list(perception_data.keys()),
                 "candidate_capabilities": capability_context.get("selected_names", []),
+                "memory_context_used": bool(memory_context),
             }
 
         quantitative = self._execute_quantitative_capabilities(task_data, perception_data, capability_context)
@@ -381,6 +383,7 @@ class AnalystWorker(BaseAgent):
                 llm_resp = await self.call_llm(
                     f"You are an urban analyst. Task: {question[:800]}\n"
                     f"Available capabilities: {capability_context.get('selected_names', [])}\n"
+                    f"Relevant memory context:\n{_safe_json(memory_context, 1200)}\n"
                     f"Perception data:\n{_safe_json(perception_data, 1800)}\n\n"
                     "Return strict JSON with keys: answer, analysis, findings, limitations, confidence. "
                     "The answer should state what can be computed from available data, what can only be proxied, "

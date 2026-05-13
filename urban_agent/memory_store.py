@@ -10,7 +10,20 @@ from typing import Any, Iterable
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
-DEFAULT_MEMORY_ROOT = PACKAGE_ROOT / "memory"
+BUILTIN_MEMORY_ROOT = PACKAGE_ROOT / "memory"
+DEFAULT_MEMORY_ROOT = BUILTIN_MEMORY_ROOT
+
+
+def _default_writable_memory_root() -> Path:
+    env_root = os.getenv("URBAN_AGENT_MEMORY_ROOT")
+    if env_root:
+        return Path(env_root).expanduser().resolve()
+    try:
+        from .constants import get_urban_home
+
+        return get_urban_home() / "memory"
+    except Exception:
+        return BUILTIN_MEMORY_ROOT
 
 
 @dataclass(frozen=True)
@@ -73,15 +86,16 @@ class FileMemoryStore:
     }
 
     def __init__(self, root: str | Path | None = None):
-        env_root = os.getenv("URBAN_AGENT_MEMORY_ROOT")
-        self.root = Path(root or env_root or DEFAULT_MEMORY_ROOT)
+        self.root = Path(root).expanduser().resolve() if root is not None else _default_writable_memory_root()
         self.roots = [self.root]
         for raw_root in os.getenv("URBAN_AGENT_EXTRA_MEMORY_ROOTS", "").split(os.pathsep):
             if not raw_root.strip():
                 continue
-            extra_root = Path(raw_root.strip())
+            extra_root = Path(raw_root.strip()).expanduser().resolve()
             if extra_root not in self.roots:
                 self.roots.append(extra_root)
+        if BUILTIN_MEMORY_ROOT not in self.roots:
+            self.roots.append(BUILTIN_MEMORY_ROOT)
 
     @classmethod
     def default(cls) -> "FileMemoryStore":

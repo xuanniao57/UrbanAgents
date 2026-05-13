@@ -29,6 +29,8 @@ import os
 import platform
 import shutil
 import shlex
+import signal
+import subprocess
 import sys
 import uuid
 from datetime import datetime
@@ -61,49 +63,36 @@ except ImportError:
     _pt_prompt = AutoSuggestFromHistory = FileHistory = PromptStyle = WordCompleter = None
     _PROMPT_TOOLKIT_AVAILABLE = False
 
+from .config_store import (
+    DEFAULT_ENV_TEMPLATE,
+    apply_config_to_environment,
+    configured_runs_dir,
+    dump_simple_yaml,
+    get_config_value,
+    parse_config_value,
+    read_urban_config,
+    set_config_value,
+    write_default_config,
+    write_default_env,
+    write_urban_config,
+)
+from .constants import (
+    LEGACY_URBAN_HOME,
+    PACKAGE_ROOT,
+    display_urban_home,
+    ensure_urban_home,
+    get_config_path,
+    get_env_path,
+    get_install_root,
+    get_logs_dir,
+    get_sessions_dir,
+    get_urban_home,
+)
 
-PACKAGE_ROOT = Path(__file__).resolve().parents[1]
-USER_CONFIG_DIR = Path(os.getenv("URBAN_AGENT_CONFIG_DIR", Path.home() / ".urban-agent")).expanduser().resolve()
+USER_CONFIG_DIR = get_urban_home()
 USER_ENV_FILE = USER_CONFIG_DIR / ".env"
-
-DEFAULT_ENV_TEMPLATE = """# UrbanAgent user configuration
-# This file is loaded from any working directory.
-
-LLM_PROVIDER=qwen
-LLM_MODEL=qwen-plus
-
-QWEN_API_KEY=
-QWEN_API_BASE=https://dashscope.aliyuncs.com/compatible-mode/v1
-QWEN_MODEL=qwen-plus
-
-OPENAI_API_KEY=
-OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_MODEL=gpt-4o-mini
-
-DEEPSEEK_API_KEY=
-DEEPSEEK_BASE_URL=https://api.deepseek.com
-DEEPSEEK_MODEL=deepseek-v4-pro
-DEEPSEEK_THINKING=enabled
-DEEPSEEK_REASONING_EFFORT=high
-Deepseek_API_KEY=
-Deepseek_API_BASE=https://api.deepseek.com
-Deepseek_MODEL=deepseek-v4-pro
-DEEPSEEK_REASONER_MODEL=deepseek-reasoner
-# Multi-model routing: planner → deep reasoning, exec → flash
-DEEPSEEK_PLANNER_MODEL=deepseek-v4-pro
-DEEPSEEK_PLANNER_THINKING=enabled
-DEEPSEEK_PLANNER_REASONING_EFFORT=high
-DEEPSEEK_EXEC_MODEL=deepseek-chat
-DEEPSEEK_EXEC_THINKING=disabled
-
-KIMI_API_KEY=
-KIMI_BASE_URL=https://api.moonshot.cn/v1
-KIMI_MODEL=moonshot-v1-auto
-KIMI_CLIENT_TYPE=auto
-KIMI_CODE_API_KEY=
-KIMI_CODE_API_BASE=https://api.kimi.com/coding/v1
-KIMI_CODE_MODEL=kimi-for-coding
-"""
+USER_CONFIG_FILE = get_config_path()
+URBAN_CONFIG = read_urban_config(USER_CONFIG_FILE)
 
 
 def _env_candidates() -> list[Path]:
@@ -112,7 +101,7 @@ def _env_candidates() -> list[Path]:
         return [Path(explicit_env).expanduser().resolve()]
 
     candidates: list[Path] = []
-    override = os.getenv("URBAN_AGENT_HOME")
+    override = os.getenv("URBAN_AGENT_HOME") or os.getenv("URBAN_AGENT_CONFIG_DIR")
     if override:
         candidates.append(Path(override).expanduser().resolve() / ".env")
 
@@ -120,6 +109,9 @@ def _env_candidates() -> list[Path]:
     for candidate in (cwd, *cwd.parents):
         candidates.append(candidate / ".env")
     candidates.append(USER_ENV_FILE)
+    legacy_env = LEGACY_URBAN_HOME.expanduser().resolve() / ".env"
+    if legacy_env != USER_ENV_FILE:
+        candidates.append(legacy_env)
     return candidates
 
 
@@ -131,21 +123,7 @@ def _resolve_env_file() -> Optional[Path]:
 
 
 def _resolve_project_root(env_file: Optional[Path] = None) -> Path:
-    override = os.getenv("URBAN_AGENT_HOME")
-    if override:
-        return Path(override).expanduser().resolve()
-
-    if env_file is not None:
-        if env_file == USER_ENV_FILE:
-            return USER_CONFIG_DIR
-        return env_file.parent.resolve()
-
-    cwd = Path.cwd().resolve()
-    markers = (".env", ".env.example", "pyproject.toml")
-    for candidate in (cwd, *cwd.parents):
-        if any((candidate / marker).exists() for marker in markers):
-            return candidate
-    return cwd
+    return PACKAGE_ROOT
 
 
 def _default_runs_dir(runtime_root: Path) -> Path:
@@ -156,7 +134,7 @@ def _default_runs_dir(runtime_root: Path) -> Path:
 
 ENV_FILE = _resolve_env_file()
 PROJECT_ROOT = _resolve_project_root(ENV_FILE)
-DEFAULT_RUNS_DIR = _default_runs_dir(PROJECT_ROOT)
+DEFAULT_RUNS_DIR = configured_runs_dir(URBAN_CONFIG)
 DEFAULT_CASE_OUTPUT_DIR = PROJECT_ROOT / "artifacts" / "case_studies"
 ENV_TEMPLATE_FILE = PROJECT_ROOT / ".env.example"
 
@@ -415,7 +393,9 @@ class _OpenAICompatibleClient:
 
 
 def _selected_provider() -> str:
-    return os.getenv("LLM_PROVIDER", "qwen").strip().lower() or "qwen"
+    model_config = URBAN_CONFIG.get("model", {}) if isinstance(URBAN_CONFIG, dict) else {}
+    default_provider = model_config.get("provider", "qwen") if isinstance(model_config, dict) else "qwen"
+    return os.getenv("LLM_PROVIDER", str(default_provider)).strip().lower() or "qwen"
 
 
 def _build_kimi_client() -> Any:
@@ -527,13 +507,46 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_doctor = subparsers.add_parser("doctor", help="Check environment, config, and provider status")
     p_doctor.add_argument("--json", action="store_true", help="Print JSON report")
+    p_doctor.add_argument("--fix", action="store_true", help="Create missing runtime directories and default templates")
 
     p_init = subparsers.add_parser("init", help="Initialize user-level UrbanAgent config")
     p_init.add_argument("--from-env", help="Copy config from an existing .env file")
     p_init.add_argument("--force", action="store_true", help="Overwrite existing user-level config")
 
+    p_setup = subparsers.add_parser("setup", help="Run first-time configuration wizard")
+    p_setup.add_argument("--non-interactive", action="store_true", help="Write defaults and apply explicit options without prompts")
+    p_setup.add_argument("--provider", choices=sorted(PROVIDER_KEY_MAP), help="Default model provider")
+    p_setup.add_argument("--model", help="Default model name")
+    p_setup.add_argument("--runs-dir", help="Default run artifact directory")
+    p_setup.add_argument("--api-key", help="API key for the selected provider")
+    p_setup.add_argument("--force", action="store_true", help="Overwrite existing config.yaml and .env templates")
+
     p_config = subparsers.add_parser("config", help="Show config paths and provider status")
     p_config.add_argument("--json", action="store_true", help="Print JSON report")
+    config_subparsers = p_config.add_subparsers(dest="config_command")
+    p_config_get = config_subparsers.add_parser("get", help="Read a config.yaml value")
+    p_config_get.add_argument("key", help="Dotted key, for example model.default")
+    p_config_set = config_subparsers.add_parser("set", help="Set a config.yaml value")
+    p_config_set.add_argument("key", help="Dotted key, for example model.default")
+    p_config_set.add_argument("value", help="Scalar value")
+
+    p_serve = subparsers.add_parser("serve", help="Start the UrbanAgent Web/API server")
+    p_serve.add_argument("--host", default=None, help="Bind host")
+    p_serve.add_argument("--port", type=int, default=None, help="Bind port")
+    p_serve.add_argument("--reload", action="store_true", help="Enable uvicorn reload")
+
+    p_service = subparsers.add_parser("service", help="Service lifecycle helper")
+    p_service.add_argument("action", choices=["install", "start", "stop", "status"], help="Service action")
+
+    p_update = subparsers.add_parser("update", help="Update a git-based UrbanAgent install")
+    p_update.add_argument("--dir", default=None, help="Installation directory; defaults to detected git checkout or URBAN_AGENT_INSTALL_DIR")
+    p_update.add_argument("--skip-install", action="store_true", help="Only pull code; skip pip install -e")
+    p_update.add_argument("--dry-run", action="store_true", help="Print planned commands")
+
+    p_uninstall = subparsers.add_parser("uninstall", help="Remove launch metadata or a managed install")
+    p_uninstall.add_argument("--dir", default=None, help="Installation directory to remove")
+    p_uninstall.add_argument("--full", action="store_true", help="Also remove URBAN_AGENT_HOME data")
+    p_uninstall.add_argument("--yes", action="store_true", help="Confirm deletion")
 
     p_caps = subparsers.add_parser("capabilities", help="List or expand method-level capabilities")
     p_caps.add_argument("--query", help="Search by task, method, backend, or domain term")
@@ -615,10 +628,11 @@ def _load_project_env() -> None:
     try:
         from dotenv import load_dotenv
     except ImportError:
-        return
+        load_dotenv = None
 
-    if ENV_FILE and ENV_FILE.exists():
+    if load_dotenv and ENV_FILE and ENV_FILE.exists():
         load_dotenv(ENV_FILE, override=False)
+    apply_config_to_environment(read_urban_config(USER_CONFIG_FILE))
 
 
 def _configure_cli_logging() -> None:
@@ -630,17 +644,18 @@ def _configure_cli_logging() -> None:
 
 
 def _write_default_user_config(source_env: Optional[str] = None, force: bool = False) -> Path:
+    ensure_urban_home()
     USER_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    if USER_ENV_FILE.exists() and not force:
-        return USER_ENV_FILE
 
     if source_env:
         source = Path(source_env).expanduser().resolve()
         if not source.exists():
             raise FileNotFoundError(f"source .env not found: {source}")
-        shutil.copyfile(source, USER_ENV_FILE)
+        if force or not USER_ENV_FILE.exists():
+            shutil.copyfile(source, USER_ENV_FILE)
     else:
-        USER_ENV_FILE.write_text(DEFAULT_ENV_TEMPLATE, encoding="utf-8")
+        write_default_env(USER_ENV_FILE, force=force)
+    write_default_config(USER_CONFIG_FILE, force=force)
     return USER_ENV_FILE
 
 
@@ -992,13 +1007,15 @@ def _provider_status(provider_name: str) -> dict[str, Any]:
 
 
 def _build_doctor_report() -> dict[str, Any]:
-    selected_provider = os.getenv("LLM_PROVIDER", "qwen").strip().lower() or "qwen"
+    selected_provider = _selected_provider()
     providers = {name: _provider_status(name) for name in PROVIDER_KEY_MAP}
     configured_providers = [name for name, status in providers.items() if status["configured"]]
     warnings = []
 
     if ENV_FILE is None or not ENV_FILE.exists():
         warnings.append(f"no .env file found; run 'urban-agent init' or create {USER_ENV_FILE}")
+    if not USER_CONFIG_FILE.exists():
+        warnings.append(f"no config.yaml found; run 'urban-agent setup' or create {USER_CONFIG_FILE}")
     if not configured_providers:
         warnings.append("no provider API key detected in environment")
     if selected_provider not in providers:
@@ -1008,10 +1025,13 @@ def _build_doctor_report() -> dict[str, Any]:
 
     return {
         "project_root": str(PROJECT_ROOT),
+        "install_root": str(get_install_root()),
+        "urban_home": str(USER_CONFIG_DIR),
         "cwd": str(Path.cwd()),
         "config": {
             "user_config_dir": str(USER_CONFIG_DIR),
             "user_env_file": str(USER_ENV_FILE),
+            "user_config_file": str(USER_CONFIG_FILE),
             "active_env_file": str(ENV_FILE) if ENV_FILE else None,
             "env_candidates": [str(item) for item in _env_candidates()],
         },
@@ -1021,6 +1041,7 @@ def _build_doctor_report() -> dict[str, Any]:
         },
         "environment": {
             ".env_exists": bool(ENV_FILE and ENV_FILE.exists()),
+            "config_yaml_exists": USER_CONFIG_FILE.exists(),
             ".env_example_exists": ENV_TEMPLATE_FILE.exists(),
             "selected_provider": selected_provider,
             "configured_providers": configured_providers,
@@ -1028,8 +1049,26 @@ def _build_doctor_report() -> dict[str, Any]:
         },
         "paths": {
             "default_runs_dir": str(DEFAULT_RUNS_DIR),
+            "sessions_dir": str(get_sessions_dir()),
+            "logs_dir": str(get_logs_dir()),
         },
         "warnings": warnings,
+    }
+
+
+def _doctor_fix() -> dict[str, Any]:
+    ensure_urban_home()
+    env_existed = USER_ENV_FILE.exists()
+    config_existed = USER_CONFIG_FILE.exists()
+    write_default_env(USER_ENV_FILE, force=False)
+    write_default_config(USER_CONFIG_FILE, force=False)
+    return {
+        "urban_home": str(USER_CONFIG_DIR),
+        "env": "kept" if env_existed else "created",
+        "config": "kept" if config_existed else "created",
+        "runs_dir": str(DEFAULT_RUNS_DIR),
+        "sessions_dir": str(get_sessions_dir()),
+        "logs_dir": str(get_logs_dir()),
     }
 
 
@@ -1046,8 +1085,11 @@ def _print_doctor_report(report: dict[str, Any]) -> None:
             "UrbanAgent Doctor",
             [
                 ("Runtime root", _truncate_middle(report["project_root"])),
+                ("Urban home", _truncate_middle(report["urban_home"])),
+                ("Install root", _truncate_middle(report["install_root"])),
                 ("Working dir", _truncate_middle(report["cwd"])),
                 ("Config file", _truncate_middle(report["config"]["active_env_file"] or "not found")),
+                ("Config YAML", _truncate_middle(report["config"]["user_config_file"])),
                 ("User config", _truncate_middle(report["config"]["user_config_dir"])),
                 ("Executable", _truncate_middle(report["python"]["executable"])),
             ],
@@ -1065,8 +1107,11 @@ def _print_doctor_report(report: dict[str, Any]) -> None:
 
     _print_section("UrbanAgent Doctor")
     print(f"Runtime root         {report['project_root']}")
+    print(f"Urban home           {report['urban_home']}")
+    print(f"Install root         {report['install_root']}")
     print(f"Working directory    {report['cwd']}")
     print(f"Config file          {report['config']['active_env_file'] or 'not found'}")
+    print(f"Config YAML          {report['config']['user_config_file']}")
     print(f"User config dir      {report['config']['user_config_dir']}")
     print(f"Python               {report['python']['version']} ({report['python']['executable']})")
     print(f"Selected provider    {env['selected_provider']}")
@@ -1118,6 +1163,7 @@ async def _run_pipeline_task(
     output_dir: str,
     interaction_mode: str,
     run_name: Optional[str] = None,
+    session_id: Optional[str] = None,
     show_progress: bool = False,
 ) -> dict[str, Any]:
     from .agents.orchestrator import MultiAgentOrchestrator
@@ -1125,6 +1171,7 @@ async def _run_pipeline_task(
 
     task_payload = _build_task_payload(task_text, bbox, input_path)
     run_dir = _create_run_dir(Path(output_dir), run_name or task_text)
+    stable_session_id = session_id or run_dir.name
     artifact_dir = run_dir / "artifacts"
     artifact_dir.mkdir(parents=True, exist_ok=True)
     task_payload["artifact_dir"] = str(artifact_dir)
@@ -1150,6 +1197,7 @@ async def _run_pipeline_task(
     vlm_client = exec_llm_client if hasattr(exec_llm_client, "analyze_image") else None
     perception_module = PerceptionModule(llm_client=exec_llm_client, vlm_client=vlm_client)
     reasoning_module = ReasoningModule(llm_client=exec_llm_client)
+    prompt_snapshot_path = get_sessions_dir() / stable_session_id / "prompt_snapshot.json" if session_id else run_dir / "prompt_snapshot.json"
 
     orchestrator = MultiAgentOrchestrator(
         llm_client=exec_llm_client,
@@ -1158,6 +1206,12 @@ async def _run_pipeline_task(
         interaction_mode=interaction_mode,
         perception_module=perception_module,
         reasoning_module=reasoning_module,
+        config={
+            **read_urban_config(USER_CONFIG_FILE),
+            "session_id": stable_session_id,
+            "prompt_snapshot_path": str(prompt_snapshot_path),
+            "project_root": str(Path.cwd()),
+        },
     )
     if show_progress:
         if _rich_ui_enabled():
@@ -1325,6 +1379,7 @@ class UrbanAgentShell:
                         input_path=self.input_path,
                         output_dir=self.output_dir,
                         interaction_mode=self.interaction_mode,
+                        session_id=self.session_id,
                         show_progress=True,
                     )
                 )
@@ -1943,10 +1998,19 @@ async def _cmd_case(args):
 
 
 def _cmd_doctor(args):
+    fix_report = None
+    if getattr(args, "fix", False):
+        fix_report = _doctor_fix()
     report = _build_doctor_report()
     if args.json:
+        if fix_report:
+            report["fix"] = fix_report
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return
+    if fix_report:
+        _print_section("UrbanAgent Doctor Fix")
+        for key, value in fix_report.items():
+            print(f"{key:<14} {value}")
     _print_doctor_report(report)
 
 
@@ -1956,18 +2020,115 @@ def _cmd_init(args):
         _CONSOLE.print(_make_key_value_panel(
             "UrbanAgent Init",
             [
-                ("User config", _truncate_middle(str(path))),
+                ("API keys", _truncate_middle(str(path))),
+                ("Config YAML", _truncate_middle(str(USER_CONFIG_FILE))),
                 ("Provider", _selected_provider()),
             ],
         ))
-        _CONSOLE.print(_make_caption_panel("Edit this file to change provider, model, or API keys.", title="Next Step"))
+        _CONSOLE.print(_make_caption_panel("Edit .env for API keys and config.yaml for model/runtime defaults.", title="Next Step"))
         return
     _print_section("UrbanAgent Init")
-    print(f"User config written to {path}")
-    print("Edit this file to change provider, model, or API keys.")
+    print(f"API keys written to {path}")
+    print(f"Config YAML written to {USER_CONFIG_FILE}")
+    print("Edit .env for API keys and config.yaml for model/runtime defaults.")
+
+
+def _prompt_default(label: str, current: str, *, choices: Optional[Sequence[str]] = None) -> str:
+    choices_text = f" ({'/'.join(choices)})" if choices else ""
+    reply = input(f"{label}{choices_text} [{current}]: ").strip()
+    if not reply:
+        return current
+    if choices and reply not in choices:
+        print(f"Unsupported value: {reply}; keeping {current}")
+        return current
+    return reply
+
+
+def _provider_key_name(provider: str) -> str:
+    return {
+        "qwen": "QWEN_API_KEY",
+        "openai": "OPENAI_API_KEY",
+        "deepseek": "DEEPSEEK_API_KEY",
+        "kimi": "KIMI_CODE_API_KEY",
+    }.get(provider, f"{provider.upper()}_API_KEY")
+
+
+def _write_env_key(env_path: Path, key_name: str, value: str) -> None:
+    lines = env_path.read_text(encoding="utf-8").splitlines() if env_path.exists() else []
+    updated = False
+    new_lines = []
+    for line in lines:
+        if line.startswith(f"{key_name}="):
+            new_lines.append(f"{key_name}={value}")
+            updated = True
+        else:
+            new_lines.append(line)
+    if not updated:
+        new_lines.append(f"{key_name}={value}")
+    env_path.write_text("\n".join(new_lines).rstrip() + "\n", encoding="utf-8")
+
+
+def _cmd_setup(args):
+    _write_default_user_config(force=args.force)
+    config = read_urban_config(USER_CONFIG_FILE)
+    model_config = config.get("model", {}) if isinstance(config, dict) else {}
+    current_provider = str(model_config.get("provider", "qwen")) if isinstance(model_config, dict) else "qwen"
+    current_model = str(model_config.get("default", "qwen-plus")) if isinstance(model_config, dict) else "qwen-plus"
+    provider = args.provider or current_provider
+    model_name = args.model or current_model
+    runs_dir = args.runs_dir or str(configured_runs_dir(config))
+
+    interactive = not args.non_interactive and sys.stdin.isatty()
+    if interactive:
+        provider = _prompt_default("Model provider", provider, choices=tuple(sorted(PROVIDER_KEY_MAP)))
+        model_name = _prompt_default("Default model", model_name)
+        runs_dir = _prompt_default("Runs directory", runs_dir)
+
+    set_config_value(config, "model.provider", provider)
+    set_config_value(config, "model.default", model_name)
+    set_config_value(config, f"model.providers.{provider}.model", model_name)
+    set_config_value(config, "runs.dir", runs_dir)
+    write_urban_config(config, USER_CONFIG_FILE)
+
+    api_key = args.api_key
+    key_name = _provider_key_name(provider)
+    if interactive and not api_key and not os.getenv(key_name):
+        import getpass
+
+        api_key = getpass.getpass(f"{key_name} (leave blank to skip): ").strip()
+    if api_key:
+        _write_env_key(USER_ENV_FILE, key_name, api_key)
+
+    apply_config_to_environment(config)
+    _print_section("UrbanAgent Setup")
+    print(f"Urban home   {USER_CONFIG_DIR}")
+    print(f"API keys     {USER_ENV_FILE}")
+    print(f"Config YAML  {USER_CONFIG_FILE}")
+    print(f"Provider     {provider}")
+    print(f"Model        {model_name}")
+    print(f"Runs dir     {runs_dir}")
 
 
 def _cmd_config(args):
+    if getattr(args, "config_command", None) == "get":
+        config = read_urban_config(USER_CONFIG_FILE)
+        try:
+            value = get_config_value(config, args.key)
+        except KeyError:
+            print(f"Config key not found: {args.key}", file=sys.stderr)
+            return 2
+        if isinstance(value, dict):
+            print(dump_simple_yaml(value).rstrip())
+        else:
+            print(value)
+        return 0
+    if getattr(args, "config_command", None) == "set":
+        config = read_urban_config(USER_CONFIG_FILE)
+        set_config_value(config, args.key, parse_config_value(args.value))
+        write_urban_config(config, USER_CONFIG_FILE)
+        print(f"Set {args.key} = {args.value}")
+        return 0
+
     report = _build_doctor_report()
     if args.json:
         print(json.dumps(report["config"], ensure_ascii=False, indent=2))
@@ -1978,6 +2139,7 @@ def _cmd_config(args):
             [
                 ("Active env", _truncate_middle(report["config"]["active_env_file"] or "not found")),
                 ("User env", _truncate_middle(report["config"]["user_env_file"])),
+                ("Config YAML", _truncate_middle(report["config"]["user_config_file"])),
                 ("Config dir", _truncate_middle(report["config"]["user_config_dir"])),
                 ("Provider", report["environment"]["selected_provider"]),
                 (
@@ -1990,9 +2152,183 @@ def _cmd_config(args):
     _print_section("UrbanAgent Config")
     print(f"Active env  {report['config']['active_env_file'] or 'not found'}")
     print(f"User env    {report['config']['user_env_file']}")
+    print(f"Config YAML {report['config']['user_config_file']}")
     print(f"Config dir  {report['config']['user_config_dir']}")
     print(f"Provider    {report['environment']['selected_provider']}")
     print(f"Configured  {', '.join(report['environment']['configured_providers']) if report['environment']['configured_providers'] else 'none'}")
+
+
+def _find_git_root(start: Path) -> Optional[Path]:
+    for candidate in (start.resolve(), *start.resolve().parents):
+        if (candidate / ".git").exists():
+            return candidate
+    return None
+
+
+def _cmd_update(args):
+    if args.dir:
+        install_dir = Path(args.dir).expanduser().resolve()
+    else:
+        managed_dir = get_install_root()
+        install_dir = managed_dir if (managed_dir / "pyproject.toml").exists() else PACKAGE_ROOT
+    git_probe = subprocess.run(
+        ["git", "-C", str(install_dir), "rev-parse", "--is-inside-work-tree"],
+        capture_output=True,
+        text=True,
+    )
+    commands = [
+        ["git", "-C", str(install_dir), "pull", "--ff-only"],
+    ]
+    if not args.skip_install:
+        commands.append([sys.executable, "-m", "pip", "install", "-e", str(install_dir)])
+    if args.dry_run:
+        for command in commands:
+            print(" ".join(shlex.quote(part) for part in command))
+        return 0
+    if git_probe.returncode != 0:
+        print(f"Not a git checkout: {install_dir}", file=sys.stderr)
+        return 2
+    if not (install_dir / "pyproject.toml").exists() and not args.skip_install:
+        print(f"No pyproject.toml at {install_dir}; use --skip-install or pass --dir to the package root.", file=sys.stderr)
+        return 2
+    for command in commands:
+        subprocess.run(command, check=True)
+    print(f"UrbanAgent updated at {install_dir}")
+    return 0
+
+
+def _cmd_uninstall(args):
+    install_dir = Path(args.dir).expanduser().resolve() if args.dir else get_install_root()
+    targets = []
+    if install_dir.exists():
+        targets.append(("install", install_dir))
+    if args.full and USER_CONFIG_DIR.exists():
+        targets.append(("urban_home", USER_CONFIG_DIR))
+    if not targets:
+        print("No managed UrbanAgent install/data directory found for removal.")
+        return 0
+    if not args.yes:
+        print("Planned removal:")
+        for label, path in targets:
+            print(f"- {label}: {path}")
+        print("Re-run with --yes to delete these paths.")
+        return 1
+    for _, path in targets:
+        shutil.rmtree(path)
+    print("UrbanAgent uninstall cleanup complete.")
+    return 0
+
+
+def _cmd_serve(args):
+    config = read_urban_config(USER_CONFIG_FILE)
+    gateway = config.get("gateway", {}) if isinstance(config, dict) else {}
+    host = args.host or str(gateway.get("host", "127.0.0.1"))
+    port = args.port or int(gateway.get("port", 8765))
+    reload = bool(args.reload or gateway.get("reload", False))
+    try:
+        import uvicorn
+    except ImportError:
+        print("uvicorn is not installed; run 'pip install uvicorn' or reinstall UrbanAgent.", file=sys.stderr)
+        return 2
+    print(f"Starting UrbanAgent Web/API at http://{host}:{port}")
+    uvicorn.run("web.app:app", host=host, port=port, reload=reload)
+    return 0
+
+
+def _service_pid_file() -> Path:
+    return get_logs_dir() / "urban-agent-service.pid"
+
+
+def _service_log_file() -> Path:
+    return get_logs_dir() / "urban-agent-service.log"
+
+
+def _pid_is_running(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        result = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {pid}"],
+            capture_output=True,
+            text=True,
+        )
+        return str(pid) in result.stdout
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def _read_service_pid() -> Optional[int]:
+    pid_file = _service_pid_file()
+    if not pid_file.exists():
+        return None
+    try:
+        return int(pid_file.read_text(encoding="utf-8").strip())
+    except ValueError:
+        return None
+
+
+def _cmd_service(args):
+    _print_section("UrbanAgent Service")
+    ensure_urban_home()
+    pid_file = _service_pid_file()
+    log_file = _service_log_file()
+    pid = _read_service_pid()
+
+    if args.action == "status":
+        if pid and _pid_is_running(pid):
+            print(f"running pid={pid}")
+            print(f"log {log_file}")
+        else:
+            print("stopped")
+            if pid_file.exists():
+                pid_file.unlink()
+        return 0
+    if args.action == "install":
+        print("Lightweight service mode uses a PID file rather than registering a system service.")
+        print(f"pid file {pid_file}")
+        print(f"log file {log_file}")
+        print("Use 'urban-agent service start' to launch the background Web/API process.")
+        return 0
+    if args.action == "start":
+        if pid and _pid_is_running(pid):
+            print(f"already running pid={pid}")
+            return 0
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        env = os.environ.copy()
+        env.setdefault("URBAN_AGENT_HOME", str(USER_CONFIG_DIR))
+        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
+        with log_file.open("ab") as log_handle:
+            process = subprocess.Popen(
+                [sys.executable, "-m", "urban_agent", "serve"],
+                stdout=log_handle,
+                stderr=subprocess.STDOUT,
+                stdin=subprocess.DEVNULL,
+                env=env,
+                creationflags=creationflags,
+                start_new_session=(os.name != "nt"),
+            )
+        pid_file.write_text(str(process.pid), encoding="utf-8")
+        print(f"started pid={process.pid}")
+        print(f"log {log_file}")
+        return 0
+    if args.action == "stop":
+        if not pid or not _pid_is_running(pid):
+            print("not running")
+            if pid_file.exists():
+                pid_file.unlink()
+            return 0
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], check=False)
+        else:
+            os.kill(pid, signal.SIGTERM)
+        if pid_file.exists():
+            pid_file.unlink()
+        print(f"stopped pid={pid}")
+        return 0
+    return 2
 
 
 def _cmd_capabilities(args):
@@ -2060,8 +2396,30 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             _cmd_doctor(args)
         elif args.command == "init":
             _cmd_init(args)
+        elif args.command == "setup":
+            result = _cmd_setup(args)
+            if isinstance(result, int):
+                return result
         elif args.command == "config":
-            _cmd_config(args)
+            result = _cmd_config(args)
+            if isinstance(result, int):
+                return result
+        elif args.command == "serve":
+            result = _cmd_serve(args)
+            if isinstance(result, int):
+                return result
+        elif args.command == "service":
+            result = _cmd_service(args)
+            if isinstance(result, int):
+                return result
+        elif args.command == "update":
+            result = _cmd_update(args)
+            if isinstance(result, int):
+                return result
+        elif args.command == "uninstall":
+            result = _cmd_uninstall(args)
+            if isinstance(result, int):
+                return result
         elif args.command == "capabilities":
             _cmd_capabilities(args)
         elif args.command == "plan":

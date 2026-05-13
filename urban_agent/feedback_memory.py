@@ -62,7 +62,7 @@ class FeedbackLesson:
 
 
 class FeedbackMemory:
-    """Reusable policy/workflow/experience memory loaded from a folder tree."""
+    """Reusable policy/workflow view plus review-feedback writer."""
 
     def __init__(self, lessons: list[FeedbackLesson] | None = None, memory_store: FileMemoryStore | None = None):
         self.memory_store = memory_store or FileMemoryStore.default()
@@ -79,7 +79,7 @@ class FeedbackMemory:
         return lessons
 
     def select_for_task(self, task: dict[str, Any] | str, *, limit: int = 8) -> dict[str, Any]:
-        memory_pack = self.memory_store.select(task, memory_types=("policy", "workflow", "experience"), limit=limit)
+        memory_pack = self.memory_store.select(task, memory_types=("policy", "workflow"), limit=limit)
         selected_lessons = [FeedbackLesson.from_record(MemoryRecord.from_dict(record, memory_type=record.get("memory_type", "policy"))) for record in memory_pack.get("records", [])]
         return {
             "source": "urbanagent_feedback_memory",

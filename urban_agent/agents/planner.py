@@ -122,7 +122,6 @@ class PlannerAgent(BaseAgent):
         # 如果有 LLM，用 LLM 做智能解析
         if self.llm_client is not None:
             prompt = (
-                f"{self.role_prompt}\n\n"
                 f"--- TASK ---\n{json.dumps(task, ensure_ascii=False, default=str)}\n\n"
                 f"--- CAPABILITY CARDS (LEVEL 1) ---\n{json.dumps(capability_context['level1_cards'], ensure_ascii=False, default=str)}\n\n"
                 f"--- REUSABLE FEEDBACK LESSONS ---\n{json.dumps(feedback_context['lessons'], ensure_ascii=False, default=str)}\n\n"

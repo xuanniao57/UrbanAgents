@@ -234,6 +234,10 @@ class ManagerAgent(BaseAgent):
 
         if subtask.input_data.get("capability_context"):
             context["capability_context"] = subtask.input_data["capability_context"]
+        if subtask.input_data.get("feedback_context"):
+            context["feedback_context"] = subtask.input_data["feedback_context"]
+        if subtask.input_data.get("memory_context"):
+            context["memory_context"] = subtask.input_data["memory_context"]
 
         # Reporter is the synthesis role: it needs all completed upstream outputs.
         # Other workers keep dependency-only context isolation.

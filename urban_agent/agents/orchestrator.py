@@ -11,6 +11,7 @@ import json
 import logging
 import math
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ..capabilities import CapabilityRegistry, get_default_capability_registry
@@ -28,6 +29,7 @@ from .workers import (
 )
 from .reviewers import HumanCheckpointAgent, SpatialReviewerAgent
 from .quality_controller import QualityController
+from .prompt_builder import UrbanAgentPromptBuilder, default_snapshot_path, read_prompt_snapshot, write_prompt_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +75,7 @@ class MultiAgentOrchestrator:
         planner_llm_client: Optional[Any] = None,
     ):
         self.config = config or {}
+        self.session_id = str(self.config.get("session_id") or f"run_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}")
         self.capability_registry = capability_registry or get_default_capability_registry()
         self.correction_registry = correction_registry or CorrectionModuleRegistry()
 
@@ -148,6 +151,63 @@ class MultiAgentOrchestrator:
             reviewers=reviewers,
             llm_client=_exec_client,
         )
+        self.prompt_snapshot, self.prompt_snapshot_path = self._load_or_build_prompt_snapshot(workers=workers, reviewers=reviewers)
+        self._apply_prompt_snapshot(workers=workers, reviewers=reviewers)
+
+    def _snapshot_path(self) -> Path:
+        raw_path = self.config.get("prompt_snapshot_path")
+        return Path(raw_path) if raw_path else default_snapshot_path(self.session_id)
+
+    def _load_or_build_prompt_snapshot(self, *, workers: Dict[AgentRole, Any], reviewers: Dict[AgentRole, Any]) -> Tuple[Any, str]:
+        snapshot_path = self._snapshot_path()
+        if snapshot_path.exists():
+            try:
+                return read_prompt_snapshot(snapshot_path), str(snapshot_path)
+            except (OSError, ValueError, json.JSONDecodeError, TypeError) as error:
+                logger.warning(f"Prompt snapshot read failed, rebuilding: {error}")
+        snapshot = self._build_prompt_snapshot(workers=workers, reviewers=reviewers)
+        return snapshot, self._write_prompt_snapshot(snapshot, snapshot_path)
+
+    def _build_prompt_snapshot(self, *, workers: Dict[AgentRole, Any], reviewers: Dict[AgentRole, Any]) -> Any:
+        role_prompts: Dict[str, str] = {
+            "planner": self.planner.role_prompt,
+            "manager": self.manager.role_prompt,
+        }
+        if self.quality_controller is not None:
+            role_prompts["quality_controller"] = self.quality_controller.role_prompt
+        for role, agent in workers.items():
+            role_prompts[role.value] = agent.role_prompt
+        for role, agent in reviewers.items():
+            role_prompts[role.value] = agent.role_prompt
+        project_root = self.config.get("project_root")
+        builder = UrbanAgentPromptBuilder(
+            project_root=Path(project_root) if project_root else None,
+            config=self.config,
+            stable_policy_snapshot=self.feedback_memory.policy_criteria(),
+        )
+        return builder.build(session_id=self.session_id, role_prompts=role_prompts)
+
+    def _write_prompt_snapshot(self, snapshot: Any, snapshot_path: Path) -> str:
+        try:
+            write_prompt_snapshot(snapshot, snapshot_path)
+            return str(snapshot_path)
+        except OSError as error:
+            logger.warning(f"Prompt snapshot write failed: {error}")
+            return ""
+
+    def _apply_prompt_snapshot(self, *, workers: Dict[AgentRole, Any], reviewers: Dict[AgentRole, Any]) -> None:
+        agents = {
+            "planner": self.planner,
+            "manager": self.manager,
+        }
+        if self.quality_controller is not None:
+            agents["quality_controller"] = self.quality_controller
+        agents.update({role.value: agent for role, agent in workers.items()})
+        agents.update({role.value: agent for role, agent in reviewers.items()})
+        for role, agent in agents.items():
+            prompt = self.prompt_snapshot.system_prompts.get(role)
+            if prompt and hasattr(agent, "set_prompt_context"):
+                agent.set_prompt_context(prompt, self.prompt_snapshot.tool_surfaces.get(role, []))
 
     # ------------------------------------------------------------------
     # Efficiency helpers
@@ -448,6 +508,13 @@ class MultiAgentOrchestrator:
                 "memory_snapshot": self.memory_module.inspect_state() if self.memory_module is not None and hasattr(self.memory_module, "inspect_state") else {},
                 "feedback_memory_root": str(self.feedback_memory.memory_store.root),
                 "review_feedback_memory_path": review_memory_path,
+            },
+            "context_kernel": {
+                "session_id": self.session_id,
+                "prompt_snapshot_path": self.prompt_snapshot_path,
+                "prompt_hashes": self.prompt_snapshot.prompt_hashes,
+                "tool_surfaces": self.prompt_snapshot.tool_surfaces,
+                "project_context_source": self.prompt_snapshot.project_context_source,
             },
             "efficiency": {
                 "plan_latency_s": plan_latency,

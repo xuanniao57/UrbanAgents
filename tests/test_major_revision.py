@@ -63,6 +63,38 @@ class TestQualityController:
         from urban_agent.agents import QualityController
         assert QualityController is not None
 
+    def test_recommender_qc_uses_targeted_reflection(self):
+        from urban_agent.agents.quality_controller import QualityController
+
+        class CapturingReflector:
+            def __init__(self):
+                self.calls = []
+
+            async def reflect_quality(self, **kwargs):
+                self.calls.append(kwargs)
+                return {
+                    "confidence": 0.91,
+                    "passed": True,
+                    "recommendation": "accept",
+                    "issues": [],
+                    "risks": ["data coverage should be stated"],
+                    "reflection": "Output is contextually trustworthy with clear caveats.",
+                    "source": "test_reflector",
+                }
+
+        reflector = CapturingReflector()
+        controller = QualityController(reflector=reflector)
+        report = asyncio.run(controller.assess(
+            "analyst",
+            {"status": "ok", "answer": "Walkability is constrained by arterial barriers."},
+            {"required_fields": ["status", "answer"], "city": "Shanghai"},
+        ))
+
+        assert reflector.calls
+        assert report.passed is True
+        assert report.reflection["source"] == "test_reflector"
+        assert report.dimension_scores["reflection_confidence"] == 0.91
+
 
 # =========================================================================
 # 2. Governance

@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, AsyncIterator, Optional
 
 from urban_agent.agents.base import AgentMessage, AgentRole
+from urban_agent.constants import get_urban_home
 from urban_agent.agents.planner import PlannerAgent
 from legacy.urban_agent_legacy.decision import SpatialMeasurement
 from plugins.qgis.qgis_bridge import QgisBridgeClient, QgisCommand, qgis_bridge_status
@@ -97,7 +98,7 @@ class ArtifactRecord:
 
 
 def default_observatory_root() -> Path:
-    home = Path(os.getenv("URBAN_AGENT_HOME", Path.home() / ".urban-agent"))
+    home = Path(os.getenv("URBAN_AGENT_HOME", get_urban_home()))
     return home / "runs" / "web"
 
 

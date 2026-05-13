@@ -12,6 +12,7 @@ build/
 !.env.example
 
 # ── Generated outputs ──
+.urban-agent/
 artifacts/
 cache/
 outputs/

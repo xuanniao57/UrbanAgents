@@ -97,9 +97,10 @@ conda activate urban-mobility
 python -m pip install .
 # Developer mode: python -m pip install -e .
 
-# 4. Create user-level config (works from any directory after install)
+# 4. Create project-local config (works from any directory after install)
 urban-agent init
-# Edit ~/.urban-agent/.env -> set at least ONE provider key.
+# Edit ./.urban-agent/.env -> set at least ONE provider key.
+# Set URBAN_AGENT_HOME to move config/runs/memory elsewhere.
 # Default provider is Qwen: LLM_PROVIDER=qwen, QWEN_MODEL=qwen-plus
 
 # 5. Run tests
@@ -153,7 +154,7 @@ python -m urban_agent visualize --input analysis_result.json --format svg
 python -m urban_agent review --input results.json
 ```
 
-The recommended collaborator-facing surface is `urban-agent shell`, `urban-agent analyze`, `urban-agent doctor`, and `urban-agent config`, not the internal pipeline stages above. Standard installation does not require entering the repository path: the CLI loads `~/.urban-agent/.env` unless `URBAN_AGENT_ENV` or `URBAN_AGENT_HOME` is set. The built-in case-study workflow is kept as a source-repo demo path rather than part of the standard installed product surface.
+The recommended collaborator-facing surface is `urban-agent shell`, `urban-agent analyze`, `urban-agent doctor`, and `urban-agent config`, not the internal pipeline stages above. Standard installation does not require entering the repository path: by default the CLI keeps config, runs, sessions, logs, cache, and memory under the project-local `.urban-agent/` directory instead of a Windows C-drive profile path. Use `URBAN_AGENT_ENV` or `URBAN_AGENT_HOME` to override this location. The built-in case-study workflow is kept as a source-repo demo path rather than part of the standard installed product surface.
 
 For a clean handoff to a collaborator, start with `docs/COLLABORATOR_CASE2_QUICKSTART.md` and copy `examples/case2_urban_vitality_input.example.json`.
 
@@ -171,7 +172,7 @@ result = await orchestrator.run(
 
 ### LLM Configuration
 
-Run `urban-agent init` once to create a user-level config at `~/.urban-agent/.env`, then edit that file to switch providers. Qwen is the default provider.
+Run `urban-agent init` once to create a project-local config at `.urban-agent/.env`, then edit that file to switch providers. Qwen is the default provider. Set `URBAN_AGENT_HOME` if a collaborator wants the runtime directory on a different drive.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -319,9 +320,10 @@ conda activate urban-mobility
 python -m pip install .
 # 开发模式: python -m pip install -e .
 
-# 4. 初始化用户级配置（安装后可在任意目录运行）
+# 4. 初始化项目本地配置（安装后可在任意目录运行）
 urban-agent init
-# 编辑 ~/.urban-agent/.env，至少设置一个 LLM 密钥。
+# 编辑 ./.urban-agent/.env，至少设置一个 LLM 密钥。
+# 可用 URBAN_AGENT_HOME 把配置、runs、memory 放到其它磁盘。
 # 默认 provider 为 Qwen: LLM_PROVIDER=qwen, QWEN_MODEL=qwen-plus
 
 # 5. 运行测试
@@ -357,7 +359,7 @@ python -m urban_agent reason --task-type geoqa --input cognition_result.json --q
 python -m urban_agent visualize --input analysis_result.json --format svg
 ```
 
-推荐给合作者使用的入口是 `urban-agent shell`、`urban-agent analyze`、`urban-agent doctor` 和 `urban-agent config`。标准安装后不需要进入源码目录；CLI 默认读取 `~/.urban-agent/.env`，也可以通过 `URBAN_AGENT_ENV` 或 `URBAN_AGENT_HOME` 覆盖配置位置。内置 case-study 仅保留为源码仓库中的开发演示，不作为标准安装后的产品入口。
+推荐给合作者使用的入口是 `urban-agent shell`、`urban-agent analyze`、`urban-agent doctor` 和 `urban-agent config`。标准安装后不需要进入源码目录；CLI 默认把配置、runs、sessions、logs、cache 和 memory 放在项目本地 `.urban-agent/` 目录，而不是 Windows C 盘用户配置目录；也可以通过 `URBAN_AGENT_ENV` 或 `URBAN_AGENT_HOME` 覆盖配置位置。内置 case-study 仅保留为源码仓库中的开发演示，不作为标准安装后的产品入口。
 
 #### Python API
 
@@ -373,7 +375,7 @@ result = await orchestrator.run(
 
 ### 大模型配置
 
-运行 `urban-agent init` 会创建 `~/.urban-agent/.env`。编辑该文件即可切换服务商（详见 `.env.example`）：
+运行 `urban-agent init` 会创建 `.urban-agent/.env`。编辑该文件即可切换服务商（详见 `.env.example`）。如果需要把运行数据放到指定磁盘，请设置 `URBAN_AGENT_HOME`：
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|

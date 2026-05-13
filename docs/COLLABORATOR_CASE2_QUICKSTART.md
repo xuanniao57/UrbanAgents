@@ -15,7 +15,7 @@ python -m pip install -e ".[dev,vision]"
 urban-agent init
 ```
 
-Edit `~/.urban-agent/.env` and set one provider key, for example `QWEN_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, or `KIMI_API_KEY`.
+Edit `.urban-agent/.env` and set one provider key, for example `QWEN_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, or `KIMI_API_KEY`. By default UrbanAgent keeps config, runs, sessions, logs, cache, and memory under the project-local `.urban-agent/` directory rather than a Windows C-drive profile path. Set `URBAN_AGENT_HOME` before running `urban-agent init` if you want those files on a different drive.
 
 Then verify:
 

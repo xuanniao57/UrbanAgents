@@ -20,7 +20,9 @@ import uuid
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, is_dataclass
+
+from ..memory_store import FileMemoryStore
 
 try:
     from experimental.cube_retriever import CubeGraphMemoryBackend, normalize_temporal_context
@@ -39,6 +41,33 @@ logger = logging.getLogger(__name__)
 
 def _json_dump_safe(value: Any) -> str:
     return json.dumps(value, default=str)
+
+
+def _json_safe(value: Any) -> Any:
+    def _default(obj: Any) -> Any:
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        if isinstance(obj, TemporalContext):
+            return obj.to_dict()
+        if is_dataclass(obj):
+            return asdict(obj)
+        if hasattr(obj, "to_dict"):
+            return obj.to_dict()
+        return str(obj)
+
+    return json.loads(json.dumps(value, ensure_ascii=False, default=_default))
+
+
+def _strip_nested_memory_context(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _strip_nested_memory_context(item)
+            for key, item in value.items()
+            if key != "memory_context"
+        }
+    if isinstance(value, list):
+        return [_strip_nested_memory_context(item) for item in value]
+    return value
 
 
 def _tokenize_text(value: Any) -> set[str]:
@@ -168,6 +197,17 @@ def _tc_from_any(obj: Any) -> Optional[TemporalContext]:
                 week_of_year=int(obj.get("week_of_year", ts.isocalendar()[1])),
             )
         except Exception:
+            return None
+    return None
+
+
+def _coerce_datetime(value: Any) -> Optional[datetime]:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            return datetime.fromisoformat(value)
+        except ValueError:
             return None
     return None
 
@@ -353,6 +393,90 @@ class MemoryReflector:
                 reflections.append(ref)
         return reflections
 
+    async def reflect_quality(
+        self,
+        *,
+        agent_role: str,
+        output: Dict[str, Any],
+        task_context: Dict[str, Any],
+        deterministic_issues: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """Targeted reflection for contextual quality control.
+
+        This is intentionally judgment-oriented rather than a fixed weighted
+        rubric: deterministic issues are supplied as guardrails, while the LLM
+        can reason about context-dependent urban data trustworthiness.
+        """
+        deterministic_issues = list(deterministic_issues or [])
+        if self.llm_client is not None:
+            prompt = (
+                "You are reflecting on whether an UrbanAgent output is trustworthy for the given task.\n"
+                "Judge contextual fit, evidence sufficiency, data authority, spatial/temporal coverage, and uncertainty.\n"
+                "Do not apply a fixed weighted scoring rubric. Return JSON only with keys:\n"
+                '{"confidence":0.0-1.0,"passed":true|false,"recommendation":"accept|retry|reject",'
+                '"issues":[str],"risks":[str],"reflection":str}\n\n'
+                f"Agent role: {agent_role}\n"
+                f"Deterministic guardrail issues: {json.dumps(deterministic_issues, ensure_ascii=False, default=str)}\n"
+                f"Task context: {json.dumps(task_context, ensure_ascii=False, default=str)[:2500]}\n"
+                f"Output: {json.dumps(output, ensure_ascii=False, default=str)[:3500]}\n"
+            )
+            try:
+                if hasattr(self.llm_client, "generate"):
+                    response = await self.llm_client.generate(prompt)
+                elif hasattr(self.llm_client, "chat"):
+                    response = await self.llm_client.chat([{"role": "user", "content": prompt}])
+                else:
+                    response = ""
+                json_match = re.search(r"\{.*\}", str(response), re.DOTALL)
+                parsed = json.loads(json_match.group()) if json_match else {}
+                if isinstance(parsed, dict) and parsed:
+                    return self._normalize_quality_reflection(parsed, deterministic_issues)
+            except Exception:
+                pass
+        return self._fallback_quality_reflection(output, task_context, deterministic_issues)
+
+    @staticmethod
+    def _normalize_quality_reflection(parsed: Dict[str, Any], deterministic_issues: List[str]) -> Dict[str, Any]:
+        issues = [str(item) for item in parsed.get("issues", []) if item]
+        for issue in deterministic_issues:
+            if issue not in issues:
+                issues.append(issue)
+        recommendation = str(parsed.get("recommendation") or "").lower()
+        if recommendation not in {"accept", "retry", "reject"}:
+            recommendation = "retry" if issues else "accept"
+        confidence = parsed.get("confidence", 0.8 if recommendation == "accept" else 0.45)
+        try:
+            confidence = float(confidence)
+        except (TypeError, ValueError):
+            confidence = 0.8 if recommendation == "accept" else 0.45
+        passed = bool(parsed.get("passed", recommendation == "accept")) and recommendation == "accept" and not deterministic_issues
+        return {
+            "confidence": max(0.0, min(1.0, confidence)),
+            "passed": passed,
+            "recommendation": recommendation,
+            "issues": issues,
+            "risks": [str(item) for item in parsed.get("risks", []) if item],
+            "reflection": str(parsed.get("reflection") or parsed.get("summary") or "Contextual quality reflection completed."),
+            "source": "memory_reflector",
+        }
+
+    @staticmethod
+    def _fallback_quality_reflection(output: Dict[str, Any], task_context: Dict[str, Any], deterministic_issues: List[str]) -> Dict[str, Any]:
+        has_output = bool(output)
+        issues = list(deterministic_issues)
+        if not has_output and "Empty output" not in issues:
+            issues.append("Empty output")
+        passed = has_output and not issues
+        return {
+            "confidence": 0.82 if passed else 0.35,
+            "passed": passed,
+            "recommendation": "accept" if passed else "retry",
+            "issues": issues,
+            "risks": [] if passed else ["Quality reflection used deterministic fallback because no LLM client was configured."],
+            "reflection": "Fallback quality reflection checked required fields, placeholder text, and contextual guardrails.",
+            "source": "memory_reflector_fallback",
+        }
+
     async def _reflect_group(
         self, locations: List[str], task_type: str, period: str, memories: List[Dict],
     ) -> Optional[ReflectionEntry]:
@@ -470,6 +594,16 @@ class MemoryModule:
     ):
         self.config = config or {}
         self.llm_client = llm_client
+        self.persistent = bool(self.config.get("persistent", False))
+        self.memory_namespace = str(self.config.get("namespace") or "runtime")
+        self.persistent_load_limit = int(self.config.get("load_limit", 200))
+        self.memory_store = (
+            FileMemoryStore(self.config.get("root") or None)
+            if self.persistent else None
+        )
+        self._persisted_memory_ids: set[str] = set()
+        self._loaded_persistent_count = 0
+        self.last_persisted_path: Optional[str] = None
 
         # Ablation flags
         self.enable_temporal_context = enable_temporal_context
@@ -513,6 +647,94 @@ class MemoryModule:
             if enable_cube_retrieval and CubeGraphMemoryBackend is not None else None
         )
 
+        if self.persistent:
+            self._load_persistent_experiences()
+
+    def _load_persistent_experiences(self) -> None:
+        if self.memory_store is None:
+            return
+        records = []
+        for record in self.memory_store.records("experience"):
+            payload = record.to_dict()
+            records.append(payload)
+        records = sorted(records, key=lambda item: str(item.get("timestamp") or ""))[-self.persistent_load_limit:]
+        for payload in records:
+            experience = self._prepare_experience(payload, now=_coerce_datetime(payload.get("timestamp")) or datetime.now())
+            self._index_experience(experience, timestamp=str(payload.get("timestamp") or datetime.now().isoformat()), set_working=False)
+            self._persisted_memory_ids.add(str(experience.get("id")))
+        if records:
+            self.working_memory = dict(self.short_term_memory[-1]) if self.short_term_memory else {}
+        self._loaded_persistent_count = len(records)
+
+    def _prepare_experience(self, experience: Dict, *, now: datetime) -> Dict[str, Any]:
+        prepared = _strip_nested_memory_context(_json_safe(dict(experience)))
+        prepared.setdefault("id", str(prepared.get("experience_id") or uuid.uuid4()))
+
+        if self.enable_temporal_context:
+            existing_tc = prepared.get("temporal_context")
+            temporal_context = _tc_from_any(existing_tc) if isinstance(existing_tc, dict) else None
+            prepared["temporal_context"] = (temporal_context or TemporalContext.from_datetime(now)).to_dict()
+
+        if self.enable_actr_activation:
+            prepared.setdefault("access_timestamps", [now.isoformat()])
+            prepared.setdefault("importance", 0.5)
+            prepared.setdefault("category", "observation")
+
+        prepared.setdefault("memory_module", "runtime")
+        prepared.setdefault("summary", self._summarize_experience(prepared))
+        prepared.setdefault("triggers", self._experience_triggers(prepared))
+        return prepared
+
+    def _index_experience(self, experience: Dict[str, Any], *, timestamp: str, set_working: bool = True) -> None:
+        if set_working:
+            self.working_memory = experience
+        short_term_record = {
+            **experience,
+            "timestamp": timestamp,
+        }
+        self.short_term_memory.append(short_term_record)
+        self._update_long_term(experience)
+
+    def _persist_experience(self, experience: Dict[str, Any]) -> None:
+        if self.memory_store is None:
+            return
+        memory_id = str(experience.get("id") or "")
+        if memory_id and memory_id in self._persisted_memory_ids:
+            return
+        payload = _json_safe(dict(experience))
+        payload["experience_id"] = memory_id or str(uuid.uuid4())
+        payload["memory_module"] = "runtime"
+        path = self.memory_store.append_experience(payload, namespace=self.memory_namespace)
+        self.last_persisted_path = str(path)
+        if memory_id:
+            self._persisted_memory_ids.add(memory_id)
+
+    @staticmethod
+    def _summarize_experience(experience: Dict[str, Any]) -> str:
+        task = experience.get("task") if isinstance(experience.get("task"), dict) else {}
+        action = experience.get("action") if isinstance(experience.get("action"), dict) else {}
+        result = experience.get("results") if isinstance(experience.get("results"), dict) else {}
+        for value in (
+            experience.get("summary"),
+            task.get("question"),
+            task.get("description"),
+            action.get("answer"),
+            result.get("final_answer"),
+        ):
+            if isinstance(value, str) and value.strip():
+                return value.strip()[:300]
+        return "UrbanAgent runtime experience"
+
+    @staticmethod
+    def _experience_triggers(experience: Dict[str, Any]) -> list[str]:
+        triggers: list[str] = []
+        for record in (experience, experience.get("task") if isinstance(experience.get("task"), dict) else {}):
+            for key in ("task_type", "workflow_profile", "city", "location", "start", "end"):
+                value = record.get(key) if isinstance(record, dict) else None
+                if isinstance(value, str) and value.strip():
+                    triggers.append(value.strip().lower())
+        return list(dict.fromkeys(triggers))[:12]
+
     async def retrieve(self, query: Dict, query_time: Optional[datetime] = None) -> Dict[str, Any]:
         """检索相关记忆。query_time 可指定查询的虚拟时间（用于测试）。"""
         query_tc = TemporalContext.from_datetime(query_time or datetime.now()) if self.enable_temporal_context else None
@@ -525,6 +747,11 @@ class MemoryModule:
             "best_match": None,
             "query_summary": self._summarize_query(query),
             "retrieval_trace": {"short_term": [], "long_term": []},
+            "persistent": {
+                "enabled": self.persistent,
+                "memory_root": str(self.memory_store.root) if self.memory_store is not None else None,
+                "loaded_count": self._loaded_persistent_count,
+            },
         }
         if self.enable_pattern_detector:
             context["temporal_patterns"] = self._get_temporal_patterns_for_query(query)
@@ -577,33 +804,8 @@ class MemoryModule:
     async def store(self, experience: Dict):
         """存储经验到记忆"""
         now = datetime.now()
-        experience.setdefault("id", str(uuid.uuid4()))
-
-        # Attach temporal context (C1) — respect pre-existing from seed data
-        if self.enable_temporal_context:
-            existing_tc = experience.get("temporal_context")
-            if existing_tc is None:
-                experience["temporal_context"] = TemporalContext.from_datetime(now)
-            elif isinstance(existing_tc, dict):
-                experience["temporal_context"] = _tc_from_any(existing_tc) or TemporalContext.from_datetime(now)
-
-        # Add access tracking for ACT-R (C2)
-        if self.enable_actr_activation:
-            experience.setdefault("access_timestamps", [now.isoformat()])
-            experience.setdefault("importance", 0.5)
-            experience.setdefault("category", "observation")
-
-        # 添加到工作记忆
-        self.working_memory = experience
-
-        # 添加到短期记忆
-        self.short_term_memory.append({
-            **experience,
-            "timestamp": now.isoformat(),
-        })
-
-        # 更新长期记忆
-        await self._update_long_term(experience)
+        experience = self._prepare_experience(experience, now=now)
+        self._index_experience(experience, timestamp=now.isoformat())
 
         # Reflector check (C4)
         if self.enable_reflector and self.reflector:
@@ -615,6 +817,9 @@ class MemoryModule:
                     self.long_term_memory["procedural"].append(self._reflection_to_procedural_strategy(reflection))
                 self.long_term_memory["reflections"] = self.long_term_memory["reflections"][-50:]
                 self.long_term_memory["procedural"] = self.long_term_memory["procedural"][-50:]
+
+        if self.persistent:
+            self._persist_experience(experience)
 
         logger.info("Experience stored in memory")
 
@@ -827,9 +1032,15 @@ class MemoryModule:
             "short_term_size": len(self.short_term_memory),
             "feedback_count": len(self.feedback_log),
             "procedural_strategy_count": len(self.long_term_memory.get("procedural", [])),
+            "persistent": {
+                "enabled": self.persistent,
+                "memory_root": str(self.memory_store.root) if self.memory_store is not None else None,
+                "loaded_count": self._loaded_persistent_count,
+                "last_persisted_path": self.last_persisted_path,
+            },
         }
 
-    async def _update_long_term(self, experience: Dict):
+    def _update_long_term(self, experience: Dict):
         """更新长期记忆"""
         perception = experience.get("perception", {})
         timestamp = datetime.now().isoformat()
@@ -1023,6 +1234,9 @@ class MemoryModule:
             "reflections_count": len(self.long_term_memory.get("reflections", [])),
             "procedural_strategy_count": len(self.long_term_memory.get("procedural", [])),
             "pattern_count": pattern_count,
+            "persistent_enabled": self.persistent,
+            "persistent_loaded_count": self._loaded_persistent_count,
+            "persistent_memory_root": str(self.memory_store.root) if self.memory_store is not None else None,
             "cube_retrieval": self.cube_retriever.get_stats() if self.cube_retriever else {},
             "ablation_flags": {
                 "temporal_context": self.enable_temporal_context,

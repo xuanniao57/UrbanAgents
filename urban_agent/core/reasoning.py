@@ -621,18 +621,38 @@ class ReasoningModule:
         task: Dict
     ) -> Dict[str, Any]:
         """通用推理"""
+        memory_records = self._memory_records(memory_context)
         reasoning_chain = [
             "Processing perception data...",
             "Applying general spatial reasoning...",
             "Generating response..."
         ]
+        memory_references = self._summarize_memory_references(memory_records)
+        if memory_references:
+            reasoning_chain.insert(1, f"Using {len(memory_references)} retrieved memory reference(s).")
         
         return {
             "workflow_profile": task.get("workflow_profile", "adaptive_urban_analysis"),
             "reasoning_chain": reasoning_chain,
-            "conclusion": "General reasoning completed",
+            "conclusion": "General reasoning completed with memory context" if memory_references else "General reasoning completed",
+            "memory_context_used": bool(memory_references),
+            "memory_references": memory_references,
             "confidence": 0.5
         }
+
+    @staticmethod
+    def _summarize_memory_references(records: List[Dict[str, Any]], limit: int = 5) -> List[Dict[str, Any]]:
+        summaries: List[Dict[str, Any]] = []
+        for record in records[:limit]:
+            task = record.get("task") if isinstance(record.get("task"), dict) else {}
+            action = record.get("action") if isinstance(record.get("action"), dict) else {}
+            summaries.append({
+                "id": record.get("id") or record.get("experience_id"),
+                "task_type": record.get("task_type") or task.get("task_type"),
+                "city": record.get("city") or task.get("city"),
+                "summary": record.get("summary") or action.get("answer") or record.get("conclusion"),
+            })
+        return summaries
     
     def _heuristic_population(self, land_use: List, density: str) -> int:
         """启发式人口估计"""

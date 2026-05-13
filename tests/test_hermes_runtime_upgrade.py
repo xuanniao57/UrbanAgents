@@ -26,6 +26,16 @@ class DummyWorker(BaseAgent):
         )
 
 
+class CapturingWorker(DummyWorker):
+    def __init__(self, role: AgentRole, payload: dict):
+        super().__init__(role, payload)
+        self.last_payload = None
+
+    async def execute(self, message: AgentMessage) -> AgentMessage:
+        self.last_payload = message.payload
+        return await super().execute(message)
+
+
 def _plan_for(role: str = "analyst") -> dict:
     return {
         "plan_id": "plan_runtime_test",
@@ -102,6 +112,25 @@ def test_manager_records_runtime_checkpoints_and_todos():
     checkpoint_ids = [item["checkpoint_id"] for item in runtime["checkpoints"]]
     assert checkpoint_ids == ["DP-1", "DP-3"]
     assert all(item["approved"] for item in runtime["checkpoints"])
+
+
+def test_manager_exposes_memory_context_to_worker_payload():
+    worker = CapturingWorker(AgentRole.ANALYST, {"answer": "ok"})
+    plan = _plan_for()
+    memory_context = {"best_match": {"id": "memory-1", "summary": "prior lesson"}}
+    plan["subtasks"][0]["input_data"]["memory_context"] = memory_context
+    manager = ManagerAgent(workers={AgentRole.ANALYST: worker}, reviewers={})
+    message = AgentMessage(
+        sender=AgentRole.PLANNER,
+        receiver=AgentRole.MANAGER,
+        msg_type="task_plan",
+        payload={"execution_plan": plan},
+        trace_id="trace_memory_context",
+    )
+
+    asyncio.run(manager.execute(message))
+
+    assert worker.last_payload["memory_context"] == memory_context
 
 
 def test_guided_checkpoint_can_block_subtask_result():
