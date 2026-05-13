@@ -1,0 +1,42 @@
+[
+  {
+    "record_id": "seed_aoi_context_buffer_pattern",
+    "timestamp": "seed",
+    "memory_type": "research_design",
+    "domain": "spatial_scope",
+    "summary": "Many urban studies distinguish an authoritative AOI or study boundary from a larger context buffer used to collect surrounding roads, buildings, POIs, viewsheds, or spillover conditions. Treat AOI/context-buffer separation as a task-relevant research design cue, not as a universal hard rule.",
+    "triggers": ["aoi", "context buffer", "buffer", "\u7814\u7a76\u8303\u56f4", "\u5386\u53f2\u8857\u533a", "\u7a7a\u95f4\u8303\u56f4"],
+    "method_hint": "Ask or infer whether the user supplied an AOI, a context buffer, or both; label exploratory scope explicitly when the authoritative AOI is missing.",
+    "caveats": ["Do not silently substitute a context buffer for the analytic AOI.", "Buffer size should be justified by research question and domain convention."]
+  },
+  {
+    "record_id": "seed_grid_units_for_perception_models",
+    "timestamp": "seed",
+    "memory_type": "research_design",
+    "domain": "spatial_unit_design",
+    "summary": "For studies linking historical-district built environment to subjective perception, uniform grid cells such as 200m x 200m can increase sample size and improve X/Y spatial alignment compared with one observation per district. Social-media perception signals can be aggregated to the same grid cells as built-environment indicators.",
+    "triggers": ["\u5386\u53f2\u611f", "\u4e3b\u89c2\u611f\u77e5", "social media", "\u5c0f\u7ea2\u4e66", "grid", "200m", "\u7f51\u683c", "\u5efa\u6210\u73af\u5883"],
+    "method_hint": "Consider 200m grids, street segments, or blocks; compare sensitivity across spatial units and report MAUP risks.",
+    "caveats": ["Grid size is a research design choice, not a law.", "Avoid machine learning on a few dozen district-level observations unless the design supports it."]
+  },
+  {
+    "record_id": "seed_social_media_y_alignment",
+    "timestamp": "seed",
+    "memory_type": "research_design",
+    "domain": "variable_operationalization",
+    "summary": "When using social-media posts to represent historical-sense perception, geocode posts, align them to the chosen spatial unit and observation window, and model posting bias, visitor bias, platform demographics, duplicate posts, and text/image sentiment uncertainty.",
+    "triggers": ["\u5c0f\u7ea2\u4e66", "\u793e\u4ea4\u5a92\u4f53", "\u6e38\u5ba2", "\u5386\u53f2\u611f", "perception", "Y\u53d8\u91cf", "subjective"],
+    "method_hint": "Aggregate historical-sense labels/scores per grid or segment; keep the Y construction separate from X indicators before modeling.",
+    "caveats": ["Social-media signals are not representative surveys.", "Do not overclaim causality without design or validation."]
+  },
+  {
+    "record_id": "seed_paper_gap_variable_verifiability",
+    "timestamp": "seed",
+    "memory_type": "research_design",
+    "domain": "paper_gap",
+    "summary": "A useful paper gap for urban-analysis agents is variable verifiability: the agent should map research questions to measurable variables, required data, spatial/temporal units, validation checks, and comparable literature choices, then flag variables that are only proxies or missing.",
+    "triggers": ["gap", "paper", "\u53d8\u91cf", "\u53ef\u9a8c\u8bc1", "\u7814\u7a76\u8bbe\u8ba1", "literature", "method"],
+    "method_hint": "Return a research design table with question, X/Y variables, data, unit, model family, validation, and risks.",
+    "caveats": ["Literature memory should guide alternatives, not force a single template."]
+  }
+]
