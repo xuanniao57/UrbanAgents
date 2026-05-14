@@ -77,6 +77,38 @@ def _patch_plain_output_if_needed(*, force: bool = False) -> None:
     hermes_cli_module._cprint = plain_print  # type: ignore[attr-defined]
 
 
+def _configure_windows_native_mode(args: argparse.Namespace) -> None:
+    """Keep Hermes-Urban on native Windows tools by default.
+
+    Upstream Hermes' generic file and terminal toolsets execute through Git
+    Bash on Windows. That is useful for Unix-like command habits, but urban
+    GIS runs usually pass native paths such as D:/... and QGIS .bat files.
+    Filtering those generic toolsets makes the model use urban_host_fs,
+    urban_host_python, and urban_qgis_process instead of drifting into
+    WSL/Git-Bash path repair loops.
+    """
+    if os.name != "nt" or getattr(args, "allow_wsl_tools", False):
+        return
+
+    os.environ.setdefault("URBAN_HERMES_WINDOWS_NATIVE", "1")
+    os.environ.setdefault("URBAN_HERMES_AVOID_WSL", "1")
+    os.environ.setdefault("TERMINAL_ENV", "local")
+    os.environ.setdefault("TERMINAL_LOCAL_PERSISTENT", "false")
+
+    original_toolsets = [item.strip() for item in str(args.toolsets or "").split(",") if item.strip()]
+    filtered_toolsets = [item for item in original_toolsets if item not in {"file", "terminal"}]
+    if not filtered_toolsets:
+        filtered_toolsets = ["urban", "todo", "memory"]
+    if filtered_toolsets != original_toolsets:
+        args.toolsets = ",".join(filtered_toolsets)
+        os.environ["URBAN_HERMES_FILTERED_TOOLSETS"] = ",".join(sorted(set(original_toolsets) - set(filtered_toolsets)))
+        if not getattr(args, "quiet", False):
+            print(
+                "[urban-hermes] Windows-native mode: filtered generic file/terminal toolsets; "
+                "use urban_host_fs, urban_host_python, and urban_qgis_process."
+            )
+
+
 def main(argv: list[str] | None = None) -> None:
     raw_args = list(sys.argv[1:] if argv is None else argv)
     if raw_args and raw_args[0] in HERMES_COMMANDS:
@@ -98,10 +130,12 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--ignore-user-config", action="store_true", help="Pass through to Hermes CLI.")
     parser.add_argument("--plain", action="store_true", help="Force plain non-prompt_toolkit output for scripted runs.")
     parser.add_argument("--yolo", action="store_true", help="Bypass Hermes dangerous-command approval prompts for this process.")
+    parser.add_argument("--allow-wsl-tools", action="store_true", help="Keep upstream generic file/terminal toolsets on Windows. By default Hermes-Urban filters them to avoid Git Bash/WSL path issues.")
     args = parser.parse_args(argv)
 
     ensure_paths()
     bootstrap()
+    _configure_windows_native_mode(args)
 
     if args.yolo:
         os.environ["HERMES_YOLO_MODE"] = "1"

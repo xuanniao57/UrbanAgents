@@ -5,7 +5,10 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import subprocess
+import sys
+import tempfile
 import time
 from collections import Counter
 from datetime import datetime
@@ -37,6 +40,8 @@ def register_all_urban_tools() -> list[str]:
         ("urban_quality_control", QUALITY_SCHEMA, _handle_quality),
         ("urban_record_feedback", RECORD_FEEDBACK_SCHEMA, _handle_record_feedback),
         ("urban_research_memory", RESEARCH_MEMORY_SCHEMA, _handle_research_memory),
+        ("urban_host_fs", HOST_FS_SCHEMA, _handle_host_fs),
+        ("urban_host_python", HOST_PYTHON_SCHEMA, _handle_host_python),
         ("urban_qgis_process", QGIS_PROCESS_SCHEMA, _handle_qgis_process),
     ]
     names: list[str] = []
@@ -70,6 +75,201 @@ def _fail(error: str, **meta: Any) -> str:
     payload = {"success": False, "error": error}
     payload.update(meta)
     return _json(payload)
+
+
+def _host_path(value: Any) -> Path:
+    text = str(value or ".").strip()
+    if text.startswith("file:///"):
+        text = text[8:]
+    match = re.match(r"^/mnt/([a-zA-Z])/(.*)$", text)
+    if match:
+        text = f"{match.group(1).upper()}:/{match.group(2)}"
+    else:
+        match = re.match(r"^/([a-zA-Z])/(.*)$", text)
+        if match:
+            text = f"{match.group(1).upper()}:/{match.group(2)}"
+    return Path(text).expanduser()
+
+
+def _decode_bytes(data: bytes, encoding: str | None = None) -> tuple[str, str]:
+    candidates = [encoding] if encoding else []
+    candidates.extend(["utf-8-sig", "utf-8", "utf-16", "gbk"])
+    seen: set[str] = set()
+    for candidate in candidates:
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        try:
+            return data.decode(candidate), candidate
+        except UnicodeDecodeError:
+            continue
+    return data.decode("utf-8", errors="replace"), "utf-8-replace"
+
+
+def _read_host_text(path: Path, *, encoding: str | None = None, max_bytes: int | None = None) -> tuple[str, str, bool]:
+    data = path.read_bytes()
+    truncated = False
+    if max_bytes is not None and max_bytes >= 0 and len(data) > max_bytes:
+        data = data[:max_bytes]
+        truncated = True
+    text, used_encoding = _decode_bytes(data, encoding)
+    return text, used_encoding, truncated
+
+
+def _host_entry(path: Path) -> dict[str, Any]:
+    try:
+        stat = path.stat()
+    except OSError:
+        stat = None
+    return {
+        "name": path.name,
+        "path": str(path),
+        "exists": path.exists(),
+        "is_file": path.is_file(),
+        "is_dir": path.is_dir(),
+        "suffix": path.suffix,
+        "size": stat.st_size if stat else None,
+        "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(timespec="seconds") if stat else None,
+    }
+
+
+def _json_summary(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        summary: dict[str, Any] = {"type": "object", "keys": list(value.keys())[:30], "key_count": len(value)}
+        if value.get("type") == "FeatureCollection":
+            features = value.get("features") or []
+            summary["geojson_type"] = "FeatureCollection"
+            summary["feature_count"] = len(features) if isinstance(features, list) else None
+            if isinstance(features, list) and features:
+                geom_types = Counter((feature.get("geometry") or {}).get("type", "unknown") for feature in features if isinstance(feature, dict))
+                summary["geometry_types"] = dict(geom_types)
+                first_props = features[0].get("properties") if isinstance(features[0], dict) else None
+                if isinstance(first_props, dict):
+                    summary["sample_property_keys"] = list(first_props.keys())[:30]
+        return summary
+    if isinstance(value, list):
+        return {"type": "array", "length": len(value), "sample_type": type(value[0]).__name__ if value else None}
+    return {"type": type(value).__name__, "repr": repr(value)[:200]}
+
+
+def _handle_host_fs(args: dict[str, Any], **_: Any) -> str:
+    action = str(args.get("action") or "stat")
+    path = _host_path(args.get("path") or ".")
+    limit = max(1, min(int(args.get("limit") or 100), 1000))
+
+    try:
+        if action in {"stat", "exists"}:
+            return _ok(_host_entry(path), action=action, host=os.name)
+
+        if action == "list":
+            if not path.exists():
+                return _fail(f"path does not exist: {path}", action=action)
+            if not path.is_dir():
+                return _fail(f"path is not a directory: {path}", action=action)
+            entries = sorted(path.iterdir(), key=lambda item: (not item.is_dir(), item.name.lower()))
+            return _ok({"path": str(path), "entries": [_host_entry(item) for item in entries[:limit]], "truncated": len(entries) > limit}, action=action, host=os.name)
+
+        if action == "glob":
+            pattern = str(args.get("pattern") or "*")
+            base = path if path.is_dir() else path.parent
+            matches = sorted(base.glob(pattern), key=lambda item: str(item).lower())
+            return _ok({"base": str(base), "pattern": pattern, "matches": [_host_entry(item) for item in matches[:limit]], "truncated": len(matches) > limit}, action=action, host=os.name)
+
+        if action == "read_text":
+            max_chars = max(1, int(args.get("max_chars") or 20000))
+            max_bytes = max_chars * 4
+            text, used_encoding, truncated = _read_host_text(path, encoding=args.get("encoding"), max_bytes=max_bytes)
+            if len(text) > max_chars:
+                text = text[:max_chars]
+                truncated = True
+            return _ok({"path": str(path), "encoding": used_encoding, "chars": len(text), "truncated": truncated, "text": text}, action=action, host=os.name)
+
+        if action in {"read_json", "json_summary", "geojson_summary"}:
+            max_bytes = max(1, int(args.get("max_bytes") or 25_000_000))
+            text, used_encoding, truncated = _read_host_text(path, encoding=args.get("encoding"), max_bytes=max_bytes)
+            if truncated:
+                return _fail(f"JSON file exceeds max_bytes={max_bytes}: {path}", action=action)
+            data = json.loads(text)
+            result = {"path": str(path), "encoding": used_encoding, "summary": _json_summary(data)}
+            if action == "read_json":
+                result["data"] = data
+            return _ok(result, action=action, host=os.name)
+
+        return _fail(f"unsupported action: {action}", supported_actions=["stat", "exists", "list", "glob", "read_text", "read_json", "json_summary", "geojson_summary"])
+    except Exception as exc:
+        return _fail(str(exc), action=action, path=str(path), host=os.name)
+
+
+def _handle_host_python(args: dict[str, Any], **_: Any) -> str:
+    python_executable = str(args.get("python") or sys.executable)
+    timeout = max(1, int(args.get("timeout") or 300))
+    argv = [str(item) for item in args.get("argv") or []]
+    workdir = _host_path(args.get("workdir") or os.getcwd())
+    output_dir = args.get("output_dir")
+    script_path_arg = args.get("script_path")
+    code = args.get("code")
+    keep_script = bool(args.get("keep_script", False) or output_dir)
+    script_path: Path | None = None
+    temporary_script = False
+
+    try:
+        workdir.mkdir(parents=True, exist_ok=True)
+        if script_path_arg:
+            script_path = _host_path(script_path_arg)
+        else:
+            if not code:
+                return _fail("code or script_path is required")
+            if output_dir:
+                out_dir = _host_path(output_dir)
+                out_dir.mkdir(parents=True, exist_ok=True)
+                script_path = out_dir / f"urban_host_python_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.py"
+            else:
+                handle = tempfile.NamedTemporaryFile(prefix="urban_host_python_", suffix=".py", delete=False, mode="w", encoding="utf-8")
+                script_path = Path(handle.name)
+                temporary_script = True
+                handle.close()
+            script_path.write_text(str(code), encoding="utf-8")
+
+        env = os.environ.copy()
+        for key, value in (args.get("env") or {}).items():
+            env[str(key)] = str(value)
+
+        cmd = [python_executable, str(script_path), *argv]
+        started = time.time()
+        proc = subprocess.run(
+            cmd,
+            cwd=str(workdir),
+            env=env,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            shell=False,
+        )
+        duration = round(time.time() - started, 3)
+        stdout_tail = proc.stdout[-20000:]
+        stderr_tail = proc.stderr[-20000:]
+        result = {
+            "command": cmd,
+            "workdir": str(workdir),
+            "returncode": proc.returncode,
+            "duration_s": duration,
+            "stdout_tail": stdout_tail,
+            "stderr_tail": stderr_tail,
+            "script_path": str(script_path) if keep_script or script_path_arg else None,
+            "windows_native": os.name == "nt",
+        }
+        if temporary_script and not keep_script:
+            try:
+                script_path.unlink(missing_ok=True)
+            except OSError:
+                result["cleanup_warning"] = f"could not remove temporary script: {script_path}"
+        return _ok(result, host=os.name) if proc.returncode == 0 else _fail("host python script failed", result=result, host=os.name)
+    except subprocess.TimeoutExpired as exc:
+        return _fail(f"host python script timed out after {timeout}s", stdout=exc.stdout, stderr=exc.stderr, host=os.name)
+    except Exception as exc:
+        return _fail(str(exc), host=os.name, script_path=str(script_path) if script_path else None)
 
 
 def _handle_capabilities(args: dict[str, Any], **_: Any) -> str:
@@ -1078,6 +1278,46 @@ RESEARCH_MEMORY_SCHEMA = {
             "caveats": {"type": "array", "items": {"type": "string"}},
             "limit": {"type": "integer", "default": 5},
             "session_id": {"type": "string"},
+        },
+        "required": [],
+    },
+}
+HOST_FS_SCHEMA = {
+    "name": "urban_host_fs",
+    "description": "Use native host Python to inspect Windows/host files and folders, including D:/... paths. Prefer this over generic read_file/search_files/terminal on Windows so paths do not go through Git Bash or WSL.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "action": {
+                "type": "string",
+                "enum": ["stat", "exists", "list", "glob", "read_text", "read_json", "json_summary", "geojson_summary"],
+                "default": "stat",
+            },
+            "path": {"type": "string", "description": "Native host path such as D:/data/file.geojson or C:/Users/..."},
+            "pattern": {"type": "string", "description": "Glob pattern used when action=glob, relative to path when path is a directory."},
+            "encoding": {"type": "string", "description": "Optional text encoding override."},
+            "limit": {"type": "integer", "default": 100},
+            "max_chars": {"type": "integer", "default": 20000},
+            "max_bytes": {"type": "integer", "default": 25000000},
+        },
+        "required": [],
+    },
+}
+HOST_PYTHON_SCHEMA = {
+    "name": "urban_host_python",
+    "description": "Run a Python script with native host paths and shell=False. Use this for Windows-local data preparation or artifact checks when generic terminal would enter Git Bash/WSL. Use urban_qgis_process for QGIS Processing algorithms.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "code": {"type": "string", "description": "Python code to run. The adapter writes it to a native temporary/script file before execution."},
+            "script_path": {"type": "string", "description": "Optional existing Python script path to run instead of inline code."},
+            "python": {"type": "string", "description": "Optional Python executable. Defaults to the interpreter running Hermes-Urban."},
+            "workdir": {"type": "string", "description": "Native host working directory."},
+            "output_dir": {"type": "string", "description": "Optional directory where the generated script is preserved for provenance."},
+            "argv": {"type": "array", "items": {"type": "string"}},
+            "env": {"type": "object"},
+            "timeout": {"type": "integer", "default": 300},
+            "keep_script": {"type": "boolean", "default": False},
         },
         "required": [],
     },

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 from .bootstrap import bootstrap
@@ -30,6 +31,11 @@ def run_dogfood() -> dict[str, Any]:
     from tools.registry import registry
 
     schemas = registry.get_definitions(set(registered), quiet=True)
+    host_fs = _dispatch("urban_host_fs", {"action": "stat", "path": __file__})["result"]
+    host_python = _dispatch(
+        "urban_host_python",
+        {"code": "print('urban_host_python_ok')", "workdir": str(Path(__file__).parent), "timeout": 30},
+    )["result"]
     osm = _dispatch(
         "urban_fetch_osm",
         {"location": "Le Marais, Paris", "radius": 450, "data_types": ["roads", "buildings", "pois"], "mock": True},
@@ -89,6 +95,8 @@ def run_dogfood() -> dict[str, Any]:
     return {
         "registered_tools": registered,
         "schema_count": len(schemas),
+        "host_fs_hit": bool(host_fs.get("exists")),
+        "host_python_hit": host_python.get("returncode") == 0 and "urban_host_python_ok" in host_python.get("stdout_tail", ""),
         "fetch_source": osm.get("source"),
         "connectivity_class": connectivity["connectivity_class"],
         "accessibility_coverage_ratio": accessibility["coverage_ratio"],

@@ -16,7 +16,7 @@ From the `paper4_urban_svgagent` repository root:
 
 ```powershell
 $env:PYTHONPATH = "d:/GitHub_1/world_agent/urban-mobility-agent/paper4_urban_svgagent/hermes_urban_agent"
-C:/Users/18029/.conda/envs/four-seasons/python.exe -m urban_hermes --toolsets urban,todo,memory,file,terminal
+C:/Users/18029/.conda/envs/four-seasons/python.exe -m urban_hermes --toolsets urban,todo,memory
 ```
 
 This enters the normal Hermes CLI after registering the `urban` toolset.
@@ -30,8 +30,14 @@ For one-shot mode, pass the query directly:
 
 ```powershell
 $env:PYTHONPATH = "d:/GitHub_1/world_agent/urban-mobility-agent/paper4_urban_svgagent/hermes_urban_agent"
-C:/Users/18029/.conda/envs/four-seasons/python.exe -m urban_hermes "Assess walkability in Le Marais and review evidence gaps" --toolsets urban,todo,memory,file,terminal
+C:/Users/18029/.conda/envs/four-seasons/python.exe -m urban_hermes "Assess walkability in Le Marais and review evidence gaps" --toolsets urban,todo,memory
 ```
+
+On Windows, Hermes-Urban filters upstream generic `file` and `terminal` toolsets
+by default even if they are requested, because upstream Hermes executes them via
+Git Bash. Use `urban_host_fs`, `urban_host_python`, and `urban_qgis_process` for
+native `D:/...` paths and QGIS artifacts. Pass `--allow-wsl-tools` only when you
+explicitly want the upstream Git-Bash/WSL-style tools.
 
 ## Quick smoke test
 
@@ -47,11 +53,12 @@ It uses synthetic OSM-like data by default so it works without network access.
 
 Expected minimum signal from a passing run:
 
-- 14 registered urban tools.
+- 16 registered urban tools.
 - `grounding_status` is `grounded` or `grounded_with_gaps`.
 - `review_recommendation` is `accept` or `accept_with_warnings` for the fixture.
 - `research_memory_hit` is `true` for the built-in research-design cue store.
 - `memory_recall_hit` is `true` after the feedback write.
+- `host_fs_hit` and `host_python_hit` are `true` for native host execution.
 
 ## Non-interactive and QGIS runs
 
@@ -60,25 +67,27 @@ output through `prompt_toolkit`:
 
 ```powershell
 $env:PYTHONPATH = "d:/GitHub_1/world_agent/urban-mobility-agent/paper4_urban_svgagent/hermes_urban_agent"
-C:/Users/18029/.conda/envs/four-seasons/python.exe -m urban_hermes "..." --quiet --plain --toolsets urban,todo,memory,file,terminal
+C:/Users/18029/.conda/envs/four-seasons/python.exe -m urban_hermes "..." --quiet --plain --toolsets urban,todo,memory
 ```
 
 If the run must execute shell/GIS commands without interactive approval prompts,
 add `--yolo` for that process:
 
 ```powershell
-C:/Users/18029/.conda/envs/four-seasons/python.exe -m urban_hermes "..." --quiet --plain --yolo --toolsets urban,todo,memory,file,terminal
+C:/Users/18029/.conda/envs/four-seasons/python.exe -m urban_hermes "..." --quiet --plain --yolo --toolsets urban,todo,memory
 ```
 
 Use the `urban_qgis_process` tool for real QGIS Processing artifacts. It wraps
 `qgis_process`, writes a JSONL command log when `output_dir` or `log_path` is
-provided, and verifies GeoJSON outputs with feature counts.
+provided, and verifies GeoJSON outputs with feature counts. Use `urban_host_fs`
+to list/read native files and `urban_host_python` for small Windows-native
+preparation scripts when QGIS Processing alone is not enough.
 
 ## Launch Hermes with the explicit launcher
 
 ```powershell
 $env:PYTHONPATH = "d:/GitHub_1/world_agent/urban-mobility-agent/paper4_urban_svgagent/hermes_urban_agent"
-C:/Users/18029/.conda/envs/four-seasons/python.exe -m urban_hermes.launcher --toolsets urban,todo,memory,file,terminal
+C:/Users/18029/.conda/envs/four-seasons/python.exe -m urban_hermes.launcher --toolsets urban,todo,memory
 ```
 
 The launcher imports `urban_hermes.bootstrap` before entering Hermes, so the dynamic `urban` toolset is visible to Hermes' toolset resolver.
