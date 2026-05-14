@@ -437,11 +437,6 @@ def write_qgis_project_script(workspace: Path, project_qgz: Path, project_qgs: P
                 group(group_name).addLayer(layer)
                 return layer
 
-            osm = QgsRasterLayer("type=xyz&url=https://tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png&zmax=19&zmin=0", "OpenStreetMap XYZ", "wms")
-            if osm.isValid():
-                project.addMapLayer(osm, False)
-                group("00 Basemap").addLayer(osm)
-
             add_vector("01 Source data", "Context buffer 3x", r"{layer_paths['context']}", style="context")
             add_vector("01 Source data", "OSM buildings", r"{layer_paths['buildings']}", style="buildings")
             add_vector("01 Source data", "OSM heritage/start_date buildings", r"{layer_paths['buildings']}", style="heritage", subset='"heritage" IS NOT NULL OR "start_date" IS NOT NULL OR "old_name" IS NOT NULL OR "tourism" IS NOT NULL')
@@ -460,6 +455,15 @@ def write_qgis_project_script(workspace: Path, project_qgz: Path, project_qgs: P
 
             add_vector("04 QGIS derived checks", "QGIS fixed grid", r"{layer_paths['qgis_fixed']}", graduated=("building_count", ["#ffffcc", "#c2e699", "#78c679", "#31a354", "#006837"]))
             add_vector("04 QGIS derived checks", "QGIS fixed grid centroids", r"{layer_paths['qgis_centroids']}", style="nodes")
+
+            # Add the opaque XYZ basemap last so it is at the bottom of the
+            # layer tree. If it sits above vectors, refreshing/toggling layers
+            # can make the canvas look like a solid blue OSM ocean tile.
+            osm = QgsRasterLayer("type=xyz&url=https://tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png&zmax=19&zmin=0", "OpenStreetMap XYZ", "wms")
+            if osm.isValid():
+                osm.setOpacity(0.75)
+                project.addMapLayer(osm, False)
+                group("99 Basemap").addLayer(osm)
 
             project.write(str(project_qgz))
             project.write(str(project_qgs))
