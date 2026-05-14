@@ -42,6 +42,7 @@ def register_all_urban_tools() -> list[str]:
         ("urban_research_memory", RESEARCH_MEMORY_SCHEMA, _handle_research_memory),
         ("urban_host_fs", HOST_FS_SCHEMA, _handle_host_fs),
         ("urban_host_python", HOST_PYTHON_SCHEMA, _handle_host_python),
+        ("urban_qgis_workspace", QGIS_WORKSPACE_SCHEMA, _handle_qgis_workspace),
         ("urban_qgis_process", QGIS_PROCESS_SCHEMA, _handle_qgis_process),
     ]
     names: list[str] = []
@@ -547,6 +548,93 @@ def _handle_research_memory(args: dict[str, Any], **_: Any) -> str:
     return provider.handle_tool_call("urban_research_memory", args)
 
 
+def _handle_qgis_workspace(args: dict[str, Any], **_: Any) -> str:
+    """Package GIS outputs into a QGIS project plus agent-readable manifest."""
+    from .paths import PAPER4_ROOT
+
+    workspace_type = str(args.get("workspace_type") or "case1_nanjing_200m")
+    run_dir_raw = args.get("run_dir")
+    if not run_dir_raw:
+        return _fail("run_dir is required so the workspace packager does not guess which experiment to package")
+    run_dir = _host_path(run_dir_raw)
+    if not run_dir.exists():
+        return _fail(f"run_dir does not exist: {run_dir}")
+
+    if args.get("packager_script"):
+        packager_script = _host_path(args["packager_script"])
+    elif workspace_type == "case1_nanjing_200m":
+        packager_script = PAPER4_ROOT / "scripts" / "package_case1_qgis_workspace.py"
+    else:
+        return _fail(
+            f"unsupported workspace_type: {workspace_type}",
+            hint="Author a workspace packager with urban_host_python, then call this tool with packager_script.",
+        )
+    if not packager_script.exists():
+        return _fail(
+            f"packager script does not exist: {packager_script}",
+            hint="Use urban_host_python to create a task-specific QGIS workspace packager, then record the pattern with urban_research_memory.",
+        )
+
+    qgis_python = _resolve_qgis_python(args.get("qgis_python"))
+    timeout = int(args.get("timeout") or 600)
+    command = [sys.executable, str(packager_script), "--run-dir", str(run_dir)]
+    if qgis_python:
+        command.extend(["--qgis-python", qgis_python])
+    started = datetime.now().isoformat()
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=str(PAPER4_ROOT),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            shell=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        return _fail("qgis workspace packager timed out", command=command, timeout_s=timeout, stdout=exc.stdout, stderr=exc.stderr)
+    except Exception as exc:
+        return _fail(f"qgis workspace packager failed to start: {exc}", command=command)
+
+    parsed_stdout = None
+    stdout = completed.stdout or ""
+    for start in [idx for idx, char in enumerate(stdout) if char == "{"]:
+        try:
+            parsed_stdout = json.loads(stdout[start:])
+            break
+        except Exception:
+            continue
+
+    workspace = run_dir / "qgis_workspace"
+    manifest_path = workspace / "manifests" / "spatial_reasoning_manifest.json"
+    manifest = None
+    if manifest_path.exists():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+        except Exception as exc:
+            manifest = {"read_warning": str(exc), "path": str(manifest_path)}
+    project_qgz = Path(str(manifest.get("project_qgz"))) if isinstance(manifest, dict) and manifest.get("project_qgz") else workspace / "project" / "case1_nanjing_road_200m_grid_workspace.qgz"
+    result = {
+        "workspace_type": workspace_type,
+        "command": command,
+        "returncode": completed.returncode,
+        "stdout_tail": stdout[-4000:],
+        "stderr_tail": (completed.stderr or "")[-4000:],
+        "parsed_stdout": parsed_stdout,
+        "workspace": str(workspace),
+        "manifest_path": str(manifest_path),
+        "manifest_exists": manifest_path.exists(),
+        "project_qgz": str(project_qgz),
+        "project_qgz_exists": project_qgz.exists(),
+        "layer_count": len(manifest.get("layers", [])) if isinstance(manifest, dict) else None,
+        "started_at": started,
+        "finished_at": datetime.now().isoformat(),
+    }
+    success = completed.returncode == 0 and result["manifest_exists"] and result["project_qgz_exists"]
+    return _json({"success": success, "result": result, "error": None if success else "workspace packager did not complete cleanly"})
+
+
 def _handle_qgis_process(args: dict[str, Any], **_: Any) -> str:
     """Run qgis_process directly from the Hermes-Urban Python process."""
     algorithm = str(args.get("algorithm") or "").strip()
@@ -630,6 +718,32 @@ def _candidate_qgis_process_paths() -> list[str]:
         ]
     )
     return [item for item in candidates if item]
+
+
+def _candidate_qgis_python_paths() -> list[str]:
+    env_path = os.getenv("QGIS_PYTHON") or os.getenv("QGIS_PYTHON_PATH")
+    candidates = [env_path] if env_path else []
+    candidates.extend(
+        [
+            r"C:\Program Files\QGIS 3.40.11\bin\python-qgis-ltr.bat",
+            r"C:\Program Files\QGIS 3.40\bin\python-qgis-ltr.bat",
+            r"C:\Program Files\QGIS 3.40.11\bin\python.exe",
+            r"C:\Program Files\QGIS 3.40\bin\python.exe",
+        ]
+    )
+    return [item for item in candidates if item]
+
+
+def _resolve_qgis_python(value: Any = None) -> str | None:
+    candidates = [str(value)] if value else []
+    candidates.extend(_candidate_qgis_python_paths())
+    for candidate in candidates:
+        if not candidate:
+            continue
+        path = Path(candidate)
+        if path.exists():
+            return str(path)
+    return None
 
 
 def _resolve_qgis_process(value: Any = None) -> str | None:
@@ -1320,6 +1434,26 @@ HOST_PYTHON_SCHEMA = {
             "keep_script": {"type": "boolean", "default": False},
         },
         "required": [],
+    },
+}
+QGIS_WORKSPACE_SCHEMA = {
+    "name": "urban_qgis_workspace",
+    "description": "Package completed GIS analysis outputs into a QGIS workspace: source/derived layers, .qgz/.qgs project, visual styles, README, and spatial_reasoning_manifest.json for later agent reasoning. Use this after generating GIS layers instead of leaving only loose GeoJSON/CSV files.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "workspace_type": {
+                "type": "string",
+                "enum": ["case1_nanjing_200m", "custom"],
+                "default": "case1_nanjing_200m",
+                "description": "Known reusable workspace packager. For custom tasks, pass packager_script.",
+            },
+            "run_dir": {"type": "string", "description": "Experiment run directory containing outputs/ and receiving qgis_workspace/."},
+            "packager_script": {"type": "string", "description": "Optional task-specific Python packager authored during the run."},
+            "qgis_python": {"type": "string", "description": "Optional QGIS Python .bat/.exe path for writing .qgz/.qgs projects."},
+            "timeout": {"type": "integer", "default": 600},
+        },
+        "required": ["run_dir"],
     },
 }
 QGIS_PROCESS_SCHEMA = {

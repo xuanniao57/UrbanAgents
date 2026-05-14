@@ -38,5 +38,15 @@
     "triggers": ["gap", "paper", "\u53d8\u91cf", "\u53ef\u9a8c\u8bc1", "\u7814\u7a76\u8bbe\u8ba1", "literature", "method"],
     "method_hint": "Return a research design table with question, X/Y variables, data, unit, model family, validation, and risks.",
     "caveats": ["Literature memory should guide alternatives, not force a single template."]
+  },
+  {
+    "record_id": "seed_qgis_workspace_packaging_for_spatial_reasoning",
+    "timestamp": "seed",
+    "memory_type": "workflow_pattern",
+    "domain": "gis_artifact_packaging",
+    "summary": "For GIS-heavy urban analysis, good results should be organized as a QGIS workspace rather than loose GeoJSON/CSV files: source layers, derived metric layers, styled .qgz/.qgs project, README, and an agent-readable spatial_reasoning_manifest.json. This lets humans inspect maps and later agents continue spatial reasoning from the same evidence.",
+    "triggers": ["qgis", "qgz", "qgs", "mapping", "map", "地图", "可视化", "空间推理", "manifest", "workspace", "工作台", "图层", "200m"],
+    "method_hint": "After generating GIS layers, call urban_qgis_workspace when a packager fits; otherwise author a task-specific packager with urban_host_python. Put opaque basemaps at the bottom of the QGIS layer tree, expose key metric fields, and record layer purposes and known limits in spatial_reasoning_manifest.json.",
+    "caveats": ["Do not let basemap layers cover analysis layers.", "Label proxy layers such as OSM heritage tags and road closeness as proxies, not authoritative measures.", "A manifest supports reasoning but does not replace independent data validation."]
   }
 ]

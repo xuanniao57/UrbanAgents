@@ -53,7 +53,7 @@ It uses synthetic OSM-like data by default so it works without network access.
 
 Expected minimum signal from a passing run:
 
-- 16 registered urban tools.
+- 17 registered urban tools.
 - `grounding_status` is `grounded` or `grounded_with_gaps`.
 - `review_recommendation` is `accept` or `accept_with_warnings` for the fixture.
 - `research_memory_hit` is `true` for the built-in research-design cue store.
@@ -82,6 +82,10 @@ Use the `urban_qgis_process` tool for real QGIS Processing artifacts. It wraps
 provided, and verifies GeoJSON outputs with feature counts. Use `urban_host_fs`
 to list/read native files and `urban_host_python` for small Windows-native
 preparation scripts when QGIS Processing alone is not enough.
+
+Use `urban_qgis_workspace` after a GIS-heavy run to package loose layers into a
+QGIS workbench: source layers, derived metric layers, `.qgz/.qgs`, README, and
+`spatial_reasoning_manifest.json` for later agent reasoning.
 
 ## Launch Hermes with the explicit launcher
 
