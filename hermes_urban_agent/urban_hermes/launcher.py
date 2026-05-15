@@ -8,6 +8,7 @@ import re
 import sys
 
 from .bootstrap import bootstrap
+from .branding import apply_urban_agents_branding
 from .paths import ensure_paths
 
 
@@ -26,6 +27,7 @@ HERMES_COMMANDS = {
 
 def _run_hermes_command(argv: list[str]) -> None:
     ensure_paths()
+    apply_urban_agents_branding()
     old_argv = sys.argv[:]
     old_disable_lazy = os.environ.get("HERMES_DISABLE_LAZY_INSTALLS")
     try:
@@ -34,7 +36,7 @@ def _run_hermes_command(argv: list[str]) -> None:
             # Those probes can trigger lazy pip installs, which is undesirable
             # during configuration and can stall or crash the setup flow.
             os.environ["HERMES_DISABLE_LAZY_INSTALLS"] = "1"
-        sys.argv = ["hermes", *argv]
+        sys.argv = ["urban-hermes", *argv]
         from hermes_cli.main import main as hermes_command_main
 
         hermes_command_main()
@@ -115,18 +117,18 @@ def main(argv: list[str] | None = None) -> None:
         _run_hermes_command(raw_args)
         return
 
-    parser = argparse.ArgumentParser(description="Launch Hermes with Hermes-Urban tools registered.")
+    parser = argparse.ArgumentParser(description="Launch Urban Agents with the Urban-Hermes runtime and urban toolset registered.")
     parser.add_argument("query", nargs="?", help="Optional one-shot query. If omitted, Hermes starts interactively.")
     parser.add_argument("--toolsets", default="urban,todo,memory,file,terminal", help="Comma-separated Hermes toolsets.")
-    parser.add_argument("--provider", default=None, help="Hermes provider override.")
-    parser.add_argument("--model", default=None, help="Hermes model override.")
+    parser.add_argument("--provider", default=None, help="Provider override.")
+    parser.add_argument("--model", default=None, help="Model override.")
     parser.add_argument("--max-turns", type=int, default=None, help="Maximum tool-calling turns for one-shot mode.")
     parser.add_argument("--skills", default=None, help="Comma-separated Hermes skills to preload.")
     parser.add_argument("--list-tools", action="store_true", help="List available tools and exit.")
     parser.add_argument("--list-toolsets", action="store_true", help="List available toolsets and exit.")
-    parser.add_argument("--quiet", action="store_true", help="Pass quiet mode through to Hermes CLI.")
-    parser.add_argument("--compact", action="store_true", help="Pass compact display mode through to Hermes CLI.")
-    parser.add_argument("--resume", default=None, help="Resume a previous Hermes session id.")
+    parser.add_argument("--quiet", action="store_true", help="Pass quiet mode through to the Urban Agents CLI.")
+    parser.add_argument("--compact", action="store_true", help="Pass compact display mode through to the Urban Agents CLI.")
+    parser.add_argument("--resume", default=None, help="Resume a previous Urban Agents session id.")
     parser.add_argument("--ignore-user-config", action="store_true", help="Pass through to Hermes CLI.")
     parser.add_argument("--plain", action="store_true", help="Force plain non-prompt_toolkit output for scripted runs.")
     parser.add_argument("--yolo", action="store_true", help="Bypass Hermes dangerous-command approval prompts for this process.")
@@ -142,9 +144,11 @@ def main(argv: list[str] | None = None) -> None:
 
     _patch_plain_output_if_needed(force=args.plain)
 
-    from cli import main as hermes_main
+    import cli as hermes_cli_module
 
-    hermes_main(
+    apply_urban_agents_branding(hermes_cli_module)
+
+    hermes_cli_module.main(
         query=args.query,
         toolsets=args.toolsets,
         provider=args.provider,

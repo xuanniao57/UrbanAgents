@@ -1,8 +1,9 @@
 # Hermes Urban Agent Adapter
 
-This folder is a Hermes-based UrbanAgent adapter carried inside the
-UrbanAgents repository branch. It registers urban analysis tools into a normal
-Hermes runtime while keeping runtime memory and generated artifacts local.
+This folder is the Urban-Hermes runtime carried inside the UrbanAgents
+repository branch. It vendors the Hermes agent runtime under the MIT license,
+registers UrbanAgent analysis tools, and presents the user-facing CLI as
+Urban Agents while keeping runtime memory and generated artifacts local.
 
 The adapter implements the three paper gaps as Hermes-native extensions:
 
@@ -10,17 +11,30 @@ The adapter implements the three paper gaps as Hermes-native extensions:
 - Step 2: `urban_ground_task` and `urban_review` expose input grounding and review routing.
 - Step 3: `urban_hermes.memory_provider` implements a single Hermes `MemoryProvider` that internally composes feedback, place, research-design, urban-method, and tool-artifact memory.
 
+## Install for collaborators
+
+Use Python 3.11 or newer. From a fresh checkout:
+
+```powershell
+cd paper4_urban_svgagent
+python -m pip install -e .
+urban-hermes setup
+```
+
+Then fill in your provider API key when prompted, or edit the generated
+`.urban-agent/urban_hermes/.env` file. A separate `hermes-agent` checkout is
+not required; UrbanAgents includes the vendored runtime used by `urban-hermes`.
+
 ## Start the interactive CLI
 
 From the `paper4_urban_svgagent` repository root:
 
 ```powershell
-$env:PYTHONPATH = "d:/GitHub_1/world_agent/urban-mobility-agent/paper4_urban_svgagent/hermes_urban_agent"
-C:/Users/18029/.conda/envs/four-seasons/python.exe -m urban_hermes --toolsets urban,todo,memory
+urban-hermes --toolsets urban,todo,memory
 ```
 
-This enters the normal Hermes CLI after registering the `urban` toolset.
-Type your task at the Hermes prompt, for example:
+This enters the Urban Agents CLI after registering the `urban` toolset.
+Type your task at the Urban Agents prompt, for example:
 
 ```text
 Assess walkability in Le Marais and review evidence gaps before giving recommendations.
@@ -29,8 +43,7 @@ Assess walkability in Le Marais and review evidence gaps before giving recommend
 For one-shot mode, pass the query directly:
 
 ```powershell
-$env:PYTHONPATH = "d:/GitHub_1/world_agent/urban-mobility-agent/paper4_urban_svgagent/hermes_urban_agent"
-C:/Users/18029/.conda/envs/four-seasons/python.exe -m urban_hermes "Assess walkability in Le Marais and review evidence gaps" --toolsets urban,todo,memory
+urban-hermes "Assess walkability in Le Marais and review evidence gaps" --toolsets urban,todo,memory
 ```
 
 On Windows, Hermes-Urban filters upstream generic `file` and `terminal` toolsets
@@ -44,8 +57,7 @@ explicitly want the upstream Git-Bash/WSL-style tools.
 From the repository root:
 
 ```powershell
-$env:PYTHONPATH = "d:/GitHub_1/world_agent/urban-mobility-agent/paper4_urban_svgagent/hermes_urban_agent"
-C:/Users/18029/.conda/envs/four-seasons/python.exe -m urban_hermes.dogfood
+urban-hermes-dogfood
 ```
 
 The smoke test prints a JSON diagnostic report.
@@ -66,15 +78,14 @@ For scripted experiments, prefer plain/quiet mode so Hermes does not route
 output through `prompt_toolkit`:
 
 ```powershell
-$env:PYTHONPATH = "d:/GitHub_1/world_agent/urban-mobility-agent/paper4_urban_svgagent/hermes_urban_agent"
-C:/Users/18029/.conda/envs/four-seasons/python.exe -m urban_hermes "..." --quiet --plain --toolsets urban,todo,memory
+urban-hermes "..." --quiet --plain --toolsets urban,todo,memory
 ```
 
 If the run must execute shell/GIS commands without interactive approval prompts,
 add `--yolo` for that process:
 
 ```powershell
-C:/Users/18029/.conda/envs/four-seasons/python.exe -m urban_hermes "..." --quiet --plain --yolo --toolsets urban,todo,memory
+urban-hermes "..." --quiet --plain --yolo --toolsets urban,todo,memory
 ```
 
 Use the `urban_qgis_process` tool for real QGIS Processing artifacts. It wraps
@@ -90,25 +101,23 @@ QGIS workbench: source layers, derived metric layers, `.qgz/.qgs`, README, and
 ## Launch Hermes with the explicit launcher
 
 ```powershell
-$env:PYTHONPATH = "d:/GitHub_1/world_agent/urban-mobility-agent/paper4_urban_svgagent/hermes_urban_agent"
-C:/Users/18029/.conda/envs/four-seasons/python.exe -m urban_hermes.launcher --toolsets urban,todo,memory
+urban-hermes --toolsets urban,todo,memory
 ```
 
-The launcher imports `urban_hermes.bootstrap` before entering Hermes, so the dynamic `urban` toolset is visible to Hermes' toolset resolver.
+The launcher imports `urban_hermes.bootstrap` before entering the vendored runtime, so the dynamic `urban` toolset is visible to the toolset resolver.
 
 ## Install the Hermes memory bridge
 
 This creates a small `urban_memory` bridge under the active Hermes home plugin directory.
 
 ```powershell
-$env:PYTHONPATH = "d:/GitHub_1/world_agent/urban-mobility-agent/paper4_urban_svgagent/hermes_urban_agent"
-C:/Users/18029/.conda/envs/four-seasons/python.exe -m urban_hermes.install_plugin
+python -m urban_hermes.install_plugin
 ```
 
-If `hermes-agent/` is not a sibling of this repository root, set
-`URBAN_HERMES_HERMES_ROOT` to the Hermes source directory before launching.
+The bridge uses the vendored runtime by default. Set `URBAN_HERMES_HERMES_ROOT`
+only when intentionally testing against an external Hermes checkout.
 
-Then set `memory.provider: urban_memory` in Hermes `config.yaml` if you want the normal Hermes memory-provider discovery path to load it automatically.
+Then set `memory.provider: urban_memory` in `.urban-agent/urban_hermes/config.yaml` if you want the normal memory-provider discovery path to load it automatically.
 
 ## Programmatic use
 

@@ -1,6 +1,9 @@
 import json
+import os
 import sys
 from pathlib import Path
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -9,12 +12,22 @@ if str(ADAPTER_ROOT) not in sys.path:
     sys.path.insert(0, str(ADAPTER_ROOT))
 
 from urban_hermes.memory_provider import UrbanMemoryProvider
+from urban_hermes.paths import HERMES_ROOT
 
 
 def _result(raw: str) -> dict:
     payload = json.loads(raw)
     assert payload["success"] is True
     return payload["result"]
+
+
+def test_urban_hermes_defaults_to_vendored_runtime():
+    if os.getenv("URBAN_HERMES_HERMES_ROOT"):
+        pytest.skip("developer override uses an external Hermes checkout")
+    assert HERMES_ROOT.name == "hermes_runtime"
+    assert HERMES_ROOT.parent.name == "_vendor"
+    assert (HERMES_ROOT / "cli.py").exists()
+    assert (HERMES_ROOT / "hermes_cli" / "banner.py").exists()
 
 
 def test_tool_artifact_memory_routes_to_research_store(tmp_path):

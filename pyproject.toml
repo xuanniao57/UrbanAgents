@@ -23,21 +23,32 @@ classifiers = [
   "Topic :: Scientific/Engineering :: GIS",
 ]
 dependencies = [
+  "croniter>=6.0.0",
   "fastapi>=0.115.0",
+  "fire>=0.7.1",
   "geopandas>=0.14.0",
+  "httpx[socks]>=0.28.1",
+  "jinja2>=3.1.6",
   "networkx>=3.2.0",
   "numpy>=1.26.0",
-  "openai>=1.52.2",
+  "openai>=2.24.0",
   "osmnx>=1.9.4",
   "pandas>=2.1.0",
   "pillow>=10.4.0",
+  "psutil>=7.2.2",
   "pydantic>=2.7.0",
   "pydantic-settings>=2.2.1",
   "prompt-toolkit>=3.0.48",
+  "PyJWT[crypto]>=2.12.1",
   "python-dotenv>=1.0.1",
+  "pyyaml>=6.0.3",
+  "requests>=2.33.0",
   "rich>=13.9.0",
+  "ruamel.yaml>=0.18.17",
   "scikit-learn>=1.5.0",
   "shapely>=2.0.0",
+  "tenacity>=9.1.4",
+  "tzdata>=2025.3; sys_platform == 'win32'",
   "uvicorn>=0.30.0",
 ]
 
@@ -58,17 +69,20 @@ Issues = "https://github.com/xuanniao57/UrbanAgents/issues"
 
 [project.scripts]
 urban-agent = "urban_agent.cli:main"
+urban-hermes = "urban_hermes.launcher:main"
+urban-hermes-dogfood = "urban_hermes.dogfood:main"
 
 [tool.setuptools]
 include-package-data = true
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["urban_agent*", "web*"]
+where = [".", "hermes_urban_agent"]
+include = ["urban_agent*", "web*", "urban_hermes*"]
 exclude = ["legacy*", "plugins*", "benchmarks*", "case_studies*", "examples*", "experimental*"]
 
 [tool.setuptools.package-data]
 urban_agent = ["memory/**/*.json", "memory/**/*.jsonl"]
+urban_hermes = ["research_memory_seed.json", "urban_skill_prompt.md", "_vendor/hermes_runtime/**/*"]
 web = ["README.md", "requirements.txt", "static/index.html", "static/css/*.css", "static/js/*.js"]
 
 [tool.pytest.ini_options]

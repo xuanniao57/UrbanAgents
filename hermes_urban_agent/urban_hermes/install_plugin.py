@@ -29,14 +29,14 @@ def install() -> dict[str, str]:
     (plugin_dir / "plugin.yaml").write_text(
         "name: urban_memory\n"
         "version: 0.1.0\n"
-        "description: UrbanAgent feedback and place memory provider for Hermes dogfooding.\n",
+        "description: Urban Agents feedback, place, research-design, method, and artifact memory provider.\n",
         encoding="utf-8",
     )
     return {
         "plugin_dir": str(plugin_dir),
         "init_file": str(init_file),
         "hermes_root": str(HERMES_ROOT),
-        "next_step": "Set memory.provider: urban_memory in Hermes config.yaml, or instantiate UrbanMemoryProvider directly.",
+        "next_step": "Set memory.provider: urban_memory in .urban-agent/urban_hermes/config.yaml, or instantiate UrbanMemoryProvider directly.",
     }
 
 
