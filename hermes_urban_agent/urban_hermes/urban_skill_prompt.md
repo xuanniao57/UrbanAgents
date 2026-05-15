@@ -6,6 +6,7 @@ Default sequence:
 
 1. Call `urban_ground_task` before analysis.
 2. If the question is an early-stage research design, call `urban_research_memory` and use recalled lessons as cues, not as fixed rules.
+   Treat memory as two-axis: temporal scope (`working` session context vs `reflective` cross-session lessons) and content layer (`research_design`, `urban_method`, `tool_artifact`, `place_case`, `feedback_correction`).
 3. On Windows-native runs, inspect local `D:/...` or `C:/...` files with `urban_host_fs`; run small local preparation/check scripts with `urban_host_python`. Do not reinterpret native paths as Linux paths.
 4. Use operator tools such as `urban_fetch_osm`, `urban_analyze_connectivity`, `urban_measure_accessibility`, `urban_calculate_density`, `urban_build_topology`, `urban_generate_svg_overlay`, and `urban_export_geojson` as needed.
 5. When real GIS intermediate artifacts are required, prefer `urban_qgis_process` over merely drafting a script. Report the command log and verified output paths.
@@ -17,7 +18,12 @@ The three required review surfaces are input grounding, reasoning review, and fe
 
 Domain-memory stance:
 
+- Use progressive disclosure. The main agent should first retrieve compact `research_design` and `urban_method` cards to structure the task. Only retrieve or expose `tool_artifact` procedures to execution/review subtasks when concrete GIS/model/Rhino/QGIS artifacts are needed.
+- Research-design memory stores problem-data-algorithm triads with temporal, spatial, and population descriptors. Use it to turn early research ideas into variables, data requirements, spatial/temporal units, and validation questions.
+- Urban-method memory stores domain conventions and scientific caveats such as AOI/context-buffer separation, MAUP, proxy-variable validity, grid/segment/block choices, and X/Y alignment.
+- Tool-artifact memory stores concrete software and output-validation procedures such as QGIS layer naming, `.qgs/.qgz` checks, metric-layer mapping, manifest schema, Rhino presentation steps, or model deployment notes.
+
 - AOI/context-buffer separation is a research-design lesson. Recall it when the task involves study areas, historical districts, or surrounding context; do not hard-code it as mandatory for every task.
 - For built-environment X variables and perception/social-media Y variables, consider grid, street-segment, or block units to align observations and avoid one-record-per-district designs when that would make modeling weak.
 - If a run provides native Windows paths and needs artifacts, treat path access as a host-execution problem, not a WSL problem. Use `urban_host_fs`, `urban_host_python`, and `urban_qgis_process` first.
-- GIS results should be map-workbench artifacts, not only files. Preserve source layers, derived metric layers, QGIS project files, visual styles, and an agent-readable manifest so later agents can continue spatial reasoning from the same evidence.
+- GIS results should be map-workbench artifacts, not only files. Preserve source layers, derived metric layers, QGIS project files, visual styles, and an agent-readable manifest so later agents can continue spatial reasoning from the same evidence. Metric mapping is not complete until field distributions, nonzero/value ranges, renderer fields, style paths, `.qgs/.qgz` readability, and basemap validity are machine-checked.

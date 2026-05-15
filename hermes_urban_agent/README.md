@@ -8,7 +8,7 @@ The adapter implements the three paper gaps as Hermes-native extensions:
 
 - Step 1: `urban_hermes.tools` registers an `urban` toolset with Hermes `tools.registry`.
 - Step 2: `urban_ground_task` and `urban_review` expose input grounding and review routing.
-- Step 3: `urban_hermes.memory_provider` implements a single Hermes `MemoryProvider` that internally composes feedback memory and place memory.
+- Step 3: `urban_hermes.memory_provider` implements a single Hermes `MemoryProvider` that internally composes feedback, place, research-design, urban-method, and tool-artifact memory.
 
 ## Start the interactive CLI
 
@@ -125,7 +125,14 @@ print(registry.dispatch("urban_ground_task", {"task": "Assess walkability in Le 
 ## Hermes memory plugin shape
 
 Hermes allows only one external memory provider at a time.
-Use `UrbanMemoryProvider`, which combines feedback and place stores behind one provider.
+Use `UrbanMemoryProvider`, which combines the Urban-Hermes stores behind one provider.
+
+Urban-Hermes memory is organized along two axes:
+
+- Temporal scope: `working` memory is session/context memory loaded by Hermes and may decay through compaction; `reflective` memory is cross-session knowledge promoted from references, review failures, or human corrections.
+- Content layer: `research_design` stores problem-data-algorithm cards with temporal, spatial, and population descriptors; `urban_method` stores urban/spatial/social analysis conventions and scientific cautions; `tool_artifact` stores concrete software, algorithm, file-format, and artifact-validation procedures; `place_case` indexes context to specific places or projects; `feedback_correction` stores reusable human/reviewer corrections.
+
+The implemented loading order is progressive: Hermes base context first; compact `research_design`/`urban_method`, place, and feedback cards before planning; only an index of matching `tool_artifact` cards during prefetch; full tool-artifact procedures are retrieved later with `urban_research_memory(content_layers=["tool_artifact"])` by execution or review subtasks; reviewed corrections are promoted after the run.
 
 ```python
 from agent.memory_manager import MemoryManager

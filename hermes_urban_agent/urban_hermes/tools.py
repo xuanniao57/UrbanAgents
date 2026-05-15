@@ -1024,7 +1024,16 @@ def _search_research_memory(task_text: str, *, limit: int = 4) -> list[dict[str,
 
         provider = UrbanMemoryProvider()
         provider.initialize(session_id="ground-task")
-        raw = provider.handle_tool_call("urban_research_memory", {"action": "search", "query": task_text, "limit": limit})
+        raw = provider.handle_tool_call(
+            "urban_research_memory",
+            {
+                "action": "search",
+                "query": task_text,
+                "limit": limit,
+                "content_layers": ["research_design", "urban_method"],
+                "memory_scopes": ["reflective"],
+            },
+        )
         payload = json.loads(raw)
         result = payload.get("result") if isinstance(payload, dict) else {}
         records = result.get("records") if isinstance(result, dict) else []
@@ -1060,6 +1069,7 @@ def _execution_plan(
             {"id": "ground", "tool": "urban_ground_task", "purpose": "make data/method/evidence requirements explicit"},
             {"id": "recall", "tool": "urban_research_memory", "purpose": "retrieve reusable research-design cues when the task is still under-specified"},
             {"id": "acquire", "tool": "urban_fetch_osm", "purpose": "collect open spatial evidence when needed"},
+            {"id": "expand_artifact_memory", "tool": "urban_research_memory", "purpose": "retrieve tool_artifact procedures only when concrete GIS/model/artifact execution or review needs them"},
             {"id": "analyze", "tool": "urban_analyze_connectivity|urban_measure_accessibility|urban_calculate_density", "purpose": "run reviewable operators"},
             {"id": "review", "tool": "urban_review", "purpose": "score spatial/temporal/population/governance assumptions"},
             {"id": "reuse", "tool": "urban_record_feedback", "purpose": "store human corrections as reusable memory"},
@@ -1375,10 +1385,10 @@ TOPOLOGY_SCHEMA = {"name": "urban_build_topology", "description": "Build a light
 GROUND_TASK_SCHEMA = {"name": "urban_ground_task", "description": "Ground an urban question in capabilities, dataset cards, research-design memory, evidence manifest, and explicit gaps.", "parameters": {"type": "object", "properties": {"task": {"type": "string"}, "location": {"type": "string"}, "bbox": {"type": "array"}, "task_data": {"type": "object"}, "capability_limit": {"type": "integer", "default": 6}, "research_memory_limit": {"type": "integer", "default": 4}}, "required": ["task"]}}
 REVIEW_SCHEMA = {"name": "urban_review", "description": "Review an urban analysis under spatial, temporal, population, and governance policies.", "parameters": {"type": "object", "properties": {"analysis": {"type": "object"}, "results": {"type": "object"}, "evidence_manifest": {"type": "object"}, "threshold": {"type": "number", "default": 0.7}}, "required": []}}
 QUALITY_SCHEMA = {"name": "urban_quality_control", "description": "Run lightweight configurator-style quality checks on an urban output.", "parameters": {"type": "object", "properties": {"output": {"type": "object"}, "required_fields": {"type": "array", "items": {"type": "string"}}}, "required": ["output"]}}
-RECORD_FEEDBACK_SCHEMA = {"name": "urban_record_feedback", "description": "Record a human correction or review finding into the Urban Hermes memory store.", "parameters": {"type": "object", "properties": {"summary": {"type": "string"}, "triggers": {"type": "array", "items": {"type": "string"}}, "place": {"type": "string"}, "correction": {"type": "string"}, "session_id": {"type": "string"}}, "required": ["summary"]}}
+RECORD_FEEDBACK_SCHEMA = {"name": "urban_record_feedback", "description": "Record a human correction or review finding into the Urban Hermes memory store.", "parameters": {"type": "object", "properties": {"summary": {"type": "string"}, "triggers": {"type": "array", "items": {"type": "string"}}, "place": {"type": "string"}, "correction": {"type": "string"}, "session_id": {"type": "string"}, "content_layer": {"type": "string", "enum": ["research_design", "urban_method", "tool_artifact", "place_case", "feedback_correction"]}, "memory_scope": {"type": "string", "enum": ["working", "reflective"], "default": "reflective"}, "source_kind": {"type": "string"}}, "required": ["summary"]}}
 RESEARCH_MEMORY_SCHEMA = {
     "name": "urban_research_memory",
-    "description": "Search, list, or record reusable urban research-design lessons such as spatial-unit choice, AOI/context-buffer conventions, and X/Y variable alignment.",
+    "description": "Search, list, or record reusable Urban-Hermes memories across two axes: temporal scope (working/reflective) and content layer (research_design, urban_method, tool_artifact, place_case, feedback_correction).",
     "parameters": {
         "type": "object",
         "properties": {
@@ -1388,8 +1398,17 @@ RESEARCH_MEMORY_SCHEMA = {
             "summary": {"type": "string"},
             "method_hint": {"type": "string"},
             "domain": {"type": "string"},
+            "content_layer": {"type": "string", "enum": ["research_design", "urban_method", "tool_artifact", "place_case", "feedback_correction"]},
+            "memory_scope": {"type": "string", "enum": ["working", "reflective"], "default": "reflective"},
+            "source_kind": {"type": "string"},
+            "problem_data_algorithm": {"type": "object"},
+            "temporal_scope": {"type": "object"},
+            "spatial_scope": {"type": "object"},
+            "population_scope": {"type": "object"},
             "triggers": {"type": "array", "items": {"type": "string"}},
             "caveats": {"type": "array", "items": {"type": "string"}},
+            "content_layers": {"type": "array", "items": {"type": "string", "enum": ["research_design", "urban_method", "tool_artifact", "place_case", "feedback_correction"]}},
+            "memory_scopes": {"type": "array", "items": {"type": "string", "enum": ["working", "reflective"]}},
             "limit": {"type": "integer", "default": 5},
             "session_id": {"type": "string"},
         },
