@@ -40,6 +40,7 @@ def register_all_urban_tools() -> list[str]:
         ("urban_quality_control", QUALITY_SCHEMA, _handle_quality),
         ("urban_record_feedback", RECORD_FEEDBACK_SCHEMA, _handle_record_feedback),
         ("urban_research_memory", RESEARCH_MEMORY_SCHEMA, _handle_research_memory),
+        ("urban_memory_reflect", MEMORY_REFLECT_SCHEMA, _handle_memory_reflect),
         ("urban_host_fs", HOST_FS_SCHEMA, _handle_host_fs),
         ("urban_host_python", HOST_PYTHON_SCHEMA, _handle_host_python),
         ("urban_qgis_workspace", QGIS_WORKSPACE_SCHEMA, _handle_qgis_workspace),
@@ -546,6 +547,15 @@ def _handle_research_memory(args: dict[str, Any], **_: Any) -> str:
     provider = UrbanMemoryProvider()
     provider.initialize(session_id=str(args.get("session_id") or "tool-call"))
     return provider.handle_tool_call("urban_research_memory", args)
+
+
+def _handle_memory_reflect(args: dict[str, Any], **_: Any) -> str:
+    """Reflect on an execution trace and promote reusable lessons."""
+    from .memory_provider import UrbanMemoryProvider
+
+    provider = UrbanMemoryProvider()
+    provider.initialize(session_id=str(args.get("session_id") or "tool-call"))
+    return provider.handle_tool_call("urban_memory_reflect", args)
 
 
 def _handle_qgis_workspace(args: dict[str, Any], **_: Any) -> str:
@@ -1385,10 +1395,10 @@ TOPOLOGY_SCHEMA = {"name": "urban_build_topology", "description": "Build a light
 GROUND_TASK_SCHEMA = {"name": "urban_ground_task", "description": "Ground an urban question in capabilities, dataset cards, research-design memory, evidence manifest, and explicit gaps.", "parameters": {"type": "object", "properties": {"task": {"type": "string"}, "location": {"type": "string"}, "bbox": {"type": "array"}, "task_data": {"type": "object"}, "capability_limit": {"type": "integer", "default": 6}, "research_memory_limit": {"type": "integer", "default": 4}}, "required": ["task"]}}
 REVIEW_SCHEMA = {"name": "urban_review", "description": "Review an urban analysis under spatial, temporal, population, and governance policies.", "parameters": {"type": "object", "properties": {"analysis": {"type": "object"}, "results": {"type": "object"}, "evidence_manifest": {"type": "object"}, "threshold": {"type": "number", "default": 0.7}}, "required": []}}
 QUALITY_SCHEMA = {"name": "urban_quality_control", "description": "Run lightweight configurator-style quality checks on an urban output.", "parameters": {"type": "object", "properties": {"output": {"type": "object"}, "required_fields": {"type": "array", "items": {"type": "string"}}}, "required": ["output"]}}
-RECORD_FEEDBACK_SCHEMA = {"name": "urban_record_feedback", "description": "Record a human correction or review finding into the Urban Hermes memory store.", "parameters": {"type": "object", "properties": {"summary": {"type": "string"}, "triggers": {"type": "array", "items": {"type": "string"}}, "place": {"type": "string"}, "correction": {"type": "string"}, "session_id": {"type": "string"}, "content_layer": {"type": "string", "enum": ["research_design", "urban_method", "tool_artifact", "place_case", "feedback_correction"]}, "memory_scope": {"type": "string", "enum": ["working", "reflective"], "default": "reflective"}, "source_kind": {"type": "string"}}, "required": ["summary"]}}
+RECORD_FEEDBACK_SCHEMA = {"name": "urban_record_feedback", "description": "Record a human correction or review finding into the Urban Hermes memory store.", "parameters": {"type": "object", "properties": {"summary": {"type": "string"}, "triggers": {"type": "array", "items": {"type": "string"}}, "place": {"type": "string"}, "correction": {"type": "string"}, "session_id": {"type": "string"}, "content_layer": {"type": "string", "enum": ["research_design", "urban_method", "tool_artifact", "place_case", "feedback_correction"]}, "memory_scope": {"type": "string", "enum": ["working", "reflective"], "default": "reflective"}, "memory_chain": {"type": "string", "enum": ["research_chain", "execution_chain"]}, "linked_memory_chains": {"type": "array", "items": {"type": "string", "enum": ["research_chain", "execution_chain"]}}, "source_kind": {"type": "string"}}, "required": ["summary"]}}
 RESEARCH_MEMORY_SCHEMA = {
     "name": "urban_research_memory",
-    "description": "Search, list, or record reusable Urban-Hermes memories across two axes: temporal scope (working/reflective) and content layer (research_design, urban_method, tool_artifact, place_case, feedback_correction).",
+    "description": "Search, list, or record reusable Urban-Hermes memories. memory_chain is a retrieval facet; content_layer is the semantic tag.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -1400,6 +1410,8 @@ RESEARCH_MEMORY_SCHEMA = {
             "domain": {"type": "string"},
             "content_layer": {"type": "string", "enum": ["research_design", "urban_method", "tool_artifact", "place_case", "feedback_correction"]},
             "memory_scope": {"type": "string", "enum": ["working", "reflective"], "default": "reflective"},
+            "memory_chain": {"type": "string", "enum": ["research_chain", "execution_chain"]},
+            "linked_memory_chains": {"type": "array", "items": {"type": "string", "enum": ["research_chain", "execution_chain"]}},
             "source_kind": {"type": "string"},
             "problem_data_algorithm": {"type": "object"},
             "temporal_scope": {"type": "object"},
@@ -1409,10 +1421,37 @@ RESEARCH_MEMORY_SCHEMA = {
             "caveats": {"type": "array", "items": {"type": "string"}},
             "content_layers": {"type": "array", "items": {"type": "string", "enum": ["research_design", "urban_method", "tool_artifact", "place_case", "feedback_correction"]}},
             "memory_scopes": {"type": "array", "items": {"type": "string", "enum": ["working", "reflective"]}},
+            "memory_chains": {"type": "array", "items": {"type": "string", "enum": ["research_chain", "execution_chain"]}},
             "limit": {"type": "integer", "default": 5},
             "session_id": {"type": "string"},
         },
         "required": [],
+    },
+}
+MEMORY_REFLECT_SCHEMA = {
+    "name": "urban_memory_reflect",
+    "description": "Reflect on an Urban-Hermes execution trace, summarize reusable lessons, and optionally promote them into research/tool/feedback memory.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "task": {"type": "string"},
+            "goal": {"type": "string"},
+            "place": {"type": "string"},
+            "trajectory": {"type": "array", "items": {"type": "object"}},
+            "execution_trace": {"type": "array", "items": {"type": "object"}},
+            "artifacts": {"type": "array", "items": {"type": "object"}},
+            "deliverables": {"type": "array", "items": {"type": "object"}},
+            "validation": {"type": "object"},
+            "review": {"type": "object"},
+            "metrics": {"type": "object"},
+            "issues": {"type": "array", "items": {"type": "string"}},
+            "memory_scope": {"type": "string", "enum": ["working", "reflective"], "default": "reflective"},
+            "memory_chain": {"type": "string", "enum": ["research_chain", "execution_chain"]},
+            "linked_memory_chains": {"type": "array", "items": {"type": "string", "enum": ["research_chain", "execution_chain"]}},
+            "record_memory": {"type": "boolean", "default": True},
+            "session_id": {"type": "string"},
+        },
+        "required": ["task"],
     },
 }
 HOST_FS_SCHEMA = {

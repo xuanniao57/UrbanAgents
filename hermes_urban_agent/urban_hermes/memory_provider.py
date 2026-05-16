@@ -22,6 +22,11 @@ MEMORY_SCOPES = {
     "reflective": "Cross-session memory promoted from research references, domain conventions, review failures, or human corrections.",
 }
 
+MEMORY_CHAINS = {
+    "research_chain": "Research-facing records: question, evidence, variables, units, methods, and validity caveats.",
+    "execution_chain": "Execution-facing records: tool calls, procedures, artifacts, validation, review, cost, duration, and repairs.",
+}
+
 CONTENT_LAYERS = {
     "research_design": "Problem-data-algorithm research design memory with temporal, spatial, and population descriptors.",
     "urban_method": "Urban/spatial/social analysis method memory: conventions, scientific cautions, units, proxies, and validation concerns.",
@@ -33,6 +38,7 @@ CONTENT_LAYERS = {
 DEFAULT_MEMORY_SCOPE = "reflective"
 PLANNING_CONTENT_LAYERS = {"research_design", "urban_method"}
 EXECUTION_CONTENT_LAYERS = {"tool_artifact"}
+EXECUTION_CHAIN_LAYERS = {"tool_artifact", "feedback_correction"}
 
 
 def _json(data: dict[str, Any]) -> str:
@@ -91,6 +97,25 @@ def _normalize_scope(value: Any) -> str:
     return scope if scope in MEMORY_SCOPES else DEFAULT_MEMORY_SCOPE
 
 
+def _normalize_memory_chain(value: Any, *, content_layer: str) -> str:
+    chain = str(value or "").strip().lower()
+    if chain in MEMORY_CHAINS:
+        return chain
+    if content_layer in EXECUTION_CHAIN_LAYERS:
+        return "execution_chain"
+    return "research_chain"
+
+
+def _linked_memory_chains(payload: dict[str, Any], *, content_layer: str, memory_chain: str) -> list[str]:
+    explicit = [item.strip().lower() for item in _string_list(payload.get("linked_memory_chains") or payload.get("memory_chains"))]
+    explicit = [item for item in explicit if item in MEMORY_CHAINS]
+    if explicit:
+        return explicit
+    if content_layer in {"place_case", "feedback_correction", "urban_method"}:
+        return ["research_chain", "execution_chain"]
+    return [memory_chain]
+
+
 def _infer_content_layer(payload: dict[str, Any], *, default: str) -> str:
     explicit = str(payload.get("content_layer") or payload.get("knowledge_layer") or payload.get("memory_layer") or "").strip().lower()
     if explicit in CONTENT_LAYERS:
@@ -110,9 +135,13 @@ def _infer_content_layer(payload: dict[str, Any], *, default: str) -> str:
 
 
 def _base_memory_metadata(payload: dict[str, Any], *, default_layer: str) -> dict[str, Any]:
+    content_layer = _infer_content_layer(payload, default=default_layer)
+    memory_chain = _normalize_memory_chain(payload.get("memory_chain") or payload.get("chain"), content_layer=content_layer)
     return {
         "memory_scope": _normalize_scope(payload.get("memory_scope") or payload.get("scope")),
-        "content_layer": _infer_content_layer(payload, default=default_layer),
+        "memory_chain": memory_chain,
+        "linked_memory_chains": _linked_memory_chains(payload, content_layer=content_layer, memory_chain=memory_chain),
+        "content_layer": content_layer,
         "source_kind": payload.get("source_kind") or payload.get("source") or "agent_record",
         "promotion_state": payload.get("promotion_state") or "promoted",
     }
@@ -124,6 +153,10 @@ def _enrich_record(record: dict[str, Any], *, default_layer: str) -> dict[str, A
         enriched["memory_scope"] = _normalize_scope(enriched.get("scope"))
     if "content_layer" not in enriched:
         enriched["content_layer"] = _infer_content_layer(enriched, default=default_layer)
+    if "memory_chain" not in enriched:
+        enriched["memory_chain"] = _normalize_memory_chain(enriched.get("chain"), content_layer=str(enriched.get("content_layer") or default_layer))
+    if "linked_memory_chains" not in enriched:
+        enriched["linked_memory_chains"] = _linked_memory_chains(enriched, content_layer=str(enriched.get("content_layer") or default_layer), memory_chain=str(enriched.get("memory_chain") or "research_chain"))
     if "source_kind" not in enriched:
         enriched["source_kind"] = enriched.get("source") or enriched.get("timestamp") or "unknown"
     if "promotion_state" not in enriched:
@@ -131,20 +164,27 @@ def _enrich_record(record: dict[str, Any], *, default_layer: str) -> dict[str, A
     return enriched
 
 
-def _filters_from_args(args: dict[str, Any]) -> tuple[set[str], set[str]]:
+def _filters_from_args(args: dict[str, Any]) -> tuple[set[str], set[str], set[str]]:
     layers = {str(item).strip().lower() for item in _as_list(args.get("content_layers") or args.get("content_layer") or args.get("knowledge_layers")) if str(item).strip()}
     scopes = {str(item).strip().lower() for item in _as_list(args.get("memory_scopes") or args.get("memory_scope") or args.get("scopes")) if str(item).strip()}
-    return layers, scopes
+    chains = {str(item).strip().lower() for item in _as_list(args.get("memory_chains") or args.get("memory_chain") or args.get("chains")) if str(item).strip()}
+    chains = {item for item in chains if item in MEMORY_CHAINS}
+    return layers, scopes, chains
 
 
-def _apply_axis_filters(records: list[dict[str, Any]], *, content_layers: set[str] | None = None, memory_scopes: set[str] | None = None) -> list[dict[str, Any]]:
+def _apply_axis_filters(records: list[dict[str, Any]], *, content_layers: set[str] | None = None, memory_scopes: set[str] | None = None, memory_chains: set[str] | None = None) -> list[dict[str, Any]]:
     content_layers = content_layers or set()
     memory_scopes = memory_scopes or set()
+    memory_chains = memory_chains or set()
     filtered = []
     for record in records:
         if content_layers and str(record.get("content_layer", "")).lower() not in content_layers:
             continue
         if memory_scopes and str(record.get("memory_scope", "")).lower() not in memory_scopes:
+            continue
+        linked_chains = {str(item).lower() for item in _as_list(record.get("linked_memory_chains"))}
+        record_chain = str(record.get("memory_chain", "")).lower()
+        if memory_chains and record_chain not in memory_chains and not (linked_chains & memory_chains):
             continue
         filtered.append(record)
     return filtered
@@ -157,6 +197,8 @@ def _compact_memory_card(record: dict[str, Any]) -> dict[str, Any]:
         for key in [
             "record_id",
             "memory_scope",
+            "memory_chain",
+            "linked_memory_chains",
             "content_layer",
             "memory_type",
             "domain",
@@ -265,14 +307,14 @@ class ResearchMemoryProvider:
         _append_jsonl(self.path, record)
         return record
 
-    def search(self, query: str, *, limit: int = 5, content_layers: set[str] | None = None, memory_scopes: set[str] | None = None) -> list[dict[str, Any]]:
+    def search(self, query: str, *, limit: int = 5, content_layers: set[str] | None = None, memory_scopes: set[str] | None = None, memory_chains: set[str] | None = None) -> list[dict[str, Any]]:
         records = [_enrich_record(record, default_layer="research_design") for record in [*_builtin_research_lessons(), *_read_jsonl(self.path)]]
-        records = _apply_axis_filters(records, content_layers=content_layers, memory_scopes=memory_scopes)
+        records = _apply_axis_filters(records, content_layers=content_layers, memory_scopes=memory_scopes, memory_chains=memory_chains)
         return _rank_records(records, query, limit=limit)
 
-    def list(self, *, limit: int = 20, content_layers: set[str] | None = None, memory_scopes: set[str] | None = None) -> list[dict[str, Any]]:
+    def list(self, *, limit: int = 20, content_layers: set[str] | None = None, memory_scopes: set[str] | None = None, memory_chains: set[str] | None = None) -> list[dict[str, Any]]:
         records = [_enrich_record(record, default_layer="research_design") for record in [*_builtin_research_lessons(), *_read_jsonl(self.path)]]
-        records = _apply_axis_filters(records, content_layers=content_layers, memory_scopes=memory_scopes)
+        records = _apply_axis_filters(records, content_layers=content_layers, memory_scopes=memory_scopes, memory_chains=memory_chains)
         return records[-limit:]
 
 
@@ -304,9 +346,9 @@ class UrbanMemoryProvider(MemoryProvider):
 
     def system_prompt_block(self) -> str:
         return (
-            "Urban memory provider is active. Use two memory axes. The temporal axis separates "
-            "working/session memory from reflective cross-session lessons. The content axis separates "
-            "research-design, urban-method, tool-artifact, place/case, and feedback-correction memory. "
+            "Urban memory provider is active. Use retrieval facets rather than loading everything. "
+            "memory_chain separates research-facing records from execution-facing records; content_layer narrows "
+            "the slice to research-design, urban-method, tool-artifact, place/case, or feedback-correction memory. "
             "Before urban analysis, recall task-relevant cards progressively: first compact research and "
             "method cues for the main plan, then selected tool-artifact procedures for execution and review. "
             "Treat recalled lessons as professional cues, not automatic facts or hard-coded rules. Store "
@@ -324,11 +366,14 @@ class UrbanMemoryProvider(MemoryProvider):
                 limit=4,
                 content_layers=PLANNING_CONTENT_LAYERS,
                 memory_scopes={"reflective"},
+                memory_chains={"research_chain"},
             )
         ]
         tool_artifact_index = [
             {
                 "record_id": item.get("record_id"),
+                "memory_chain": item.get("memory_chain"),
+                "linked_memory_chains": item.get("linked_memory_chains"),
                 "content_layer": item.get("content_layer"),
                 "summary": item.get("summary"),
                 "triggers": item.get("triggers"),
@@ -338,6 +383,7 @@ class UrbanMemoryProvider(MemoryProvider):
                 limit=2,
                 content_layers=EXECUTION_CONTENT_LAYERS,
                 memory_scopes={"reflective"},
+                memory_chains={"execution_chain"},
             )
         ]
         if not feedback and not places and not planning and not tool_artifact_index:
@@ -371,29 +417,29 @@ class UrbanMemoryProvider(MemoryProvider):
             )
 
     def get_tool_schemas(self) -> list[dict[str, Any]]:
-        return [URBAN_MEMORY_SEARCH_SCHEMA, URBAN_MEMORY_RECORD_SCHEMA, URBAN_PLACE_CONTEXT_SCHEMA, URBAN_RESEARCH_MEMORY_SCHEMA]
+        return [URBAN_MEMORY_SEARCH_SCHEMA, URBAN_MEMORY_RECORD_SCHEMA, URBAN_PLACE_CONTEXT_SCHEMA, URBAN_RESEARCH_MEMORY_SCHEMA, URBAN_MEMORY_REFLECT_SCHEMA]
 
     def handle_tool_call(self, tool_name: str, args: dict[str, Any], **kwargs: Any) -> str:
         if tool_name == "urban_memory_search":
             query = str(args.get("query") or "")
             limit = int(args.get("limit") or 5)
             memory_types = set(_string_list(args.get("memory_types") or ["feedback", "place"]))
-            content_layers, memory_scopes = _filters_from_args(args)
+            content_layers, memory_scopes, memory_chains = _filters_from_args(args)
             result: dict[str, Any] = {
                 "query": query,
                 "memory_root": str(self.root),
                 "memory_axes": _memory_axes_payload(),
                 "loading_order": _memory_loading_order(),
-                "filters": {"memory_types": sorted(memory_types), "content_layers": sorted(content_layers), "memory_scopes": sorted(memory_scopes)},
+                "filters": {"memory_types": sorted(memory_types), "content_layers": sorted(content_layers), "memory_scopes": sorted(memory_scopes), "memory_chains": sorted(memory_chains)},
             }
             if "feedback" in memory_types:
                 records = self.feedback.search(query, limit=max(limit * 2, limit))
-                result["feedback_lessons"] = _apply_axis_filters(records, content_layers=content_layers, memory_scopes=memory_scopes)[:limit]
+                result["feedback_lessons"] = _apply_axis_filters(records, content_layers=content_layers, memory_scopes=memory_scopes, memory_chains=memory_chains)[:limit]
             if "place" in memory_types:
                 records = self.place.search(query, limit=max(limit * 2, limit))
-                result["place_context"] = _apply_axis_filters(records, content_layers=content_layers, memory_scopes=memory_scopes)[:limit]
+                result["place_context"] = _apply_axis_filters(records, content_layers=content_layers, memory_scopes=memory_scopes, memory_chains=memory_chains)[:limit]
             if "research" in memory_types or "research_design" in memory_types:
-                result["research_design_lessons"] = self.research.search(query, limit=limit, content_layers=content_layers, memory_scopes=memory_scopes)
+                result["research_design_lessons"] = self.research.search(query, limit=limit, content_layers=content_layers, memory_scopes=memory_scopes, memory_chains=memory_chains)
             return _json({"success": True, "result": result})
         if tool_name == "urban_memory_record":
             memory_type = str(args.get("memory_type") or "feedback")
@@ -421,14 +467,58 @@ class UrbanMemoryProvider(MemoryProvider):
         if tool_name == "urban_research_memory":
             action = str(args.get("action") or "search")
             limit = int(args.get("limit") or 5)
-            content_layers, memory_scopes = _filters_from_args(args)
+            content_layers, memory_scopes, memory_chains = _filters_from_args(args)
             if action == "record":
                 return _json({"success": True, "result": {"record": self.research.record(args), "memory_root": str(self.root)}})
             if action == "list":
-                return _json({"success": True, "result": {"records": self.research.list(limit=limit, content_layers=content_layers, memory_scopes=memory_scopes), "memory_root": str(self.root), "memory_axes": _memory_axes_payload()}})
+                return _json({"success": True, "result": {"records": self.research.list(limit=limit, content_layers=content_layers, memory_scopes=memory_scopes, memory_chains=memory_chains), "memory_root": str(self.root), "memory_axes": _memory_axes_payload()}})
             query = str(args.get("query") or args.get("task") or "")
-            return _json({"success": True, "result": {"query": query, "records": self.research.search(query, limit=limit, content_layers=content_layers, memory_scopes=memory_scopes), "memory_root": str(self.root), "memory_axes": _memory_axes_payload(), "loading_order": _memory_loading_order()}})
+            return _json({"success": True, "result": {"query": query, "records": self.research.search(query, limit=limit, content_layers=content_layers, memory_scopes=memory_scopes, memory_chains=memory_chains), "memory_root": str(self.root), "memory_axes": _memory_axes_payload(), "loading_order": _memory_loading_order()}})
+        if tool_name == "urban_memory_reflect":
+            return _json({"success": True, "result": self.reflect_execution(args)})
         return _json({"success": False, "error": f"UrbanMemoryProvider does not handle {tool_name}"})
+
+    def reflect_execution(self, payload: dict[str, Any]) -> dict[str, Any]:
+        task = str(payload.get("task") or payload.get("goal") or "urban execution")
+        memory_scope = _normalize_scope(payload.get("memory_scope") or payload.get("scope"))
+        record_memory = payload.get("record_memory", True) is not False
+        observations = _execution_reflection_observations(payload)
+        records: list[dict[str, Any]] = []
+        for observation in observations:
+            record_payload = {
+                "summary": observation["summary"],
+                "method_hint": observation.get("method_hint"),
+                "domain": observation.get("domain"),
+                "content_layer": observation["content_layer"],
+                "memory_chain": observation.get("memory_chain"),
+                "linked_memory_chains": observation.get("linked_memory_chains"),
+                "memory_scope": memory_scope,
+                "source_kind": "execution_reflection",
+                "promotion_state": "promoted" if record_memory else "draft",
+                "triggers": observation.get("triggers") or sorted(_tokens(observation["summary"]))[:12],
+                "caveats": observation.get("caveats") or [],
+                "task": task,
+            }
+            if observation["content_layer"] == "place_case":
+                record_payload["place"] = observation.get("place") or payload.get("place") or task
+            if not record_memory:
+                records.append({"would_record": record_payload})
+                continue
+            if observation["content_layer"] in {"research_design", "urban_method", "tool_artifact"}:
+                records.append({"research": self.research.record(record_payload)})
+            elif observation["content_layer"] == "place_case":
+                records.append({"place": self.place.record(record_payload)})
+            else:
+                records.append({"feedback": self.feedback.record(record_payload)})
+        return {
+            "task": task,
+            "record_memory": record_memory,
+            "memory_scope": memory_scope,
+            "summary": _summarize_execution_reflection(task, observations),
+            "observations": observations,
+            "records": records,
+            "memory_root": str(self.root),
+        }
 
     def on_memory_write(self, action: str, target: str, content: str, metadata: dict[str, Any] | None = None) -> None:
         metadata = metadata or {}
@@ -452,10 +542,12 @@ def register(ctx: Any) -> None:
 def _memory_axes_payload() -> dict[str, Any]:
     return {
         "temporal_axis": MEMORY_SCOPES,
+        "chain_axis": MEMORY_CHAINS,
         "content_axis": CONTENT_LAYERS,
         "note": (
             "Temporal scope controls when memory is loaded and whether it decays or persists; "
-            "content layer controls what kind of urban knowledge the memory carries."
+            "memory_chain separates research-facing and execution-facing records; content layers slice either chain "
+            "for targeted retrieval."
         ),
     }
 
@@ -503,6 +595,96 @@ def _rank_records(records: list[dict[str, Any]], query: str, *, limit: int) -> l
             scored.append((score, record))
     scored.sort(key=lambda item: (-item[0], str(item[1].get("timestamp", ""))))
     return [record for _, record in scored[:limit]]
+
+
+def _execution_reflection_observations(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    task = str(payload.get("task") or payload.get("goal") or "urban execution")
+    text = json.dumps(payload, ensure_ascii=False, default=str).lower()
+    observations: list[dict[str, Any]] = []
+
+    if any(term in text for term in ["qgis", "qgz", "qgs", "renderer", "classattribute", "manifest", "invalid_layers"]):
+        observations.append(
+            {
+                "content_layer": "tool_artifact",
+                "domain": "qgis_artifact_validation",
+                "summary": "QGIS deliverables should be accepted only after independent project read-back, empty invalid layer lists, metric-layer renderer checks, and manifest consistency checks.",
+                "method_hint": "Validate .qgs/.qgz with PyQGIS, inspect QgsGraduatedSymbolRenderer.classAttribute(), verify basemap ordering and manifest metric_layers before reporting success.",
+                "triggers": ["qgis", "qgz", "qgs", "renderer", "invalid_layers", "manifest"],
+                "caveats": ["Layer names or GeoJSON fields alone are not enough evidence that the rendered map encodes the intended metric."],
+            }
+        )
+
+    if any(term in text for term in ["delegate_task", "subagent", "delegation", "worker", "reviewer"]):
+        observations.append(
+            {
+                "content_layer": "urban_method",
+                "domain": "multi_agent_execution_review",
+                "summary": "When Urban-Hermes delegates analysis or artifact generation to subagents, the main agent remains responsible for research design, child-task specification, and final read-back verification.",
+                "method_hint": "Require child agents to return verifiable handles such as file paths, validation summaries, and manifest locations; the parent should independently inspect critical outputs before acceptance.",
+                "triggers": ["delegate_task", "subagent", "worker", "reviewer", "验收"],
+                "caveats": ["Subagent summaries are self-reports until the parent verifies artifacts or metrics."],
+            }
+        )
+
+    if any(term in text for term in ["ablation", "no_memory", "without memory", "memory-off", "消融", "无记忆", "cost", "duration", "用时"]):
+        observations.append(
+            {
+                "content_layer": "research_design",
+                "domain": "memory_ablation_protocol",
+                "summary": "Memory ablation for historical-district experiments should compare paired memory-on and memory-off runs with the same prompt, case list, model/provider, validation rubric, duration, and cost accounting.",
+                "method_hint": "Record per-case prompt, memory setting, tool calls, elapsed time, token/cost estimate, artifact validity, and reviewer score; summarize matched differences rather than isolated anecdotes.",
+                "triggers": ["memory ablation", "no_memory", "消融", "cost", "duration", "历史街区"],
+                "caveats": ["Do not attribute all quality differences to memory unless prompts, tools, and validation settings are held constant."],
+            }
+        )
+
+    place = payload.get("place") or payload.get("location")
+    if place:
+        observations.append(
+            {
+                "content_layer": "place_case",
+                "domain": "historical_district_case",
+                "place": str(place),
+                "summary": f"Execution context and validation lessons for {place} should be indexed as a place-case memory rather than mixed into generic method memory.",
+                "method_hint": "Store case-specific AOI, data availability, artifact paths, and known validation failures under place_case; keep reusable QGIS or modeling rules in tool_artifact or urban_method memory.",
+                "triggers": [str(place), "历史街区", "place_case"],
+            }
+        )
+
+    issues = _string_list(payload.get("issues") or payload.get("failures") or payload.get("corrections"))
+    validation = payload.get("validation") or payload.get("review") or payload.get("quality") or {}
+    if issues or (isinstance(validation, dict) and not bool(validation.get("passed", True))):
+        issue_text = "; ".join(issues[:5]) or _shorten(json.dumps(validation, ensure_ascii=False, default=str), 240)
+        observations.append(
+            {
+                "content_layer": "feedback_correction",
+                "domain": "execution_quality_feedback",
+                "summary": f"Execution review found reusable correction points for {task}: {issue_text}",
+                "method_hint": "Promote repeated review failures into feedback memory and require the next run to pre-check them before final reporting.",
+                "triggers": ["review", "feedback", "correction", "复盘", "验收"],
+            }
+        )
+
+    if observations:
+        return observations
+    return [
+        {
+            "content_layer": "feedback_correction",
+            "domain": "execution_reflection",
+            "summary": f"Execution reflection for {task} produced no specialized rule; preserve the trace as a lightweight review checkpoint.",
+            "method_hint": "Use more explicit artifacts, validation results, issues, or metrics when asking for reflective memory promotion.",
+            "triggers": ["execution_reflection", "review", "memory"],
+        }
+    ]
+
+
+def _summarize_execution_reflection(task: str, observations: list[dict[str, Any]]) -> str:
+    layers = []
+    for observation in observations:
+        layer = str(observation.get("content_layer") or "unknown")
+        if layer not in layers:
+            layers.append(layer)
+    return f"Reflected on {task}; produced {len(observations)} reusable observation(s) across {', '.join(layers)}."
 
 
 def _builtin_research_lessons() -> list[dict[str, Any]]:
@@ -624,6 +806,7 @@ URBAN_MEMORY_SEARCH_SCHEMA = {
             "memory_types": {"type": "array", "items": {"type": "string", "enum": ["feedback", "place", "research", "research_design"]}},
             "content_layers": {"type": "array", "items": {"type": "string", "enum": list(CONTENT_LAYERS)}},
             "memory_scopes": {"type": "array", "items": {"type": "string", "enum": list(MEMORY_SCOPES)}},
+            "memory_chains": {"type": "array", "items": {"type": "string", "enum": list(MEMORY_CHAINS)}},
             "limit": {"type": "integer", "default": 5},
         },
         "required": ["query"],
@@ -643,6 +826,8 @@ URBAN_MEMORY_RECORD_SCHEMA = {
             "memory_type": {"type": "string", "enum": ["feedback", "place", "research", "research_design", "urban_method", "tool_artifact", "place_case", "feedback_correction"], "default": "feedback"},
             "content_layer": {"type": "string", "enum": list(CONTENT_LAYERS)},
             "memory_scope": {"type": "string", "enum": list(MEMORY_SCOPES), "default": DEFAULT_MEMORY_SCOPE},
+            "memory_chain": {"type": "string", "enum": list(MEMORY_CHAINS)},
+            "linked_memory_chains": {"type": "array", "items": {"type": "string", "enum": list(MEMORY_CHAINS)}},
             "source_kind": {"type": "string"},
             "promotion_state": {"type": "string"},
         },
@@ -670,6 +855,8 @@ URBAN_RESEARCH_MEMORY_SCHEMA = {
             "domain": {"type": "string"},
             "content_layer": {"type": "string", "enum": list(CONTENT_LAYERS)},
             "memory_scope": {"type": "string", "enum": list(MEMORY_SCOPES), "default": DEFAULT_MEMORY_SCOPE},
+            "memory_chain": {"type": "string", "enum": list(MEMORY_CHAINS)},
+            "linked_memory_chains": {"type": "array", "items": {"type": "string", "enum": list(MEMORY_CHAINS)}},
             "source_kind": {"type": "string"},
             "problem_data_algorithm": {"type": "object"},
             "temporal_scope": {"type": "object"},
@@ -679,8 +866,35 @@ URBAN_RESEARCH_MEMORY_SCHEMA = {
             "caveats": {"type": "array", "items": {"type": "string"}},
             "content_layers": {"type": "array", "items": {"type": "string", "enum": list(CONTENT_LAYERS)}},
             "memory_scopes": {"type": "array", "items": {"type": "string", "enum": list(MEMORY_SCOPES)}},
+            "memory_chains": {"type": "array", "items": {"type": "string", "enum": list(MEMORY_CHAINS)}},
             "limit": {"type": "integer", "default": 5},
         },
         "required": [],
+    },
+}
+
+URBAN_MEMORY_REFLECT_SCHEMA = {
+    "name": "urban_memory_reflect",
+    "description": "Reflect on an Urban-Hermes execution trace and optionally promote reusable lessons into memory. memory_chain is a retrieval facet, not a separate storage backend.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "task": {"type": "string"},
+            "goal": {"type": "string"},
+            "place": {"type": "string"},
+            "trajectory": {"type": "array", "items": {"type": "object"}},
+            "execution_trace": {"type": "array", "items": {"type": "object"}},
+            "artifacts": {"type": "array", "items": {"type": "object"}},
+            "deliverables": {"type": "array", "items": {"type": "object"}},
+            "validation": {"type": "object"},
+            "review": {"type": "object"},
+            "metrics": {"type": "object"},
+            "issues": {"type": "array", "items": {"type": "string"}},
+            "memory_scope": {"type": "string", "enum": list(MEMORY_SCOPES), "default": DEFAULT_MEMORY_SCOPE},
+            "memory_chain": {"type": "string", "enum": list(MEMORY_CHAINS)},
+            "linked_memory_chains": {"type": "array", "items": {"type": "string", "enum": list(MEMORY_CHAINS)}},
+            "record_memory": {"type": "boolean", "default": True},
+        },
+        "required": ["task"],
     },
 }

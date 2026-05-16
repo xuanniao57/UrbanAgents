@@ -46,7 +46,7 @@ def _module_registers_tools(module_path: Path) -> bool:
     to call ``registry.register()`` inside a function are not picked up.
     """
     try:
-        source = module_path.read_text(encoding="utf-8")
+        source = module_path.read_text(encoding="utf-8-sig")
         tree = ast.parse(source, filename=str(module_path))
     except (OSError, SyntaxError):
         return False

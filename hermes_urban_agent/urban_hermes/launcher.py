@@ -119,7 +119,7 @@ def main(argv: list[str] | None = None) -> None:
 
     parser = argparse.ArgumentParser(description="Launch Urban Agents with the Urban-Hermes runtime and urban toolset registered.")
     parser.add_argument("query", nargs="?", help="Optional one-shot query. If omitted, Hermes starts interactively.")
-    parser.add_argument("--toolsets", default="urban,todo,memory,file,terminal", help="Comma-separated Hermes toolsets.")
+    parser.add_argument("--toolsets", default="urban,todo,memory,delegation,file,terminal", help="Comma-separated Hermes toolsets.")
     parser.add_argument("--provider", default=None, help="Provider override.")
     parser.add_argument("--model", default=None, help="Model override.")
     parser.add_argument("--max-turns", type=int, default=None, help="Maximum tool-calling turns for one-shot mode.")
