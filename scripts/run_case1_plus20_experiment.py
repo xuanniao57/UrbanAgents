@@ -192,11 +192,21 @@ INDICATORS = [
 
 
 def main() -> None:
+    global OUTPUT_ROOT, TABLE_DIR, CARD_DIR, PAPER_CARD_DIR, TRACE_DIR
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=Path, default=INPUT_PATH)
     parser.add_argument("--output-dir", type=Path, default=OUTPUT_ROOT)
     parser.add_argument("--max-images-per-case", type=int, default=120)
+    parser.add_argument("--validation-limit", type=int, default=None, help="Limit the number of validation cases after Case1.")
+    parser.add_argument("--experiment-id", type=str, default="", help="Override the experiment_id written to the manifest.")
     args = parser.parse_args()
+
+    OUTPUT_ROOT = args.output_dir
+    TABLE_DIR = OUTPUT_ROOT / "tables"
+    CARD_DIR = OUTPUT_ROOT / "dataset_cards"
+    PAPER_CARD_DIR = OUTPUT_ROOT / "paper_cards"
+    TRACE_DIR = OUTPUT_ROOT / "traces"
 
     if not HAS_GEO:
         raise RuntimeError("geopandas is required for this experiment harness")
@@ -206,6 +216,12 @@ def main() -> None:
 
     started = datetime.now()
     config = read_json(args.input)
+    if args.validation_limit is not None:
+        config = dict(config)
+        config["validation_cases"] = list(config.get("validation_cases", []))[: max(0, args.validation_limit)]
+    if args.experiment_id:
+        config = dict(config)
+        config["experiment_id"] = args.experiment_id
     cases = load_cases(config)
     roots = resolve_roots(config)
 
@@ -257,12 +273,12 @@ def main() -> None:
     draw_map_grid(cases, full_case_metrics, args.output_dir)
     draw_cumulative_figure(cumulative_rows, args.output_dir)
     draw_ablation_figure(ablation_rows, args.output_dir)
-    draw_governance_schema(args.output_dir)
+    draw_governance_schema(cases, args.output_dir)
     draw_rdma_process_panel(cases, full_case_metrics, ablation_rows, args.output_dir)
     draw_indicator_matrix_figure(args.output_dir, indicator_matrix)
     write_experiment_draft(cases, coverage_rows, ablation_rows, full_case_metrics, cumulative_rows, args.output_dir)
 
-    manifest = build_manifest(args.output_dir, started, cases, coverage_rows, ablation_rows)
+    manifest = build_manifest(args.output_dir, started, config, cases, coverage_rows, ablation_rows)
     (args.output_dir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(manifest, ensure_ascii=False, indent=2))
 
@@ -1164,7 +1180,7 @@ def draw_map_grid(cases: list[CaseSpec], full_metrics: list[dict[str, Any]], out
         ax.set_axis_off()
     for ax in axes_flat[len(cases):]:
         ax.set_axis_off()
-    fig.suptitle("Case1 + 20 historical districts: AOI, OSM roads/buildings, and street-view samples", fontsize=16, fontweight="bold")
+    fig.suptitle(f"Case1 + {len(cases) - 1} historical-district tasks: AOI, OSM roads/buildings, and street-view samples", fontsize=16, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.97))
     fig.savefig(output_dir / "fig_case1_plus20_spatial_small_multiples.png", dpi=220)
     plt.close(fig)
@@ -1233,6 +1249,8 @@ def draw_cumulative_figure(rows: list[dict[str, Any]], output_dir: Path) -> None
 def draw_ablation_figure(rows: list[dict[str, Any]], output_dir: Path) -> None:
     setup_fonts()
     frame = pd.DataFrame(rows)
+    case_count = int(frame["cases"].iloc[0]) if "cases" in frame and len(frame) else 0
+    validation_count = max(0, case_count - 1)
     fig, axes = plt.subplots(1, 3, figsize=(16, 5))
     x = np.arange(len(frame))
     labels = frame["condition"].tolist()
@@ -1248,7 +1266,7 @@ def draw_ablation_figure(rows: list[dict[str, Any]], output_dir: Path) -> None:
         ax.set_xticks(x)
         ax.set_xticklabels(labels, rotation=18, ha="right")
         ax.grid(axis="y", alpha=0.25)
-    fig.suptitle("Case1 + 20 ablation: grounding, reviewer, and memory mechanisms", fontsize=15, fontweight="bold")
+    fig.suptitle(f"Case1 + {validation_count} ablation: grounding, reviewer, and memory mechanisms", fontsize=15, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.92))
     fig.savefig(output_dir / "fig_case1_plus20_ablation_summary.png", dpi=220)
     plt.close(fig)
@@ -1256,8 +1274,9 @@ def draw_ablation_figure(rows: list[dict[str, Any]], output_dir: Path) -> None:
     draw_table_png(rows, output_dir / "table_case1_plus20_ablation_summary.png", title="Ablation summary")
 
 
-def draw_governance_schema(output_dir: Path) -> None:
+def draw_governance_schema(cases: list[CaseSpec], output_dir: Path) -> None:
     setup_fonts()
+    validation_count = len(cases) - 1
     fig, ax = plt.subplots(figsize=(15, 8))
     ax.set_axis_off()
     ax.set_xlim(0, 1)
@@ -1265,7 +1284,7 @@ def draw_governance_schema(output_dir: Path) -> None:
     box_style = dict(fill=False, linewidth=1.8, edgecolor="#334155")
     groups = [
         (0.04, 0.62, 0.26, 0.24, "Dataset Cards", ["AOI authority", "Street-view batch", "OSM Overpass/cache", "SinoBF buildings/points"]),
-        (0.37, 0.62, 0.26, 0.24, "Workflow Memory", ["Case1 workflow lesson", "tool order", "proxy/missing downgrade", "reuse on 20 tasks"]),
+        (0.37, 0.62, 0.26, 0.24, "Workflow Memory", ["Case1 workflow lesson", "tool order", "proxy/missing downgrade", f"reuse on {validation_count} tasks"]),
         (0.70, 0.62, 0.26, 0.24, "Grounding Reviewer", ["path authority", "method-data fit", "known limits", "overclaim blocking"]),
         (0.20, 0.18, 0.26, 0.24, "Analyst Tools", ["clip layers", "compute metrics", "render maps", "write traces"]),
         (0.55, 0.18, 0.26, 0.24, "Paper Outputs", ["RDMA-style panel", "small multiples", "ablation tables", "cumulative curves"]),
@@ -1284,7 +1303,7 @@ def draw_governance_schema(output_dir: Path) -> None:
     ]
     for start, end in arrows:
         ax.add_patch(FancyArrowPatch(start, end, arrowstyle="->", mutation_scale=14, linewidth=1.5, color="#475569"))
-    ax.text(0.04, 0.93, "UrbanAgent data governance and harness for Case1 + 20 experiments", fontsize=20, fontweight="bold", color="#111827")
+    ax.text(0.04, 0.93, f"UrbanAgent data governance and harness for Case1 + {validation_count} experiments", fontsize=20, fontweight="bold", color="#111827")
     ax.text(0.04, 0.895, "Paper-card / literature grounding is reserved in the schema but not used in this ablation.", fontsize=12, color="#667085")
     fig.savefig(output_dir / "fig_case1_plus20_data_governance_harness.png", dpi=220, bbox_inches="tight")
     plt.close(fig)
@@ -1296,6 +1315,7 @@ def draw_rdma_process_panel(
     ablation_rows: list[dict[str, Any]],
     output_dir: Path,
 ) -> None:
+    validation_count = len(cases) - 1
     width, height = 1800, 2350
     img = Image.new("RGB", (width, height), "white")
     draw = ImageDraw.Draw(img)
@@ -1303,7 +1323,7 @@ def draw_rdma_process_panel(
     y = 40
     draw.text((60, y), "Case1 process panel: UrbanAgent input grounding, memory I/O, and review harness", fill="#111827", font=fonts["title"])
     y += 80
-    y = bubble(draw, fonts, 70, y, 1420, "User", "Analyze Paper9-style built-environment indicators for Shanghai Nanjing Road, then test whether the workflow improves on 20 similar heritage districts.")
+    y = bubble(draw, fonts, 70, y, 1420, "User", f"Analyze Paper9-style built-environment indicators for Shanghai Nanjing Road, then test whether the workflow improves on {validation_count} similar heritage districts.")
     y = agent_tag(draw, fonts, 75, y)
     y = process_card_input(draw, fonts, 70, y, width - 140)
     y += 28
@@ -1311,11 +1331,11 @@ def draw_rdma_process_panel(
     y = agent_tag(draw, fonts, 75, y)
     y = process_card_review(draw, fonts, 70, y, width - 140, full_metrics[0])
     y += 28
-    y = bubble(draw, fonts, 70, y, 1260, "User", "Now reuse this workflow on 20 similar districts and compare ablation conditions.")
+    y = bubble(draw, fonts, 70, y, 1260, "User", f"Now reuse this workflow on {validation_count} similar districts and compare ablation conditions.")
     y = agent_tag(draw, fonts, 75, y)
     y = process_card_results(img, draw, fonts, 70, y, width - 140, full_metrics, ablation_rows, output_dir)
     y += 24
-    draw.text((70, y), "Figure. RDMA-style UrbanAgent process panel for Case1 + 20 historical-district experiments.", fill="#1d4ed8", font=fonts["h2"])
+    draw.text((70, y), f"Figure. RDMA-style UrbanAgent process panel for Case1 + {validation_count} historical-district experiments.", fill="#1d4ed8", font=fonts["h2"])
     save_image_with_pdf(img, output_dir / "fig_case1_plus20_rdma_style_process_panel.png")
 
 
@@ -1407,8 +1427,8 @@ def process_card_results(
 ) -> int:
     h = 790
     dashed_rect(draw, [x, y, x + w, y + h], "#94a3b8")
-    draw.text((x + 28, y + 24), "20 SIMILAR TASKS:", fill="#111827", font=fonts["h2"])
     validation = [row for row in full_metrics if row["role"] == "validation"]
+    draw.text((x + 28, y + 24), f"{len(validation)} SIMILAR TASKS:", fill="#111827", font=fonts["h2"])
     summary_rows = [
         ("Districts", str(len(validation))),
         ("Street-view points", str(sum(int(row["streetview_image_points"]) for row in validation))),
@@ -1482,18 +1502,20 @@ def write_experiment_draft(
     no_review = next(row for row in ablation_rows if row["condition"] == "no_reviewer")
     no_memory = next(row for row in ablation_rows if row["condition"] == "no_memory")
     validation = [row for row in full_metrics if row["role"] == "validation"]
-    text = f"""# Case1 + 20 Experimental Results Draft
+    validation_count = len(validation)
+    total_count = len(cases)
+    text = f"""# Case1 + {validation_count} Experimental Results Draft
 
 ## Experimental Setup
 
-The experiment fixes Case1 as `{cases[0].label}` and evaluates cumulative refinement on 20 similar historical-district tasks. All 21 tasks have authoritative AOI boundaries, local street-view images, OSM-derived road/building layers, and SinoBF-1 building-function resources.
+The experiment fixes Case1 as `{cases[0].label}` and evaluates cumulative refinement on {validation_count} similar historical-district tasks. All {total_count} tasks have authoritative AOI boundaries, local street-view images, OSM-derived road/building layers, and SinoBF-1 building-function resources.
 
 The literature-grounding / paper-card interface is reserved but not used in this ablation. The tested input-grounding mechanism is the dataset-card plus authoritative-input gate.
 
 ## Data Coverage
 
-- Case count: {len(cases)}.
-- Validation tasks after Case1: {len(validation)}.
+- Case count: {total_count}.
+- Validation tasks after Case1: {validation_count}.
 - Validation street-view points: {sum(int(row['streetview_image_points']) for row in validation)}.
 - Validation street-view images: {sum(int(row['streetview_image_files']) for row in validation)}.
 - Full resource coverage: {sum(1 for row in coverage_rows if row['full_input_coverage'])}/{len(coverage_rows)}.
@@ -1528,13 +1550,14 @@ The strongest claim supported here is that the architecture exposes verifiable c
 def build_manifest(
     output_dir: Path,
     started: datetime,
+    config: dict[str, Any],
     cases: list[CaseSpec],
     coverage_rows: list[dict[str, Any]],
     ablation_rows: list[dict[str, Any]],
 ) -> dict[str, Any]:
     files = sorted(str(path.relative_to(output_dir)) for path in output_dir.rglob("*") if path.is_file())
     return {
-        "experiment_id": "case1_plus20_heritage_grounding_20260512",
+        "experiment_id": config.get("experiment_id") or "case1_plus_heritage_grounding",
         "started_at": started.isoformat(timespec="seconds"),
         "completed_at": datetime.now().isoformat(timespec="seconds"),
         "output_dir": str(output_dir),
