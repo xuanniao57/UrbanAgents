@@ -4,6 +4,8 @@
 
 你是合作者一方的测试员。Urban-Hermes 是受测系统。你的任务是：
 
+本测试包中，`Urban Agent` 指当前的 `Urban-Hermes` 分支与运行时。回传记录、transcript 标注和第 5 章材料都按这个口径写。
+
 1. 安装 Urban-Hermes 并验证环境可用
 2. 导入 Case 2 文献研究记忆，并确认 `urban_research_memory` 能检索到
 3. 准备数据画布（把数据文件放到约定目录）

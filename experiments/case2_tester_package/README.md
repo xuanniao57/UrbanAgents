@@ -2,6 +2,10 @@
 
 > 给合作者：先读 `TESTER_ROLE.md`，再按 `INSTALL.md` 装环境和导入文献记忆，最后按 `DIALOGUE_SCRIPT.md` 跑实验。
 
+## 命名口径
+
+本测试包中，`Urban Agent` 指当前的 `Urban-Hermes` 分支与运行时。后续 Case 2 实验、合作者回传和第 5 章写作都按这个口径记录，不再把 Urban-Hermes 当作临时旁支。
+
 ## 核心文档
 
 | 文档 | 用途 |
