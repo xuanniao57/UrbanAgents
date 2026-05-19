@@ -1,0 +1,122 @@
+{
+  "source_library": "D:/论文库/论文库",
+  "selection_date": "2026-05-18",
+  "purpose": "Build layered research memory for Case 2: vague vitality question -> subjective streetscape perception -> nonlinear and spatial heterogeneity workflow.",
+  "processing_rule": "Run MinerU one paper at a time. Generate a single-paper input JSON for each paper_id and inspect output before moving on.",
+  "status_legend": {
+    "candidate": "selected for planned processing",
+    "single_input_created": "single-paper JSON has been created",
+    "mineru_done": "MinerU extraction succeeded",
+    "memory_extracted": "layered memory note has been written",
+    "failed": "processing failed and needs repair or replacement"
+  },
+  "papers": [
+    {
+      "paper_id": "subjective_vitality_multimodal",
+      "title": "Beyond objective features: Integrating subjective perceptions to decipher urban vitality via multimodal machine learning",
+      "pdfPath": "D:/论文库/论文库/Beyond objective features_ Integrating subjective perceptions to decipher urban vitality via multimodal machine learning.pdf",
+      "role": "bridge_subjective_perception_and_vitality",
+      "why_selected": "Directly connects subjective perception, objective built environment, urban vitality, and multimodal machine learning.",
+      "memory_focus": ["problem_framing", "direct_proxy_missing", "perception_as_x", "multimodal_workflow"],
+      "status": "candidate"
+    },
+    {
+      "paper_id": "shenzhen_perception_vitality",
+      "title": "Using street view images to examine the association between human perceptions of locale and urban vitality in Shenzhen, China",
+      "pdfPath": "D:/论文库/论文库/Using street view images to examine the association between human perceptions of locale and urban vitality in Shenzhen, China.pdf",
+      "role": "streetview_perception_to_vitality_case",
+      "why_selected": "A close empirical analogue for relating human perception from street-view imagery to urban vitality.",
+      "memory_focus": ["streetview_perception", "urban_vitality", "spatial_unit_alignment", "claim_limits"],
+      "status": "candidate"
+    },
+    {
+      "paper_id": "nonlinear_spatial_heterogeneity_vitality",
+      "title": "Investigating nonlinear and spatially heterogeneous impacts of the built environment on urban vitality",
+      "pdfPath": "D:/论文库/论文库/Investigating nonlinear and spatially heterogeneous impacts of the built environment on urban vitality.pdf",
+      "role": "nonlinearity_and_spatial_heterogeneity_design",
+      "why_selected": "Matches the nonlinear and spatial heterogeneity part of the Case 2 research trajectory.",
+      "memory_focus": ["nonlinear_diagnosis", "spatial_heterogeneity", "method_gating", "urban_vitality"],
+      "status": "candidate"
+    },
+    {
+      "paper_id": "jinan_vitality_explainable_ai",
+      "title": "Nonlinear effects of the built environment on urban vitality in Jinan based on multi-source data and explainable AI",
+      "pdfPath": "D:/论文库/论文库/Nonlinear effects of the built environment on urban vitality in Jinan based on multi-source data and explainable AI.pdf",
+      "role": "explainable_ml_for_nonlinear_vitality",
+      "why_selected": "Useful for deciding when interpretable machine learning is justified and how to avoid causal overclaiming.",
+      "memory_focus": ["explainable_ai", "multi_source_data", "nonlinear_effects", "claim_limits"],
+      "status": "candidate"
+    },
+    {
+      "paper_id": "street_built_environment_vitality_deep_learning",
+      "title": "Exploring the association between street built environment and street vitality using deep learning methods",
+      "pdfPath": "D:/论文库/论文库/Exploring the association between street built environment and street vitality using deep learning methods.pdf",
+      "role": "street_built_environment_feature_extraction",
+      "why_selected": "Provides a street-scale workflow for extracting visual built-environment features and aligning them with vitality.",
+      "memory_focus": ["street_scale_features", "deep_learning_extraction", "spatial_join", "vitality_proxy"],
+      "status": "candidate"
+    },
+    {
+      "paper_id": "pedestrian_volume_streetview",
+      "title": "Examining the association between the built environment and pedestrian volume using street view images",
+      "pdfPath": "D:/论文库/论文库/Examining the association between the built environment and pedestrian volume using street view images.pdf",
+      "role": "observed_outcome_reference",
+      "why_selected": "Helps distinguish observed pedestrian outcome Y from perceptual or POI proxies.",
+      "memory_focus": ["observed_y", "pedestrian_volume", "streetview_features", "direct_vs_proxy"],
+      "status": "candidate"
+    },
+    {
+      "paper_id": "large_scale_human_perception_ml",
+      "title": "Measuring human perceptions of a large-scale urban region using machine learning",
+      "pdfPath": "D:/论文库/论文库/Measuring human perceptions of a large-scale urban region using machine learning.pdf",
+      "role": "perception_measurement_foundation",
+      "why_selected": "Supports the question of how subjective built-environment perception can be measured from large-scale imagery.",
+      "memory_focus": ["perception_measurement", "machine_learning", "streetview_sampling", "validity"],
+      "status": "candidate"
+    },
+    {
+      "paper_id": "urban_renewal_scene_parsing_perception",
+      "title": "Measuring human perceptions of streetscapes to better inform urban renewal: A perspective of scene semantic parsing",
+      "pdfPath": "D:/论文库/论文库/Measuring human perceptions of streetscapes to better inform urban renewal_ A perspective of scene semantic parsing.pdf",
+      "role": "semantic_parsing_to_perception",
+      "why_selected": "Useful for decomposing subjective perception into visual semantics and interpretable urban-design variables.",
+      "memory_focus": ["scene_semantic_parsing", "perception_scores", "urban_renewal", "variable_construction"],
+      "status": "candidate"
+    },
+    {
+      "paper_id": "llm_park_perceptions",
+      "title": "Beyond sentiment: Using large language models to decode multidimensional urban park perceptions for enhanced equality",
+      "pdfPath": "D:/论文库/论文库/Beyond sentiment_ Using large language models to decode multidimensional urban park perceptions for enhanced equality.pdf",
+      "role": "llm_subjective_perception_measurement",
+      "why_selected": "Supports the later natural question about whether large models can evaluate subjective built-environment perception.",
+      "memory_focus": ["llm_perception", "multidimensional_scores", "equity", "measurement_caveats"],
+      "status": "candidate"
+    },
+    {
+      "paper_id": "multiscale_geographical_random_forest",
+      "title": "Multiscale geographical random forest: A novel spatial ML approach for traffic safety modeling integrating street-view semantic visual features",
+      "pdfPath": "D:/论文库/论文库/Multiscale geographical random forest_ A novel spatial ML approach for traffic safety modeling integrating street-view semantic visual features.pdf",
+      "role": "spatial_ml_method_reference",
+      "why_selected": "Provides a spatial machine-learning reference for when local heterogeneity methods are appropriate.",
+      "memory_focus": ["geographical_random_forest", "multiscale_effects", "streetview_visual_features", "method_gating"],
+      "status": "candidate"
+    }
+  ],
+  "backup_candidates": [
+    {
+      "title": "GeoShapley: A Game Theory Approach to Measuring Spatial Effects in Machine Learning Models",
+      "pdfPath": "D:/论文库/论文库/GeoShapley_ A Game Theory Approach to Measuring Spatial Effects in Machine Learning Models.pdf",
+      "use_if": "Need stronger explanation-memory for spatial ML effects."
+    },
+    {
+      "title": "Multiscale Geographically Weighted Regression (MGWR)",
+      "pdfPath": "D:/论文库/论文库/Multiscale Geographically Weighted Regression  MGWR .pdf",
+      "use_if": "Need a classic local-regression method reference."
+    },
+    {
+      "title": "Can ChatGPT-5 assess human perceptions of dynamic urban streetscape transitions? Insights from Hong Kong",
+      "pdfPath": "D:/论文库/论文库/Can ChatGPT-5 assess human perceptions of dynamic urban streetscape transitions_ Insights from Hong Kong.pdf",
+      "use_if": "Need a more explicit LLM-as-perception-evaluator reference."
+    }
+  ]
+}

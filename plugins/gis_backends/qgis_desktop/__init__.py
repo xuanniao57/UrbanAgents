@@ -1,0 +1,1 @@
+"""QGIS Desktop backend for the Urban-Hermes GIS protocol."""

@@ -1,0 +1,16 @@
+{
+  "papers": [
+    {
+      "itemKey": "subjective_vitality_multimodal",
+      "title": "Beyond objective features: Integrating subjective perceptions to decipher urban vitality via multimodal machine learning",
+      "pdfPath": "D:/论文库/论文库/Beyond objective features_ Integrating subjective perceptions to decipher urban vitality via multimodal machine learning.pdf",
+      "role": "bridge_subjective_perception_and_vitality",
+      "memory_focus": [
+        "problem_framing",
+        "direct_proxy_missing",
+        "perception_as_x",
+        "multimodal_workflow"
+      ]
+    }
+  ]
+}

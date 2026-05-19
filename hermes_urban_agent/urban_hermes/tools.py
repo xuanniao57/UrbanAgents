@@ -43,6 +43,7 @@ def register_all_urban_tools() -> list[str]:
         ("urban_memory_reflect", MEMORY_REFLECT_SCHEMA, _handle_memory_reflect),
         ("urban_host_fs", HOST_FS_SCHEMA, _handle_host_fs),
         ("urban_host_python", HOST_PYTHON_SCHEMA, _handle_host_python),
+        ("urban_gis_workspace", GIS_WORKSPACE_SCHEMA, _handle_gis_workspace),
         ("urban_qgis_workspace", QGIS_WORKSPACE_SCHEMA, _handle_qgis_workspace),
         ("urban_qgis_process", QGIS_PROCESS_SCHEMA, _handle_qgis_process),
     ]
@@ -556,6 +557,30 @@ def _handle_memory_reflect(args: dict[str, Any], **_: Any) -> str:
     provider = UrbanMemoryProvider()
     provider.initialize(session_id=str(args.get("session_id") or "tool-call"))
     return provider.handle_tool_call("urban_memory_reflect", args)
+
+
+def _handle_gis_workspace(args: dict[str, Any], **_: Any) -> str:
+    """Run a backend-neutral GIS workspace protocol adapter."""
+    try:
+        from .paths import PAPER4_ROOT
+
+        paper4_root = str(PAPER4_ROOT)
+        if paper4_root in sys.path:
+            sys.path.remove(paper4_root)
+        sys.path.insert(0, paper4_root)
+        loaded_plugins = sys.modules.get("plugins")
+        loaded_plugins_path = str(getattr(loaded_plugins, "__file__", "")) if loaded_plugins else ""
+        if loaded_plugins and paper4_root not in loaded_plugins_path:
+            sys.modules.pop("plugins", None)
+        from plugins.gis_backends.registry import get_backend
+
+        backend = get_backend(args.get("backend"))
+        result = backend.run(args)
+        if result.get("success"):
+            return _ok(result)
+        return _fail("GIS backend did not complete cleanly", result=result)
+    except Exception as exc:
+        return _fail(str(exc), backend=args.get("backend"), mode=args.get("mode"))
 
 
 def _handle_qgis_workspace(args: dict[str, Any], **_: Any) -> str:
@@ -1490,6 +1515,36 @@ HOST_PYTHON_SCHEMA = {
             "env": {"type": "object"},
             "timeout": {"type": "integer", "default": 300},
             "keep_script": {"type": "boolean", "default": False},
+        },
+        "required": [],
+    },
+}
+GIS_WORKSPACE_SCHEMA = {
+    "name": "urban_gis_workspace",
+    "description": "Run the backend-neutral GIS artifact protocol: probe, package, validate, or package-and-validate a GIS workspace from spatial_reasoning_manifest.json. Backends are detachable tool extensions such as qgis_desktop, arcgis_pro, or web_map; currently qgis_desktop is implemented.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "backend": {
+                "type": "string",
+                "enum": ["auto", "qgis_desktop", "arcgis_pro"],
+                "default": "auto",
+                "description": "GIS backend adapter to use. auto currently resolves to qgis_desktop.",
+            },
+            "mode": {
+                "type": "string",
+                "enum": ["probe", "package", "validate", "package_and_validate"],
+                "default": "package_and_validate",
+            },
+            "run_dir": {"type": "string", "description": "Experiment run directory containing spatial_reasoning_manifest.json and source layers."},
+            "artifact_manifest": {"type": "string", "description": "Optional explicit path to spatial_reasoning_manifest.json."},
+            "workspace_dir": {"type": "string", "description": "Existing backend workspace directory, mainly for validate mode."},
+            "output_dir": {"type": "string", "description": "Optional backend workspace output directory."},
+            "runtime_executable": {"type": "string", "description": "Optional backend runtime executable, e.g. QGIS Python .bat/.exe."},
+            "qgis_python": {"type": "string", "description": "Compatibility alias for runtime_executable when backend=qgis_desktop."},
+            "arcgis_python": {"type": "string", "description": "Compatibility alias for runtime_executable when backend=arcgis_pro."},
+            "template_aprx": {"type": "string", "description": "Optional ArcGIS Pro project template used to create a full .aprx workspace."},
+            "timeout": {"type": "integer", "default": 180},
         },
         "required": [],
     },
