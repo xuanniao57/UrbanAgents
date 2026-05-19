@@ -12,7 +12,7 @@ Case2 = 一个街景感知相关的城市分析任务。
 - 不要调用 urban_research_memory
 - 不要调用 urban_record_feedback、urban_memory_record 或任何 memory 写入工具
 - 不要依赖历史经验、place memory、research-design memory、urban-method memory 或 tool-artifact memory
-- 仍然可以调用 urban_ground_task、urban_host_fs、urban_host_python、urban_qgis_process、urban_review 等非记忆工具
+- 仍然可以调用 urban_ground_task、urban_host_fs、urban_host_python、urban_gis_workspace、urban_review 等非记忆工具
 
 请完成与 full run 相同的实质任务：
 1. 输入 grounding

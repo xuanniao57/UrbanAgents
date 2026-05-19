@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from ..common.manifest_io import load_json, normalize_manifest, resolve_manifest_path, write_json
-from .runtime import arcgis_command, resolve_arcgis_python
+from .runtime import arcgis_command, resolve_arcgis_python, resolve_template_aprx
 
 
 ARCPY_PACKAGER_SCRIPT = r'''
@@ -208,7 +208,7 @@ def main(args):
     aprx_path = project_dir / "protocol_arcgis_workspace.aprx"
     project_created = False
     exported_maps = []
-    project_message = "template_aprx not provided; file geodatabase was created without an .aprx project"
+    project_message = "template_aprx not available; file geodatabase was created without an .aprx project"
     if template_aprx and Path(template_aprx).exists():
         try:
             aprx = arcpy.mp.ArcGISProject(str(template_aprx))
@@ -270,6 +270,7 @@ def package_workspace(
         directory.mkdir(parents=True, exist_ok=True)
 
     manifest = _materialize_layers(manifest, data_dir=data_dir)
+    template_aprx = resolve_template_aprx(template_aprx or "auto")
     manifest.setdefault("backend_workspaces", {})
     manifest["backend_workspaces"]["arcgis_pro"] = {
         "workspace_dir": str(workspace_dir),
@@ -279,7 +280,7 @@ def package_workspace(
     }
     manifest.setdefault("known_limits", [])
     if not template_aprx:
-        manifest["known_limits"].append("ArcGIS Pro .aprx creation requires a template_aprx or an ArcGIS Pro in-app Python context; this run validates FileGDB import only if no template is provided.")
+        manifest["known_limits"].append("ArcGIS Pro .aprx creation requires a readable local template_aprx; this run validates FileGDB import only because no template was found.")
     workspace_manifest_path = manifest_dir / "spatial_reasoning_manifest.json"
     write_json(workspace_manifest_path, manifest)
     _write_readme(workspace_dir, manifest)
@@ -316,6 +317,7 @@ def package_workspace(
         "success": success,
         "workspace_dir": str(workspace_dir),
         "workspace_manifest": str(workspace_manifest_path),
+        "template_aprx_resolved": template_aprx,
         "returncode": completed.returncode,
         "parsed_stdout": parsed,
         "stdout_tail": (completed.stdout or "")[-4000:],
@@ -356,7 +358,7 @@ def _write_readme(workspace_dir: Path, manifest: dict[str, Any]) -> None:
         f"CRS: {manifest.get('coordinate_reference_system')}",
         "",
         "This workspace was generated through the Urban-Hermes GIS backend protocol.",
-        "If template_aprx is not supplied, this backend validates ArcPy import into a FileGDB but does not create a full .aprx map project.",
+        "When a readable ArcGIS Pro template .aprx is available, the backend also writes a reviewable .aprx project. Otherwise it validates ArcPy import into a FileGDB.",
     ]
     (workspace_dir / "README.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 

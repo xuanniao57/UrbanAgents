@@ -23,7 +23,7 @@
 ```text
 arcgis_workspace/
   data/protocol_arcgis_workspace.gdb
-  project/*.aprx                  # 有 template_aprx 时生成
+  project/*.aprx                  # 找到本机模板或传入 template_aprx 时生成
   maps/*.png / *.pdf              # 有布局模板时生成
   manifests/spatial_reasoning_manifest.json
   manifests/arcgis_validation_report.json
@@ -40,13 +40,19 @@ arcgis_workspace/
 5. 生成 `arcgis_validation_report.json`
 6. 检查 FileGDB 是否存在、feature count、metric fields、spatial reference、manifest 路径一致性
 
-如果没有 `template_aprx`，validator 会给出 warning：
+Urban-Hermes 会优先自动寻找 ArcGIS Pro 自带的空白工程模板，例如：
 
 ```text
-no .aprx project was validated; provide template_aprx for full ArcGIS Pro project validation
+C:/Program Files/ArcGIS/Pro/Resources/ArcToolBox/Services/routingservices/data/Blank.aprx
 ```
 
-这不是安装失败。它的含义是：当前已经完成 ArcGIS Pro 数据级验收，但还没有完成 `.aprx` 工程/布局图的完整视觉验收。
+如果本机没有可读模板，validator 才会给出 warning：
+
+```text
+no .aprx project was validated; automatic Blank.aprx discovery failed or template_aprx was unavailable
+```
+
+这不是安装失败。它的含义是：当前已经完成 ArcGIS Pro 数据级验收，但还没有完成 `.aprx` 工程/布局图的完整视觉验收。若自动模板存在，后端会复制模板、写入图层并生成可复查 `.aprx`。
 
 ## 推荐给合作者的策略
 
@@ -56,7 +62,7 @@ no .aprx project was validated; provide template_aprx for full ArcGIS Pro projec
 2. 先运行 ArcGIS Pro backend probe。
 3. 跑实验时要求 Urban-Hermes 生成可检查的 GIS manifest、GeoJSON/CSV 和 ArcGIS workspace。
 4. 回传 `arcgis_workspace/`、`arcgis_validation_report.json` 和 transcript。
-5. 如果需要完整 `.aprx` 地图，请提供一个空白 ArcGIS Pro template project，后续用 `template_aprx` 路径补跑。
+5. 如果自动模板没有找到，再提供一个空白 ArcGIS Pro template project，用 `template_aprx` 路径补跑。
 
 ## 手动探测 ArcGIS Pro Backend
 

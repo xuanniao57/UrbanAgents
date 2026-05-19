@@ -27,6 +27,7 @@ INCLUDE_DIRS = [
     "urban_agent",
     "web",
     "experiments/case2_tester_package",
+    "experiments/case2_literature_memory_20260518",
 ]
 
 INCLUDE_FILES = [
@@ -40,9 +41,18 @@ INCLUDE_FILES = [
     "scripts/run_gis_backend_protocol_smoke.py",
 ]
 
-EXCLUDED_DIR_NAMES = {"__pycache__", ".pytest_cache", ".git", "runtime_memory", "hermes_home"}
+EXCLUDED_DIR_NAMES = {"__pycache__", ".pytest_cache", ".git", "runtime_memory", "hermes_home", "hermes_memory"}
 EXCLUDED_SUFFIXES = {".pyc", ".pyo", ".log", ".tmp"}
-EXCLUDED_FILE_NAMES = {".env", "kimi_code.env"}
+EXCLUDED_FILE_NAMES = {
+    ".env",
+    "kimi_code.env",
+    "CASE2_TESTER_HANDBOOK.md",
+    "COLLABORATOR_REALISTIC_TEST_README.md",
+    "AGENT_TESTER_OPERATOR_GUIDE.md",
+    "INSTALL_LATEST_URBAN_HERMES.md",
+    "KIMI_CODE_API_SETUP.md",
+    "section_5_4_writing_guide.md",
+}
 
 
 def _copytree(src: Path, dst: Path) -> None:
@@ -121,7 +131,8 @@ def build_release(output_root: Path, release_name: str) -> dict:
         "notes": [
             "This release includes Urban-Hermes and the vendored Hermes runtime under hermes_urban_agent/urban_hermes/_vendor/hermes_runtime.",
             "Secrets such as kimi_code.env and .env are intentionally excluded.",
-            "ArcGIS Pro FileGDB validation is supported; full .aprx visual validation needs template_aprx.",
+            "Case 2 literature memory cards and the attached literature-memory folder are included so Turn 1 can start from research-memory recall.",
+            "ArcGIS Pro FileGDB validation is supported. When ArcGIS Pro exposes a readable Blank.aprx template, the backend also creates and validates an .aprx project.",
         ],
     }
     (staging / "RELEASE_MANIFEST.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -129,8 +140,9 @@ def build_release(output_root: Path, release_name: str) -> dict:
         "# UrbanAgents Case2 Offline Release\n\n"
         "1. Unzip this folder to `D:/UrbanAgents_Case2`.\n"
         "2. Open `paper4_urban_svgagent/experiments/case2_tester_package/README.md`.\n"
-        "3. Follow `INSTALL.md`, then run `scripts/gis_backend_preflight.py`.\n"
-        "4. Put research data under `D:/UrbanAgents_Case2_Data`.\n",
+        "3. Follow `INSTALL.md`, including `seed_case2_research_memory.py`.\n"
+        "4. Run `scripts/gis_backend_preflight.py`.\n"
+        "5. Put research data under `D:/UrbanAgents_Case2_Data`.\n",
         encoding="utf-8",
     )
 

@@ -1543,7 +1543,7 @@ GIS_WORKSPACE_SCHEMA = {
             "runtime_executable": {"type": "string", "description": "Optional backend runtime executable, e.g. QGIS Python .bat/.exe."},
             "qgis_python": {"type": "string", "description": "Compatibility alias for runtime_executable when backend=qgis_desktop."},
             "arcgis_python": {"type": "string", "description": "Compatibility alias for runtime_executable when backend=arcgis_pro."},
-            "template_aprx": {"type": "string", "description": "Optional ArcGIS Pro project template used to create a full .aprx workspace."},
+            "template_aprx": {"type": "string", "description": "Optional ArcGIS Pro project template. If omitted, the arcgis_pro backend searches common Blank.aprx locations automatically."},
             "timeout": {"type": "integer", "default": 180},
         },
         "required": [],

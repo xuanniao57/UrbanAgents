@@ -1,6 +1,6 @@
 # Case 2 Tester Package
 
-> 给合作者：先读 `TESTER_ROLE.md`，再按 `INSTALL.md` 装环境，最后按 `DIALOGUE_SCRIPT.md` 跑实验。
+> 给合作者：先读 `TESTER_ROLE.md`，再按 `INSTALL.md` 装环境和导入文献记忆，最后按 `DIALOGUE_SCRIPT.md` 跑实验。
 
 ## 核心文档
 
@@ -36,13 +36,14 @@ prompts/realistic_dialogue/
 |---|---|
 | `env/kimi_code.env.example` | API 配置模板（不含真实 key） |
 | `scripts/load_kimi_code_env.ps1` | 本地加载 API key |
+| `scripts/seed_case2_research_memory.py` | 把十篇文献的轻量研究记忆导入 Urban-Hermes memory root |
 | `scripts/gis_backend_preflight.py` | 探测 `urban_gis_workspace`、QGIS Desktop、ArcGIS Pro 后端 |
 | `data_canvas/README.md` | 数据画布约定（只约目录，不约格式） |
 | `qgis_validation/` | 旧版独立 QGIS 验收脚本；新协议优先用 `urban_gis_workspace` |
 | `evaluation_templates/` | 回传清单 + 逐轮评价模板 |
-| `literature_memory/` | 十篇文献记忆种子 |
+| `literature_memory/` | 十篇文献记忆种子和 Case2 研究记忆卡 |
 | `prompts/ablation/` | 消融 prompt |
 
 ## 已整合的旧文档
 
-以下文件内容已整合入三份核心文档，保留仅供参考：`CASE2_TESTER_HANDBOOK.md`、`COLLABORATOR_REALISTIC_TEST_README.md`、`AGENT_TESTER_OPERATOR_GUIDE.md`、`INSTALL_LATEST_URBAN_HERMES.md`、`KIMI_CODE_API_SETUP.md`、`evaluation_templates/section_5_4_writing_guide.md`、`evaluation_templates/section_5_4_realistic_dialogue_outline.md`
+以下旧文件只在源码仓库中供开发者追溯，不作为合作者主流程；离线包会尽量只保留上面的主流程文档：`CASE2_TESTER_HANDBOOK.md`、`COLLABORATOR_REALISTIC_TEST_README.md`、`AGENT_TESTER_OPERATOR_GUIDE.md`、`INSTALL_LATEST_URBAN_HERMES.md`、`KIMI_CODE_API_SETUP.md`、`evaluation_templates/section_5_4_writing_guide.md`

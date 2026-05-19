@@ -123,7 +123,7 @@ def validate_workspace(workspace_dir: Path) -> dict[str, Any]:
     if not manifest_check.get("ok"):
         blocking_errors.append("manifest consistency failed")
     if project_read_ok is None:
-        warnings.append("no .aprx project was validated; provide template_aprx for full ArcGIS Pro project validation")
+        warnings.append("no .aprx project was validated; automatic Blank.aprx discovery failed or template_aprx was unavailable")
 
     return {
         "backend": "arcgis_pro",

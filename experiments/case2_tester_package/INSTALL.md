@@ -104,7 +104,9 @@ KIMI_BASE_URL=
 
 ```powershell
 $env:HERMES_HOME = "D:/UrbanAgents_Case2/paper4_urban_svgagent/experiments/case2_tester_package/hermes_home"
+$env:URBAN_HERMES_MEMORY_ROOT = "D:/UrbanAgents_Case2/paper4_urban_svgagent/experiments/case2_tester_package/hermes_memory"
 New-Item -ItemType Directory -Force -Path $env:HERMES_HOME | Out-Null
+New-Item -ItemType Directory -Force -Path $env:URBAN_HERMES_MEMORY_ROOT | Out-Null
 @"
 model:
   default: kimi-for-coding
@@ -118,7 +120,26 @@ terminal:
 "@ | Out-File -FilePath "$env:HERMES_HOME\config.yaml" -Encoding utf8
 ```
 
-## 6. Preflight
+## 6. Seed Case 2 Literature Memory
+
+Case 2 不是从空白研究经验开始。正式实验前，先把十篇相关文献压缩成可检索的研究记忆卡，导入 Urban-Hermes 的 memory root：
+
+```powershell
+Set-Location D:/UrbanAgents_Case2/paper4_urban_svgagent
+$env:URBAN_HERMES_MEMORY_ROOT = "D:/UrbanAgents_Case2/paper4_urban_svgagent/experiments/case2_tester_package/hermes_memory"
+python experiments/case2_tester_package/scripts/seed_case2_research_memory.py --replace-case2
+```
+
+成功后，输出 JSON 中应看到：
+
+```text
+inserted_count > 0
+probe_hits 包含街道活力、街景感知、建成环境或空间异质性相关记忆
+```
+
+这些记忆只提供研究范式参考：例如如何界定城市活力结果变量、街景感知作为解释层、3D/5D 建成环境基线、非线性和空间异质性方法门槛。它们不能替代本地数据盘点。
+
+## 7. Preflight
 
 ```powershell
 conda activate urban-hermes-case2
@@ -127,6 +148,7 @@ $env:PYTHONUTF8 = "1"
 $env:PYTHONIOENCODING = "utf-8"
 $env:PYTHONPATH = "$PWD\hermes_urban_agent;$PWD"
 $env:HERMES_HOME = "D:/UrbanAgents_Case2/paper4_urban_svgagent/experiments/case2_tester_package/hermes_home"
+$env:URBAN_HERMES_MEMORY_ROOT = "D:/UrbanAgents_Case2/paper4_urban_svgagent/experiments/case2_tester_package/hermes_memory"
 . D:/UrbanAgents_Case2/paper4_urban_svgagent/experiments/case2_tester_package/scripts/load_kimi_code_env.ps1 -EnvFile D:/UrbanAgents_Case2/paper4_urban_svgagent/experiments/case2_tester_package/env/kimi_code.env
 
 # Kimi / Hermes 冒烟
@@ -134,6 +156,9 @@ python -m urban_hermes.launcher "say hello in one word" --provider kimi-coding -
 
 # 工具列表
 python -m urban_hermes.launcher --list-tools --plain
+
+# 文献记忆检索自测
+python -m urban_hermes.launcher "请用 urban_research_memory 检索：街道活力 街景感知 建成环境 非线性 空间异质性。只返回命中的记忆标题。" --provider kimi-coding --model kimi-for-coding --max-turns 3 --yolo --toolsets urban,todo,memory
 
 # GIS 后端探测：QGIS 可选；ArcGIS Pro 可用时应看到 arcgis_pro.available=true
 python experiments/case2_tester_package/scripts/gis_backend_preflight.py
@@ -152,7 +177,7 @@ urban_gis_workspace
 
 如果 QGIS 未安装但 ArcGIS Pro 可用，这是可以接受的。继续实验时优先回传 ArcGIS Pro 的 FileGDB / validation JSON。详见 `ARCGIS_PRO_SUPPORT.md`。
 
-## 7. Data Directory
+## 8. Data Directory
 
 实验数据目录必须存在，但数据格式不预设：
 

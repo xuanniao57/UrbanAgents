@@ -6,7 +6,7 @@ Use this outline after running `prompts/case2_realistic_research_dialogue_script
 
 The central claim is:
 
-> Urban-Hermes can take a rough urban-vitality research idea and turn it into a staged, reviewable research workflow: data and method scoping, built-environment 3D/5D baseline design, gated GWR/GWRF and explainability analysis, reviewer self-check, and perception-augmented revision.
+> Urban-Hermes can take a rough urban-vitality research idea, recall relevant urban-science research memory, and turn the local data canvas into a staged, reviewable research workflow: data and method scoping, built-environment 3D/5D baseline design, gated GWR/GWRF and explainability analysis, reviewer self-check, and perception-augmented revision.
 
 ## Recommended Section Title
 
@@ -22,13 +22,14 @@ Chinese option:
 
 ## Revised Structure
 
-### 5.4.1 A Realistic Starting Point: Vague Research Intent
+### 5.4.1 A Realistic Starting Point: Literature-Informed Scoping
 
-Write this subsection around the first turn. The human does not specify direct/proxy/missing tables. The human only says they want to study factors shaping street vitality and asks whether the data, methods, environment, and compute are sufficient.
+Write this subsection around the first turn. The human does not specify direct/proxy/missing tables. The human asks the agent to combine its existing urban-vitality, streetscape-perception, and built-environment research memory with the local data canvas.
 
 Evidence to report:
 
 - Did Urban-Hermes inspect `D:/UrbanAgents_Case2_Data` before suggesting methods?
+- Did it retrieve or cite research-memory cues before committing to a workflow?
 - Did it identify the urban-vitality outcome family?
 - Did it distinguish observed outcome, built-environment exposure, control variables, and proxy indicators?
 - Did it list method requirements such as QGIS/PyQGIS, spatial statistics packages, GWR/GWRF dependencies, memory/tool access, and compute constraints?
@@ -36,7 +37,7 @@ Evidence to report:
 Suggested wording:
 
 ```text
-Unlike the previous case, the human did not provide a protocol. The first turn only contained a research intention and a data folder. This setting tests whether the agent can reconstruct the missing research design from the data canvas itself.
+Unlike the previous case, the human did not provide a protocol. The first turn only contained a research intention, a request to use prior research memory, and a data folder. This setting tests whether the agent can translate literature-derived workflow experience into local, data-bounded research scoping.
 ```
 
 ### 5.4.2 Built-Environment-Only Baseline: 3D/5D As A Research Norm
@@ -66,11 +67,11 @@ Evidence to report:
 - Did the agent check outcome validity, sample size, spatial unit alignment, spatial autocorrelation, and bandwidth/local estimation before GWR/GWRF?
 - Did it treat PDP/SHAP as explanations of a valid model rather than independent evidence?
 - Did it refuse or downgrade when gates failed?
-- Did it review QGIS layers, fields, spatial joins, model diagnostics, report claims, and temporal assumptions?
+- Did it review GIS layers, fields, spatial joins, backend validation, model diagnostics, report claims, and temporal assumptions?
 
 Reviewer self-check dimensions:
 
-- Spatial reasoning: CRS, geometry validity, spatial joins, unit alignment, QGIS data sources and symbology fields.
+- Spatial reasoning: CRS, geometry validity, spatial joins, unit alignment, GIS data sources and symbology or metric fields.
 - Image reasoning: whether image-derived variables exist, their provenance, and whether perception labels are validated.
 - Text/table reasoning: field names, units, missing values, claims in tables and captions.
 - Temporal reasoning: timestamps, time windows, repeated observations, day/night or weekday/weekend claims.
@@ -105,8 +106,8 @@ Only after the built-environment baseline is established does the workflow intro
 This conclusion should connect back to the gaps:
 
 - Gap 1: Input grounding is demonstrated by the transformation from vague intent to evidence-bounded variables and feasible methods.
-- Gap 2: Verifiability is demonstrated by QGIS, CSV/GeoJSON, model diagnostics, and reviewer self-check manifests.
-- Gap 3: Mention lightly only if memory retrieval or feedback memory is observed. Leave the main cross-task memory argument to Section 5.5.
+- Gap 2: Verifiability is demonstrated by GIS backend workspaces, CSV/GeoJSON/FileGDB, model diagnostics, and reviewer self-check manifests.
+- Gap 3: Mention lightly through first-turn literature-memory recall and feedback memory only if observed. Leave the main cross-task memory argument to Section 5.5.
 
 Suggested wording:
 
@@ -129,7 +130,7 @@ The key result is not that one model produced a higher score. The key result is 
 | memory rules | 研究范式记忆 or 文献范式转化规则 |
 | pressure test | 诱导性研究请求 or 发表压力情境 |
 | refuse request | 拒绝无证据分析升级 or 将请求降级为可支持流程 |
-| QGIS artifact validation | 空间产物验收 or QGIS 工程复核 |
+| QGIS artifact validation | GIS 后端产物验收 or QGIS/ArcGIS 工程复核 |
 | text/time reasoning | 表格字段审查、报告声称审查、时间覆盖审查 |
 
 ## Figure/Table Suggestions

@@ -32,6 +32,29 @@ def resolve_arcgis_python(value: object | None = None) -> str | None:
     return None
 
 
+def candidate_template_aprx_paths() -> list[str]:
+    env_path = os.getenv("ARCGIS_TEMPLATE_APRX") or os.getenv("TEMPLATE_APRX")
+    candidates = [env_path] if env_path else []
+    candidates.extend(
+        [
+            r"C:\Program Files\ArcGIS\Pro\Resources\ArcToolBox\Services\routingservices\data\Blank.aprx",
+        ]
+    )
+    return [item for item in candidates if item]
+
+
+def resolve_template_aprx(value: object | None = None) -> str | None:
+    candidates = []
+    if value and str(value).strip().lower() not in {"auto", "none", "null"}:
+        candidates.append(str(value))
+    candidates.extend(candidate_template_aprx_paths())
+    for candidate in candidates:
+        path = Path(candidate)
+        if path.exists() and path.suffix.lower() == ".aprx":
+            return str(path)
+    return None
+
+
 def arcgis_command(executable: str, *args: str) -> list[str]:
     if os.name == "nt" and executable.lower().endswith((".bat", ".cmd")):
         return ["cmd.exe", "/c", executable, *args]
@@ -45,6 +68,8 @@ def probe_runtime(executable: object | None = None, *, timeout: int = 60) -> dic
         "available": bool(arcgis_python),
         "executable": arcgis_python,
         "searched": candidate_arcgis_python_paths(),
+        "default_template_aprx": resolve_template_aprx("auto"),
+        "template_aprx_searched": candidate_template_aprx_paths(),
     }
     if not arcgis_python:
         result["message"] = "ArcGIS Pro Python was not found."

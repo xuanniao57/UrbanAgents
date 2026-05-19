@@ -26,16 +26,19 @@ Copy this file to `return_manifest.md` in the return package and fill it after t
   - `urban_research_memory`: yes / no
   - `urban_record_feedback`: yes / no
   - `urban_review`: yes / no
-  - `urban_qgis_workspace`: yes / no
-  - `urban_qgis_process`: yes / no
+  - `urban_gis_workspace`: yes / no
 - Kimi Code smoke test passed: yes / no
+- Case 2 literature memory seeded: yes / no
+- Memory root:
+- Memory seed summary path:
 - QGIS Python path:
-- QGIS preflight passed: yes / no / not available
+- ArcGIS Pro Python path:
+- GIS backend preflight passed: yes / no / partial
 
 ## 3. Data Canvas
 
 - Data root:
-- AOI present: yes / no
+- Formal study boundary present: yes / no
 - Spatial units present: yes / no
 - Streetview perception data present: yes / no
 - Built-environment data present: yes / no
@@ -59,6 +62,7 @@ Copy this file to `return_manifest.md` in the return package and fill it after t
 ### 5.4.1 Vague idea and scoping
 
 - Did Urban-Hermes inspect data before method choice? yes / no
+- Did Urban-Hermes recall Case 2 literature/research memory during scoping? yes / no
 - Evidence path or transcript excerpt:
 - Did it identify method/environment/compute requirements? yes / no
 - Evidence path:
@@ -73,7 +77,7 @@ Copy this file to `return_manifest.md` in the return package and fill it after t
 
 - Did it gate GWR/GWRF by outcome validity, sample size, spatial diagnostics, and bandwidth/local estimation? yes / no
 - Did it gate PDP/SHAP by model validity? yes / no
-- Did it inspect QGIS/spatial artifacts? yes / no / not available
+- Did it inspect GIS/spatial artifacts? yes / no / not available
 - Evidence path:
 
 ### 5.4.4 Perception-augmented revision
@@ -95,9 +99,10 @@ Copy this file to `return_manifest.md` in the return package and fill it after t
 
 ## 7. Validator / Reviewer Checks
 
-- QGIS project generated: yes / no
-- QGIS project opened: yes / no / not attempted
-- QGIS validator path:
+- QGIS project generated: yes / no / not available
+- ArcGIS FileGDB generated: yes / no / not available
+- ArcGIS `.aprx` generated: yes / no / not available
+- GIS validation report path:
 - Manifest/schema validator path:
 - Validator summary:
 

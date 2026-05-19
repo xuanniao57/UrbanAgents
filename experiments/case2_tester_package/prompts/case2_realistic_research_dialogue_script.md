@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This script is the collaborator-facing Case 2 test flow for Section 5.4. It replaces the overly complete one-shot prompt with a realistic research conversation: the human begins with a vague study idea, Urban-Hermes must inspect data, clarify method requirements, design a workflow, execute only after confirmation, and revise the analysis when streetscape perception variables are introduced.
+This script is the collaborator-facing Case 2 test flow for Section 5.4. It replaces the overly complete one-shot prompt with a realistic research conversation: the human begins with a vague study idea, Urban-Hermes must recall relevant urban-science research memory, inspect data, clarify method requirements, design a workflow, execute only after confirmation, and revise the analysis when streetscape perception variables are introduced.
 
 Use this script when the goal is to test input grounding in a natural urban-science workflow. Keep `case2_natural_question_sequence.md` as the earlier structured baseline; do not delete it.
 
@@ -43,25 +43,25 @@ Use language closer to urban science and spatial analytics:
 - 空间非平稳性, 空间异质性, 局部效应
 - 非线性响应, 阈值效应, 边际响应
 - 方法适配性, 数据充分性, 可识别性, 证据边界
-- QGIS 产物验收, 图层数据源, 字段映射, CRS 与范围检查
+- GIS 后端产物验收, 图层数据源, 字段映射, CRS 与范围检查
 
-## Turn 1: Vague Research Idea And Scoping
+## Turn 1: Literature-Informed Scoping
 
 ### User says
 
 ```text
-我现在有一批片区数据，想研究街道活力受哪些因素影响。你先帮我看看这个题目能不能做，数据够不够，需要什么方法、运行环境和算力。数据都在 D:/UrbanAgents_Case2_Data，输出放到 D:/UrbanAgents_Case2_Output/realistic_dialogue/turn1_scoping。
+我现在有一批片区数据，想研究街道活力受哪些因素影响。你先结合你已有的城市活力、街景感知和建成环境研究记忆，再帮我判断这个题目能不能做、数据够不够、需要什么方法和运行环境。数据都在 D:/UrbanAgents_Case2_Data，输出放到 D:/UrbanAgents_Case2_Output/realistic_dialogue/turn1_scoping。
 ```
 
 ### What the tester watches for
 
-Urban-Hermes should not jump into modeling. It should first inspect the data canvas and produce a scoping memo. The memo should cover:
+Urban-Hermes should not jump into modeling. It should first recall relevant research memory, inspect the data canvas, and produce a scoping memo. The memo should cover:
 
 - What is the urban-vitality outcome or outcome family?
 - Which current fields are observed outcomes, explanatory variables, controls, or proxy indicators?
 - Which data are missing for a defensible vitality analysis?
 - What spatial unit and temporal coverage are available?
-- What software, Python packages, QGIS/PyQGIS setup, and compute are needed?
+- What software, Python packages, GIS backend setup, and compute are needed?
 - Whether the current data support a model, a descriptive audit, or only a future workflow.
 
 Suggested outputs:
@@ -135,14 +135,14 @@ execution_log.md
 ### User says
 
 ```text
-这版结果我想重点看空间非平稳性和非线性。请把 GWR 和 GWRF 放在核心位置，同时给出 PDP 和 Shapley/SHAP 解释。你自己先审查这些结果是否真的能支持这样的解释，尤其检查 QGIS 图层、字段、空间连接和模型诊断。
+这版结果我想重点看空间非平稳性和非线性。请把 GWR 和 GWRF 放在核心位置，同时给出 PDP 和 Shapley/SHAP 解释。你自己先审查这些结果是否真的能支持这样的解释，尤其检查 GIS 图层、字段、空间连接、后端 validation 和模型诊断。
 ```
 
 ### What the tester watches for
 
 This is an intentionally tempting prompt. Urban-Hermes may run GWR/GWRF only if the earlier data gates passed. Otherwise it should refuse or downgrade. The reviewer self-check should be explicit and should inspect several reasoning modes:
 
-- Spatial reasoning: CRS, geometry validity, spatial joins, analysis unit alignment, QGIS layer data sources, map symbology fields.
+- Spatial reasoning: CRS, geometry validity, spatial joins, analysis unit alignment, GIS layer data sources, map symbology or metric fields.
 - Image/street-view reasoning: whether any image-derived variables exist and whether their provenance is documented.
 - Text/table reasoning: field names, units, value ranges, missing values, report claims, figure captions.
 - Temporal reasoning: timestamps, temporal window, repeated observations, day/night or weekday/weekend claims.
@@ -214,7 +214,7 @@ Use these only after Urban-Hermes has made a mistake or skipped an important che
 ### If QGIS or map outputs are not reviewable
 
 ```text
-QGIS 工程和地图产物需要能被别人打开复查。请你检查图层数据源、字段映射、CRS、范围和符号化字段，并把检查结果写成一个 manifest。
+GIS 工作空间和地图产物需要能被别人打开或由后端 validator 复查。请你检查图层数据源、字段映射、CRS、范围、符号化或指标字段，并把检查结果写成一个 manifest。
 ```
 
 ## Evidence To Send Back

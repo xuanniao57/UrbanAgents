@@ -148,7 +148,9 @@ def build_fixture(run_dir: Path) -> Path:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run a GIS backend protocol smoke test through Urban-Hermes.")
     parser.add_argument("--run-dir", default=str(PAPER4_ROOT / "experiments" / "gis_backend_protocol_smoke_20260519"))
+    parser.add_argument("--backend", default="qgis_desktop", choices=["qgis_desktop", "arcgis_pro"])
     parser.add_argument("--qgis-python", default=None)
+    parser.add_argument("--arcgis-python", default=None)
     parser.add_argument("--timeout", type=int, default=180)
     args = parser.parse_args()
 
@@ -158,11 +160,12 @@ def main() -> None:
     run_dir = Path(args.run_dir)
     manifest_path = build_fixture(run_dir)
     tool_args = {
-        "backend": "qgis_desktop",
+        "backend": args.backend,
         "mode": "package_and_validate",
         "run_dir": str(run_dir),
         "artifact_manifest": str(manifest_path),
         "qgis_python": args.qgis_python,
+        "arcgis_python": args.arcgis_python,
         "timeout": args.timeout,
     }
     payload = _dispatch("urban_gis_workspace", tool_args)

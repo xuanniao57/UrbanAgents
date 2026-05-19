@@ -409,7 +409,7 @@ Acceptance requires:
 - exported image/PDF/screenshot exists when the backend is expected to produce visual outputs;
 - `needs_correction=false`.
 
-For ArcGIS Pro, FileGDB validation is a valid data-level acceptance. Full visual acceptance additionally requires a `template_aprx` so the backend can create and validate an `.aprx` project and exported map/layout.
+For ArcGIS Pro, FileGDB validation is a valid data-level acceptance. Full visual acceptance additionally uses a readable `.aprx` template. The backend first searches ArcGIS Pro's default `Blank.aprx`; `template_aprx` is only needed when the default template is unavailable.
 
 If any condition fails, Hermes must treat the GIS artifact as incomplete and either correct it or record the limitation.
 
@@ -461,11 +461,11 @@ Done / current behavior:
 2. layers are packaged into a file geodatabase;
 3. GeoJSON Point, LineString, Polygon, MultiLineString, and MultiPolygon are written with ArcPy cursors so metric fields are preserved;
 4. FileGDB feature count, metric fields, spatial reference, and manifest consistency are validated;
-5. `.aprx` creation is supported only when `template_aprx` is provided; without a template the backend emits a warning, not a false project artifact.
+5. `.aprx` creation is supported through automatic `Blank.aprx` discovery or an explicit `template_aprx`; without a readable template the backend emits a warning, not a false project artifact.
 
 Remaining ArcGIS Pro work:
 
-1. prepare a minimal `.aprx` template for collaborator machines;
+1. refine a minimal `.aprx` template and layout for collaborator machines when the default ArcGIS Pro blank project is not enough;
 2. add optional `.lyrx` symbology application;
 3. export layout PNG/PDF from the template;
 4. validate broken project layers and exported maps as full visual acceptance.

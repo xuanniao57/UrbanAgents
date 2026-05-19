@@ -5,10 +5,11 @@
 你是合作者一方的测试员。Urban-Hermes 是受测系统。你的任务是：
 
 1. 安装 Urban-Hermes 并验证环境可用
-2. 准备数据画布（把数据文件放到约定目录）
-3. 按对话剧本逐轮把短 prompt 喂给 Urban-Hermes
-4. 保存每轮 transcript 和产物
-5. 填写回传清单，连同实验素材传回
+2. 导入 Case 2 文献研究记忆，并确认 `urban_research_memory` 能检索到
+3. 准备数据画布（把数据文件放到约定目录）
+4. 按对话剧本逐轮把短 prompt 喂给 Urban-Hermes
+5. 保存每轮 transcript 和产物
+6. 填写回传清单，连同实验素材传回
 
 你**不是** Urban-Hermes。如果 Urban-Hermes 出错，记录错误，不要替它手写正确结果。
 
@@ -40,17 +41,39 @@
 
 ## GIS 后端规则
 
+## 文献记忆规则
+
+正式实验不是让 Urban-Hermes 从零发明研究流程。运行 Turn 1 前，先导入 `literature_memory/case2_research_memory_cards.json`，让系统能召回这些研究范式：
+
+- 城市活力结果变量与代理指标的区分
+- 街景感知作为解释层或情境层，而不是自动等同于观测活力
+- 3D/5D 建成环境基线
+- 非线性、SHAP/PDP、GWR/GWRF 的方法前提
+- GIS 产物验收和空间推理可复查
+
+导入命令：
+
+```powershell
+Set-Location D:/UrbanAgents_Case2/paper4_urban_svgagent
+$env:URBAN_HERMES_MEMORY_ROOT = "D:/UrbanAgents_Case2/paper4_urban_svgagent/experiments/case2_tester_package/hermes_memory"
+python experiments/case2_tester_package/scripts/seed_case2_research_memory.py --replace-case2
+```
+
+检查 Turn 1 transcript 时，重点看 Urban-Hermes 是否在数据盘点前后调用或引用了 `urban_research_memory`。合格表现不是照搬文献结论，而是把文献经验转化为本地数据能否支撑的研究问题、变量角色、空间单元、方法门槛和证据边界。
+
+## GIS 后端规则
+
 Urban-Hermes 现在通过 `urban_gis_workspace` 调用可拆装 GIS 后端：
 
 - `qgis_desktop`：生成/验证 QGIS `.qgz` + preview PNG。
-- `arcgis_pro`：探测 ArcPy，生成/验证 FileGDB；完整 `.aprx` 工程验收需要 `template_aprx`。
+- `arcgis_pro`：探测 ArcPy，生成/验证 FileGDB；若本机有 ArcGIS Pro 空白模板，也会生成/验证 `.aprx` 工程。
 
 如果只有 ArcGIS Pro：
 
 1. 先运行 `python experiments/case2_tester_package/scripts/gis_backend_preflight.py`。
 2. 继续实验，不要因为缺 QGIS 停止。
 3. 回传 `arcgis_workspace/`、`arcgis_validation_report.json`、`spatial_reasoning_manifest.json`。
-4. 如果日志里出现 “no .aprx project was validated”，这表示缺少 ArcGIS Pro 工程模板，不是 FileGDB 数据级验收失败。
+4. 如果日志里出现 “no .aprx project was validated”，这表示没有找到可读 ArcGIS Pro 工程模板，不是 FileGDB 数据级验收失败。
 
 ## 四阶段流程
 
@@ -75,6 +98,7 @@ $env:PYTHONUTF8 = "1"
 $env:PYTHONIOENCODING = "utf-8"
 $env:PYTHONPATH = "$PWD\hermes_urban_agent;$PWD"
 $env:HERMES_HOME = "D:/UrbanAgents_Case2/paper4_urban_svgagent/experiments/case2_tester_package/hermes_home"
+$env:URBAN_HERMES_MEMORY_ROOT = "D:/UrbanAgents_Case2/paper4_urban_svgagent/experiments/case2_tester_package/hermes_memory"
 . D:/UrbanAgents_Case2/paper4_urban_svgagent/experiments/case2_tester_package/scripts/load_kimi_code_env.ps1 -EnvFile D:/UrbanAgents_Case2/paper4_urban_svgagent/experiments/case2_tester_package/env/kimi_code.env
 ```
 
@@ -94,13 +118,14 @@ python -m urban_hermes.launcher $query `
 ## 每轮检查重点
 
 1. Urban-Hermes 是否在提议方法前先读了数据目录？
-2. 是否区分了结果变量、解释变量、控制变量、代理指标和数据缺口？
-3. 是否把街景感知分数当成观测活力？
-4. 是否把 POI 密度当成人群活动？
-5. 是否在没有时间戳时声称昼夜/时间变化？
-6. GWR/GWRF 是否先检查了样本量、结果变量、空间诊断才运行？
-7. PDP/SHAP 是否建立在有效模型之上？
-8. 产物是否包含可外部检查的 CSV、GeoJSON、JSON、报告？
+2. Urban-Hermes 是否在研究摸底阶段召回了相关文献记忆？
+3. 是否区分了结果变量、解释变量、控制变量、代理指标和数据缺口？
+4. 是否把街景感知分数当成观测活力？
+5. 是否把 POI 密度当成人群活动？
+6. 是否在没有时间戳时声称昼夜/时间变化？
+7. GWR/GWRF 是否先检查了样本量、结果变量、空间诊断才运行？
+8. PDP/SHAP 是否建立在有效模型之上？
+9. 产物是否包含可外部检查的 CSV、GeoJSON、JSON、报告？
 
 ## 回传材料清单
 
@@ -109,6 +134,7 @@ python -m urban_hermes.launcher $query `
 ```text
 return_manifest.md           ← 填写 evaluation_templates/collaborator_return_manifest_template.md
 install_smoke_log.txt        ← release/commit id、工具列表、Kimi 冒烟结果、GIS backend preflight 状态
+case2_research_memory_seed.json ← 文献记忆导入与检索自测结果
 turn1_scoping/               ← transcript + 产物
 turn2a_design/               ← transcript + 产物
 turn2b_execute/              ← transcript + 产物

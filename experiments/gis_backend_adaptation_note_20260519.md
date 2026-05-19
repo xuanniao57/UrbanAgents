@@ -10,7 +10,7 @@ If the collaborator only has ArcGIS Pro, the fastest reliable path is **not** to
 
 1. Keep the current common artifact contract: GeoJSON/GPKG/CSV + style metadata + `spatial_reasoning_manifest.json`.
 2. Use `plugins/gis_backends/qgis_desktop` as the canonical QGIS Desktop backend: `.qgz` + PNG preview + independent validation JSON.
-3. Use `plugins/gis_backends/arcgis_pro` as the ArcGIS Pro backend: ArcPy runtime probe + FileGDB import + validation JSON; full `.aprx`/PNG/PDF export requires a `template_aprx`.
+3. Use `plugins/gis_backends/arcgis_pro` as the ArcGIS Pro backend: ArcPy runtime probe + FileGDB import + validation JSON; `.aprx` creation first searches ArcGIS Pro's default blank template, with explicit `template_aprx` as a fallback.
 4. Add QGIS Web / browser map as a lightweight visual-review backend later, preferably via MapLibre/Leaflet first, not by requiring a full QGIS Server stack.
 
 For the collaborator package, the rule should be:

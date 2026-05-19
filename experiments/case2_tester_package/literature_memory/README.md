@@ -30,6 +30,26 @@ python C:/Users/18029/.claude/skills/zotero-pdf-analyzer/scripts/mineru_api_v4.p
 
 After each run, inspect the extracted folder and update `selected_papers.json` status fields before processing the next paper.
 
+## Runtime Preload For Urban-Hermes
+
+Before the formal Case 2 dialogue, the tester should import the lightweight memory cards into Urban-Hermes research memory:
+
+```powershell
+Set-Location D:/UrbanAgents_Case2/paper4_urban_svgagent
+$env:URBAN_HERMES_MEMORY_ROOT = "D:/UrbanAgents_Case2/paper4_urban_svgagent/experiments/case2_tester_package/hermes_memory"
+python experiments/case2_tester_package/scripts/seed_case2_research_memory.py --replace-case2
+```
+
+The script writes to:
+
+```text
+<URBAN_HERMES_MEMORY_ROOT>/research_memory/research_lessons.jsonl
+```
+
+It also runs a retrieval probe for street vitality, streetscape perception, built environment, nonlinearity, and spatial heterogeneity. This means Turn 1 can ask Urban-Hermes to use its existing research memory without pasting the ten-paper notes into the prompt.
+
+The imported cards are Level-1 memory only: compact research-design cues, method gates, and evidence boundaries. Full `full.md` paper text should not be loaded into Turn 1. Use Level-2 outlines and Level-3 original sections only when the paper-writing task later requires a specific citation or figure/table comparison.
+
 ## Memory Layers
 
 The extraction is deliberately layered.
@@ -63,6 +83,7 @@ It is where unsupported claims, missing outcome variables, temporal gaps, and ca
 literature_memory/
 ├── README.md
 ├── selected_papers.json
+├── case2_research_memory_cards.json
 ├── extraction_schema.md
 ├── memory_template.md
 ├── single_inputs/
