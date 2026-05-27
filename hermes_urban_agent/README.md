@@ -40,6 +40,18 @@ Type your task at the Urban Agents prompt, for example:
 Assess walkability in Le Marais and review evidence gaps before giving recommendations.
 ```
 
+To start the browser workspace and CLI together, use the repository helper:
+
+```powershell
+python scripts/start_urban_agent_workspace.py --toolsets urban,todo,memory,delegation
+```
+
+The helper serves the frontend at `http://localhost:8017`, opens the Urban Agent
+route workspace, and then launches the same Urban-Hermes CLI in the terminal.
+During a run, `urban_route_tree` writes `route_tree_frontend_state.json` and
+returns a matching `frontend_url`, so the browser and CLI inspect the same
+route-state file.
+
 For one-shot mode, pass the query directly:
 
 ```powershell

@@ -8,6 +8,14 @@ It is designed as the browser-side companion to the CLI: the CLI continues the d
 From `D:/GitHub_1/world_agent/urban-mobility-agent/paper4_urban_svgagent/`:
 
 ```powershell
+python scripts/start_urban_agent_workspace.py --toolsets urban,todo,memory,delegation
+```
+
+This starts the static frontend, opens the Urban Agent workspace, and then
+launches the Urban-Hermes CLI with the same frontend port. If you only need the
+viewer without the CLI, run the static server directly:
+
+```powershell
 python -m http.server 8017
 ```
 
