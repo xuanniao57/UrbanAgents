@@ -1,0 +1,1278 @@
+{
+  "schema_version": "urban_route_tree_state_v1",
+  "meta": {
+    "state_id": "urt_20260527_020400_semantic_repair",
+    "task": "Assess Shanghai street-vitality drivers using prepared data canvas with LBS activity data and population attributes",
+    "created_at": "2026-05-27T02:04:00",
+    "updated_at": "2026-05-27T03:20:00",
+    "run_dir": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009",
+    "repaired_from": [
+      "plan/route_tree.json",
+      "trace/workflow_trace.json"
+    ]
+  },
+  "nodes": [
+    {
+      "node_id": "RO_01_all_window_aggregate",
+      "node_type": "research_object",
+      "title": "All-window aggregate LBS vitality",
+      "status": "approved",
+      "status_reason": "Main outcome branch; data ready; baseline association model",
+      "depends_on": [],
+      "required_inputs": [
+        "case2_model_ready_grid_metrics.csv",
+        "spatial_units_500m.geojson"
+      ],
+      "required_parameters": {
+        "spatial_unit": "500m grid",
+        "temporal_aggregation": "sum across 7 days",
+        "outcome_transform": "log1p(lbs_total_stays)",
+        "people_proxy": "aggregated device-user count, not census population"
+      },
+      "expected_outputs": [
+        "outcome_distribution_map",
+        "outcome_summary_stats"
+      ],
+      "time_space_people": {
+        "time": "7-day aggregate; no diurnal or weekday/weekend differentiation",
+        "space": "500m grid; MAUP-sensitive; bbox 121.405-121.570, 31.180-31.289",
+        "people": "device-user proxy; no social-attribute breakdown"
+      },
+      "claim_boundary": "Can support descriptive association between built environment and aggregate activity intensity. Cannot support individual behavior, causal effect, or temporal heterogeneity claims.",
+      "review_risks": [
+        "Weekend vs weekday patterns may differ",
+        "No population-profile breakdown"
+      ],
+      "memory_sources": [
+        "seed_case2_vitality_outcome_operationalization"
+      ],
+      "artifacts": [
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s1_outcome\\outcome_distribution_map.png",
+          "type": "map",
+          "title": "Outcome distribution map (log stays)",
+          "review_status": "reviewed"
+        },
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s1_outcome\\outcome_summary_stats.json",
+          "type": "table",
+          "title": "Outcome summary statistics",
+          "review_status": "reviewed"
+        },
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s1_outcome\\study_area_map.png",
+          "type": "map",
+          "title": "study_area_map.png",
+          "review_status": "reviewed"
+        },
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s1_outcome\\study_area_locator_map.png",
+          "type": "map",
+          "title": "Study area locator map (two-panel publication layout)",
+          "review_status": "reviewed"
+        },
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s1_outcome\\study_area_locator_map_note.json",
+          "type": "metadata",
+          "title": "Study area locator map artifact note",
+          "review_status": "reviewed"
+        }
+      ],
+      "review_records": [
+        {
+          "step_id": "S1_S2_review",
+          "review_target_type": "worker_output",
+          "time_implications": "Outcome reflects 7-day aggregate; weekday/weekend contrast based on 5 vs 2 days",
+          "space_implications": "516 grid cells cover AOI; no islands in weights",
+          "people_implications": "Vitality proxy = LBS stay intensity",
+          "artifact_readiness": "ready_with_caveats",
+          "claim_impact": "VIF>10 and r>0.7 noted; proceed with tree-based model",
+          "decision": "proceed",
+          "timestamp": "2026-05-27T02:22:30"
+        }
+      ]
+    },
+    {
+      "node_id": "RO_02_weekday_weekend_contrast",
+      "node_type": "research_object",
+      "title": "Weekday/weekend vitality contrast",
+      "status": "completed",
+      "status_reason": "Completed comparison branch feeding RC_01; not main path",
+      "depends_on": [],
+      "required_inputs": [
+        "lbs_grid_daily_period_metrics.csv"
+      ],
+      "required_parameters": {
+        "spatial_unit": "500m grid",
+        "temporal_aggregation": "weekday=Mon-Fri (5 days), weekend=Sat-Sun (2 days: 09-21, 09-22)",
+        "outcome_transform": "log1p(weekday_stays) vs log1p(weekend_stays)",
+        "people_proxy": "aggregated device-user count by day type"
+      },
+      "expected_outputs": [
+        "weekday_weekend_map_pair",
+        "contrast_ratio_map",
+        "contrast_summary_stats"
+      ],
+      "time_space_people": {
+        "time": "Weekday vs weekend; only one weekend in the 7-day window (2 days vs 5 days)",
+        "space": "500m grid",
+        "people": "day-type-specific device-user proxy"
+      },
+      "claim_boundary": "Can describe weekday/weekend spatial differences in aggregate activity. Cannot generalize beyond the single weekend observed. Cannot attribute differences to built environment without modeling.",
+      "review_risks": [
+        "Only one weekend (2 days) vs 5 weekdays",
+        "Small sample for weekend pattern stability"
+      ],
+      "memory_sources": [
+        "seed_case2_vitality_outcome_operationalization"
+      ],
+      "artifacts": [
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s1_outcome\\weekday_weekend_contrast.csv",
+          "type": "table",
+          "title": "Weekday/weekend contrast table",
+          "review_status": "reviewed"
+        },
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s1_outcome\\weekday_weekend_map_pair.png",
+          "type": "map",
+          "title": "Weekday/weekend map pair",
+          "review_status": "reviewed"
+        },
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s1_outcome\\study_area_map.png",
+          "type": "map",
+          "title": "study_area_map.png",
+          "review_status": "reviewed"
+        }
+      ],
+      "review_records": [
+        {
+          "step_id": "S1_S2_review",
+          "review_target_type": "worker_output",
+          "time_implications": "Outcome reflects 7-day aggregate; weekday/weekend contrast based on 5 vs 2 days",
+          "space_implications": "516 grid cells cover AOI; no islands in weights",
+          "people_implications": "Vitality proxy = LBS stay intensity",
+          "artifact_readiness": "ready_with_caveats",
+          "claim_impact": "VIF>10 and r>0.7 noted; proceed with tree-based model",
+          "decision": "proceed",
+          "timestamp": "2026-05-27T02:22:30"
+        }
+      ]
+    },
+    {
+      "node_id": "RO_03_day_period_split",
+      "node_type": "research_object",
+      "title": "Day-period vitality (morning/day/evening/night)",
+      "status": "deferred",
+      "status_reason": "Deferred by user; can be activated later",
+      "depends_on": [],
+      "required_inputs": [
+        "lbs_grid_daily_period_metrics.csv"
+      ],
+      "required_parameters": {
+        "spatial_unit": "500m grid",
+        "temporal_aggregation": "period = morning_peak, daytime, evening_peak, night",
+        "outcome_transform": "log1p(period_stays) per period",
+        "people_proxy": "period-specific device-user count"
+      },
+      "expected_outputs": [
+        "period_map_quadrant",
+        "period_profile_by_grid",
+        "period_correlation_matrix"
+      ],
+      "time_space_people": {
+        "time": "Four periods across 7 days; period definitions fixed by data provider",
+        "space": "500m grid",
+        "people": "period-specific device-user proxy"
+      },
+      "claim_boundary": "Can describe diurnal spatial variation in aggregate activity. Cannot infer land-use function from period intensity alone.",
+      "review_risks": [
+        "Period definitions are fixed and may not match local commuting patterns",
+        "Night period may have sparse data in some grids"
+      ],
+      "memory_sources": [
+        "seed_case2_vitality_outcome_operationalization"
+      ],
+      "artifacts": [],
+      "review_records": [
+        {
+          "step_id": "S1_S2_review",
+          "review_target_type": "worker_output",
+          "time_implications": "Outcome reflects 7-day aggregate; weekday/weekend contrast based on 5 vs 2 days",
+          "space_implications": "516 grid cells cover AOI; no islands in weights",
+          "people_implications": "Vitality proxy = LBS stay intensity",
+          "artifact_readiness": "ready_with_caveats",
+          "claim_impact": "VIF>10 and r>0.7 noted; proceed with tree-based model",
+          "decision": "proceed",
+          "timestamp": "2026-05-27T02:22:30"
+        }
+      ]
+    },
+    {
+      "node_id": "RO_04_population_profile_aggregation",
+      "node_type": "research_object",
+      "title": "Population-profile aware vitality aggregation",
+      "status": "deferred",
+      "status_reason": "Deferred: raw UUID join not prepared; privacy risk",
+      "depends_on": [],
+      "required_inputs": [
+        "LBS_pop/上海市.csv (uuid-level attributes)",
+        "raw LBS stay records (uuid, grid, time)"
+      ],
+      "required_parameters": {
+        "spatial_unit": "500m grid",
+        "join_key": "uuid",
+        "privacy_min_count": 5,
+        "aggregation_rule": "group by grid + attribute category, suppress if count < 5",
+        "attributes_available": [
+          "gender",
+          "age_group",
+          "education_level",
+          "income_level",
+          "job",
+          "have_car",
+          "kids_stage",
+          "subway_times"
+        ]
+      },
+      "expected_outputs": [
+        "population_profile_coverage_table",
+        "attribute_composition_map",
+        "privacy_audit_log"
+      ],
+      "time_space_people": {
+        "time": "7-day aggregate",
+        "space": "500m grid",
+        "people": "social-attribute breakdown of sampled device users, not census population"
+      },
+      "claim_boundary": "Can describe association between built environment and device-user attribute composition. Cannot claim general population demographics. Sampling bias (device ownership, app usage) must be stated.",
+      "review_risks": [
+        "UUID-to-grid join requires raw stay records not in canvas",
+        "Privacy suppression may leave many grids with missing data",
+        "Sampling bias of LBS panel unknown"
+      ],
+      "memory_sources": [
+        "seed_case2_vitality_outcome_operationalization"
+      ],
+      "artifacts": [],
+      "review_records": [
+        {
+          "step_id": "S1_S2_review",
+          "review_target_type": "worker_output",
+          "time_implications": "Outcome reflects 7-day aggregate; weekday/weekend contrast based on 5 vs 2 days",
+          "space_implications": "516 grid cells cover AOI; no islands in weights",
+          "people_implications": "Vitality proxy = LBS stay intensity",
+          "artifact_readiness": "ready_with_caveats",
+          "claim_impact": "VIF>10 and r>0.7 noted; proceed with tree-based model",
+          "decision": "proceed",
+          "timestamp": "2026-05-27T02:22:30"
+        }
+      ]
+    },
+    {
+      "node_id": "FP_01_built_form_baseline",
+      "node_type": "feature_package",
+      "title": "Built-form baseline variables",
+      "status": "approved",
+      "status_reason": "Core built-form variables; data ready",
+      "depends_on": [
+        "RO_01_all_window_aggregate"
+      ],
+      "required_inputs": [
+        "case2_model_ready_grid_metrics.csv"
+      ],
+      "required_parameters": {
+        "variables": [
+          "cmab_building_density_per_ha",
+          "cmab_building_coverage_ratio",
+          "cmab_mean_height_m",
+          "cmab_function_entropy",
+          "cmab_age_entropy"
+        ],
+        "alignment": "already grid-aggregated in canvas",
+        "collinearity_check": "required (density, coverage, height may correlate)"
+      },
+      "expected_outputs": [
+        "feature_correlation_matrix",
+        "VIF_table",
+        "feature_coverage_map"
+      ],
+      "time_space_people": {
+        "time": "static snapshot (CMAB 2020-12-31)",
+        "space": "500m grid",
+        "people": "environmental exposure proxy"
+      },
+      "claim_boundary": "Built-form association candidates. Not causal. CMAB attributes are source-derived, not validated on the ground.",
+      "review_risks": [
+        "CMAB data is from 2020; may not reflect 2024 conditions",
+        "Collinearity among density/coverage/height"
+      ],
+      "memory_sources": [
+        "seed_case2_vitality_feature_package_design"
+      ],
+      "artifacts": [
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s2_features\\feature_correlation_matrix.csv",
+          "type": "table",
+          "title": "Feature correlation matrix",
+          "review_status": "reviewed"
+        },
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s2_features\\feature_correlation_heatmap.png",
+          "type": "figure",
+          "title": "Feature correlation heatmap",
+          "review_status": "reviewed"
+        },
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s2_features\\vif_table.csv",
+          "type": "table",
+          "title": "VIF table",
+          "review_status": "reviewed"
+        }
+      ],
+      "review_records": [
+        {
+          "step_id": "S1_S2_review",
+          "review_target_type": "worker_output",
+          "time_implications": "Outcome reflects 7-day aggregate; weekday/weekend contrast based on 5 vs 2 days",
+          "space_implications": "516 grid cells cover AOI; no islands in weights",
+          "people_implications": "Vitality proxy = LBS stay intensity",
+          "artifact_readiness": "ready_with_caveats",
+          "claim_impact": "VIF>10 and r>0.7 noted; proceed with tree-based model",
+          "decision": "proceed",
+          "timestamp": "2026-05-27T02:22:30"
+        }
+      ]
+    },
+    {
+      "node_id": "FP_02_activity_opportunity",
+      "node_type": "feature_package",
+      "title": "Activity-opportunity variables (POI + road)",
+      "status": "approved",
+      "status_reason": "Core opportunity variables; data ready",
+      "depends_on": [
+        "RO_01_all_window_aggregate"
+      ],
+      "required_inputs": [
+        "case2_model_ready_grid_metrics.csv",
+        "osm_points_inner_ring.geojson",
+        "osm_roads_inner_ring.geojson"
+      ],
+      "required_parameters": {
+        "variables": [
+          "osm_road_density_m_per_ha",
+          "osm_poi_count",
+          "osm_poi_type_entropy"
+        ],
+        "alignment": "already grid-aggregated in canvas",
+        "collinearity_check": "required"
+      },
+      "expected_outputs": [
+        "feature_correlation_matrix",
+        "VIF_table",
+        "feature_coverage_map"
+      ],
+      "time_space_people": {
+        "time": "OSM snapshot date unknown",
+        "space": "500m grid",
+        "people": "activity-opportunity proxy, not observed activity"
+      },
+      "claim_boundary": "POI and road density are opportunity proxies. Cannot equate POI count with actual visitation or economic activity.",
+      "review_risks": [
+        "OSM completeness varies by area",
+        "POI type entropy may be noisy for low-count grids"
+      ],
+      "memory_sources": [
+        "seed_case2_vitality_feature_package_design"
+      ],
+      "artifacts": [
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s2_features\\feature_coverage_map.png",
+          "type": "map",
+          "title": "Feature coverage map",
+          "review_status": "reviewed"
+        },
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s2_features\\feature_summary_stats.json",
+          "type": "table",
+          "title": "Feature summary statistics",
+          "review_status": "reviewed"
+        }
+      ],
+      "review_records": [
+        {
+          "step_id": "S1_S2_review",
+          "review_target_type": "worker_output",
+          "time_implications": "Outcome reflects 7-day aggregate; weekday/weekend contrast based on 5 vs 2 days",
+          "space_implications": "516 grid cells cover AOI; no islands in weights",
+          "people_implications": "Vitality proxy = LBS stay intensity",
+          "artifact_readiness": "ready_with_caveats",
+          "claim_impact": "VIF>10 and r>0.7 noted; proceed with tree-based model",
+          "decision": "proceed",
+          "timestamp": "2026-05-27T02:22:30"
+        }
+      ]
+    },
+    {
+      "node_id": "FP_03_accessibility_connectivity",
+      "node_type": "feature_package",
+      "title": "Accessibility / connectivity add-on",
+      "status": "deferred",
+      "status_reason": "Deferred by user; requires GIS processing",
+      "depends_on": [
+        "RO_01_all_window_aggregate"
+      ],
+      "required_inputs": [
+        "osm_roads_inner_ring.geojson",
+        "spatial_units_500m.geojson"
+      ],
+      "required_parameters": {
+        "variables": [
+          "network_density",
+          "intersection_count",
+          "connectivity_index"
+        ],
+        "alignment": "requires road-network processing from OSM roads",
+        "derivation": "sna/igraph or QGIS from osm_roads_inner_ring.geojson"
+      },
+      "expected_outputs": [
+        "accessibility_layer",
+        "connectivity_map",
+        "feature_coverage_check"
+      ],
+      "time_space_people": {
+        "time": "static",
+        "space": "500m grid",
+        "people": "network accessibility proxy"
+      },
+      "claim_boundary": "Accessibility metrics are network-structure proxies. Not pedestrian-level accessibility without sidewalk data.",
+      "review_risks": [
+        "Requires additional GIS processing",
+        "May be highly correlated with road_density"
+      ],
+      "memory_sources": [
+        "seed_case2_vitality_feature_package_design"
+      ],
+      "artifacts": [],
+      "review_records": [
+        {
+          "step_id": "S1_S2_review",
+          "review_target_type": "worker_output",
+          "time_implications": "Outcome reflects 7-day aggregate; weekday/weekend contrast based on 5 vs 2 days",
+          "space_implications": "516 grid cells cover AOI; no islands in weights",
+          "people_implications": "Vitality proxy = LBS stay intensity",
+          "artifact_readiness": "ready_with_caveats",
+          "claim_impact": "VIF>10 and r>0.7 noted; proceed with tree-based model",
+          "decision": "proceed",
+          "timestamp": "2026-05-27T02:22:30"
+        }
+      ]
+    },
+    {
+      "node_id": "FP_04_full_multimodal",
+      "node_type": "feature_package",
+      "title": "Full multimodal package (built-form + opportunity + accessibility)",
+      "status": "deferred",
+      "status_reason": "Deferred by user; high collinearity risk without review",
+      "depends_on": [
+        "RO_01_all_window_aggregate"
+      ],
+      "required_inputs": [
+        "case2_model_ready_grid_metrics.csv",
+        "osm_roads_inner_ring.geojson",
+        "osm_points_inner_ring.geojson"
+      ],
+      "required_parameters": {
+        "variables": "union of FP_01 + FP_02 + FP_03",
+        "collinearity_check": "required",
+        "VIF_threshold": 5.0
+      },
+      "expected_outputs": [
+        "full_feature_table",
+        "correlation_matrix",
+        "VIF_table"
+      ],
+      "time_space_people": {
+        "time": "static",
+        "space": "500m grid",
+        "people": "multimodal environmental exposure"
+      },
+      "claim_boundary": "Combined association model. Individual variable effects are not independently causal due to collinearity.",
+      "review_risks": [
+        "High collinearity risk between density and accessibility",
+        "Model interpretation requires regularization or decomposition"
+      ],
+      "memory_sources": [
+        "seed_case2_vitality_feature_package_design"
+      ],
+      "artifacts": [],
+      "review_records": [
+        {
+          "step_id": "S1_S2_review",
+          "review_target_type": "worker_output",
+          "time_implications": "Outcome reflects 7-day aggregate; weekday/weekend contrast based on 5 vs 2 days",
+          "space_implications": "516 grid cells cover AOI; no islands in weights",
+          "people_implications": "Vitality proxy = LBS stay intensity",
+          "artifact_readiness": "ready_with_caveats",
+          "claim_impact": "VIF>10 and r>0.7 noted; proceed with tree-based model",
+          "decision": "proceed",
+          "timestamp": "2026-05-27T02:22:30"
+        }
+      ]
+    },
+    {
+      "node_id": "ME_01_rf_baseline",
+      "node_type": "model_execution",
+      "title": "Random Forest baseline (all-window + built-form + opportunity)",
+      "status": "approved",
+      "status_reason": "Existing baseline model; use as-is then review residuals",
+      "depends_on": [
+        "RO_01_all_window_aggregate",
+        "FP_01_built_form_baseline",
+        "FP_02_activity_opportunity"
+      ],
+      "required_inputs": [
+        "case2_model_ready_grid_metrics.csv"
+      ],
+      "required_parameters": {
+        "model": "RandomForestRegressor",
+        "cv_strategy": "5-fold",
+        "features": [
+          "cmab_building_density_per_ha",
+          "cmab_building_coverage_ratio",
+          "cmab_mean_height_m",
+          "cmab_function_entropy",
+          "osm_road_density_m_per_ha",
+          "osm_poi_count",
+          "osm_poi_type_entropy"
+        ],
+        "target": "lbs_vitality_index_log_stays"
+      },
+      "expected_outputs": [
+        "cv_r2",
+        "cv_mae",
+        "permutation_importance"
+      ],
+      "time_space_people": {
+        "time": "7-day aggregate",
+        "space": "500m grid",
+        "people": "aggregate device-user proxy"
+      },
+      "claim_boundary": "Association model only. Already run: cv_r2=0.493, cv_mae=0.508. Not causal.",
+      "review_risks": [
+        "No spatial diagnostics",
+        "No residual autocorrelation check"
+      ],
+      "memory_sources": [],
+      "artifacts": [],
+      "review_records": []
+    },
+    {
+      "node_id": "ME_02_gwrf_spatial_heterogeneity",
+      "node_type": "model_execution",
+      "title": "GWRF spatial heterogeneity model",
+      "status": "blocked",
+      "status_reason": "Blocked: local multicollinearity exceeded threshold (50.2% windows with condition number >= 30)",
+      "depends_on": [
+        "RO_01_all_window_aggregate",
+        "FP_04_full_multimodal"
+      ],
+      "required_inputs": [
+        "model-ready feature table with coordinates"
+      ],
+      "required_parameters": {
+        "model": "GWRF (geographically weighted random forest)",
+        "bandwidth": "adaptive or fixed; to be determined by AICc or CV",
+        "kernel": "bisquare or Gaussian",
+        "coordinate_basis": "grid centroids in projected CRS (EPSG:3857 or UTM 51N)",
+        "local_diagnostics": "local R2, local residuals, local coefficient maps, local prediction/importance",
+        "validation": "spatial cross-validation or leave-one-out by distance"
+      },
+      "expected_outputs": [
+        "local_coefficient_maps",
+        "bandwidth_diagnostics",
+        "local_prediction_map",
+        "local_importance_map",
+        "residual_autocorrelation_check"
+      ],
+      "time_space_people": {
+        "time": "7-day aggregate",
+        "space": "500m grid; local coefficients per cell; projected coordinates required",
+        "people": "spatially varying association, not local causal effect"
+      },
+      "claim_boundary": "Can describe spatially varying associations. Cannot claim local causal effects without stronger design.",
+      "review_risks": [
+        "Bandwidth choice strongly affects results",
+        "Multicollinearity in local windows",
+        "Small n=516 for local estimation"
+      ],
+      "memory_sources": [],
+      "artifacts": [
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s3_gwrf\\gwrf_requirements_check.json",
+          "type": "model_output",
+          "title": "gwrf_requirements_check.json",
+          "review_status": "reviewed"
+        }
+      ],
+      "review_records": []
+    },
+    {
+      "node_id": "MX_01_shap_pdp_explanation",
+      "node_type": "model_explanation",
+      "title": "SHAP / PDP model explanation",
+      "status": "completed",
+      "status_reason": "SHAP/PDP explanation completed on fitted RF model",
+      "depends_on": [
+        "ME_01_rf_baseline"
+      ],
+      "required_inputs": [
+        "fitted RF model",
+        "feature matrix"
+      ],
+      "required_parameters": {
+        "method": "SHAP TreeExplainer + PDP",
+        "scope": "global summary + grid-level explanations"
+      },
+      "expected_outputs": [
+        "shap_summary_plot",
+        "pdp_curves",
+        "grid_shap_values"
+      ],
+      "time_space_people": {
+        "time": "7-day aggregate",
+        "space": "grid-level and aggregate explanations",
+        "people": "feature contribution to aggregate proxy"
+      },
+      "claim_boundary": "Explanations are model-dependent. SHAP values describe the fitted model, not ground-truth causal effects.",
+      "review_risks": [
+        "Correlated features can produce misleading SHAP attributions"
+      ],
+      "memory_sources": [],
+      "artifacts": [
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s4_explanation\\feature_importance_comparison.csv",
+          "type": "explanation_output",
+          "title": "feature_importance_comparison.csv",
+          "review_status": "reviewed"
+        }
+      ],
+      "review_records": []
+    },
+    {
+      "node_id": "DI_01_residual_spatial_autocorrelation",
+      "node_type": "diagnostic",
+      "title": "Residual spatial autocorrelation check",
+      "status": "completed",
+      "status_reason": "Residual check completed; Moran's I=0.191 significant",
+      "depends_on": [
+        "ME_01_rf_baseline"
+      ],
+      "required_inputs": [
+        "model residuals with grid coordinates"
+      ],
+      "required_parameters": {
+        "test": "Moran's I on residuals",
+        "neighbor_definition": "queen contiguity or distance-based (500m threshold)",
+        "significance_threshold": 0.05
+      },
+      "expected_outputs": [
+        "moran_i_report",
+        "residual_map"
+      ],
+      "time_space_people": {
+        "time": "7-day aggregate",
+        "space": "spatial dependence in residuals",
+        "people": "unmodeled spatial process"
+      },
+      "claim_boundary": "If significant, suggests missing spatial variables or need for spatial model.",
+      "review_risks": [
+        "Significant Moran's I would motivate GWRF branch"
+      ],
+      "memory_sources": [],
+      "artifacts": [
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s4_diagnostics\\residual_moran_i_report.json",
+          "type": "diagnostic_output",
+          "title": "residual_moran_i_report.json",
+          "review_status": "reviewed"
+        }
+      ],
+      "review_records": [
+        {
+          "step_id": "S4_residual_review",
+          "review_target_type": "diagnostic",
+          "time_implications": "Residual spatial structure may reflect unmeasured temporal or historical factors",
+          "space_implications": "Moran's I=0.191 significant; spatial model warranted but blocked by multicollinearity",
+          "people_implications": "Unexplained spatial clusters may correspond to unobserved activity generators",
+          "artifact_readiness": "ready",
+          "claim_impact": "GWRF branch blocked; RF remains primary model",
+          "decision": "branch_blocked",
+          "timestamp": "2026-05-27T02:34:20"
+        }
+      ]
+    },
+    {
+      "node_id": "RC_01_route_comparison",
+      "node_type": "route_comparison",
+      "title": "Outcome and feature package comparison",
+      "status": "completed",
+      "status_reason": "Route comparison completed with all approved branches",
+      "depends_on": [
+        "RO_01_all_window_aggregate",
+        "RO_02_weekday_weekend_contrast",
+        "RO_03_day_period_split",
+        "FP_01_built_form_baseline",
+        "FP_02_activity_opportunity",
+        "FP_04_full_multimodal"
+      ],
+      "required_inputs": [
+        "completed model outputs per branch"
+      ],
+      "required_parameters": {
+        "comparison_dimensions": [
+          "cv_r2",
+          "cv_mae",
+          "spatial_residual_structure",
+          "interpretability"
+        ]
+      },
+      "expected_outputs": [
+        "comparison_table",
+        "claim_calibration_report"
+      ],
+      "time_space_people": {
+        "time": "varies by outcome branch",
+        "space": "varies by spatial model",
+        "people": "varies by people proxy"
+      },
+      "claim_boundary": "Comparison is evidence-calibration, not model selection for causal inference.",
+      "review_risks": [
+        "Different outcomes are not nested; comparison is descriptive"
+      ],
+      "memory_sources": [],
+      "artifacts": [
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s5_claims\\calibrated_claims.json",
+          "type": "comparison_output",
+          "title": "calibrated_claims.json",
+          "review_status": "reviewed"
+        }
+      ],
+      "review_records": []
+    },
+    {
+      "node_id": "CS_01_claim_synthesis",
+      "node_type": "claim_synthesis",
+      "title": "Final claim synthesis",
+      "status": "completed",
+      "status_reason": "Final claim synthesis completed",
+      "depends_on": [
+        "RC_01_route_comparison"
+      ],
+      "required_inputs": [
+        "route_comparison_table",
+        "claim_gates"
+      ],
+      "required_parameters": {
+        "claim_levels": [
+          "stable",
+          "conditional",
+          "insufficient",
+          "unsupported"
+        ]
+      },
+      "expected_outputs": [
+        "calibrated_claims",
+        "claim_boundary_document"
+      ],
+      "time_space_people": {
+        "time": "7-day observation window",
+        "space": "Shanghai inner ring 500m grid",
+        "people": "LBS device-user proxy"
+      },
+      "claim_boundary": "Final claims must respect all upstream claim boundaries.",
+      "review_risks": [
+        "Overclaiming is the main risk"
+      ],
+      "memory_sources": [],
+      "artifacts": [
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s5_claims\\calibrated_claims.json",
+          "type": "claim_output",
+          "title": "calibrated_claims.json",
+          "review_status": "reviewed"
+        }
+      ],
+      "review_records": []
+    }
+  ],
+  "edges": [
+    {
+      "from": "RO_01_all_window_aggregate",
+      "to": "FP_01_built_form_baseline",
+      "operation": "outcome-to-feature alignment",
+      "reason": "built-form variables need an outcome branch for interpretation",
+      "claim_effect": "associates static built form with aggregate activity"
+    },
+    {
+      "from": "RO_01_all_window_aggregate",
+      "to": "FP_02_activity_opportunity",
+      "operation": "outcome-to-feature alignment",
+      "reason": "POI/road variables need an outcome branch",
+      "claim_effect": "associates opportunity proxies with aggregate activity"
+    },
+    {
+      "from": "RO_01_all_window_aggregate",
+      "to": "FP_03_accessibility_connectivity",
+      "operation": "outcome-to-feature alignment",
+      "reason": "accessibility needs outcome for spatial interpretation",
+      "claim_effect": "associates network structure with aggregate activity"
+    },
+    {
+      "from": "RO_01_all_window_aggregate",
+      "to": "FP_04_full_multimodal",
+      "operation": "outcome-to-feature alignment",
+      "reason": "full package combines all X groups",
+      "claim_effect": "combined association, not independent effects"
+    },
+    {
+      "from": "FP_01_built_form_baseline",
+      "to": "ME_01_rf_baseline",
+      "operation": "feature-to-model",
+      "reason": "RF baseline uses built-form + opportunity",
+      "claim_effect": "baseline association"
+    },
+    {
+      "from": "FP_02_activity_opportunity",
+      "to": "ME_01_rf_baseline",
+      "operation": "feature-to-model",
+      "reason": "RF baseline uses built-form + opportunity",
+      "claim_effect": "baseline association"
+    },
+    {
+      "from": "FP_04_full_multimodal",
+      "to": "ME_02_gwrf_spatial_heterogeneity",
+      "operation": "feature-to-model",
+      "reason": "GWRF needs full feature set",
+      "claim_effect": "spatially varying association"
+    },
+    {
+      "from": "ME_01_rf_baseline",
+      "to": "MX_01_shap_pdp_explanation",
+      "operation": "model-to-explanation",
+      "reason": "SHAP/PDP requires fitted model",
+      "claim_effect": "model-dependent explanation"
+    },
+    {
+      "from": "ME_01_rf_baseline",
+      "to": "DI_01_residual_spatial_autocorrelation",
+      "operation": "model-to-diagnostic",
+      "reason": "residual check motivates spatial model branch",
+      "claim_effect": "may suggest GWRF if significant"
+    },
+    {
+      "from": "RO_02_weekday_weekend_contrast",
+      "to": "RC_01_route_comparison",
+      "operation": "branch-to-comparison",
+      "reason": "temporal outcome branch is comparison evidence",
+      "claim_effect": "temporal heterogeneity evidence"
+    },
+    {
+      "from": "RO_03_day_period_split",
+      "to": "RC_01_route_comparison",
+      "operation": "branch-to-comparison",
+      "reason": "period outcome branch is comparison evidence",
+      "claim_effect": "diurnal heterogeneity evidence"
+    },
+    {
+      "from": "RC_01_route_comparison",
+      "to": "CS_01_claim_synthesis",
+      "operation": "comparison-to-claims",
+      "reason": "calibrated claims from compared branches",
+      "claim_effect": "stable/conditional/insufficient/unsupported"
+    },
+    {
+      "from": "MX_01_shap_pdp_explanation",
+      "to": "RC_01_route_comparison",
+      "operation": "explanation-to-comparison",
+      "reason": "SHAP/PDP outputs feed route comparison",
+      "claim_effect": "model explanation as comparison evidence"
+    },
+    {
+      "from": "DI_01_residual_spatial_autocorrelation",
+      "to": "RC_01_route_comparison",
+      "operation": "diagnostic-to-comparison",
+      "reason": "residual check informs model route comparison",
+      "claim_effect": "diagnostic evidence for route comparison"
+    }
+  ],
+  "main_path": [
+    "RO_01_all_window_aggregate",
+    "FP_01_built_form_baseline",
+    "FP_02_activity_opportunity",
+    "ME_01_rf_baseline",
+    "DI_01_residual_spatial_autocorrelation",
+    "MX_01_shap_pdp_explanation",
+    "RC_01_route_comparison",
+    "CS_01_claim_synthesis"
+  ],
+  "active_path": [
+    "RO_01_all_window_aggregate",
+    "FP_01_built_form_baseline",
+    "FP_02_activity_opportunity",
+    "ME_01_rf_baseline"
+  ],
+  "branch_tree": {
+    "active": [
+      "RO_01_all_window_aggregate",
+      "FP_01_built_form_baseline",
+      "FP_02_activity_opportunity",
+      "ME_01_rf_baseline"
+    ],
+    "main": [
+      "RO_01_all_window_aggregate",
+      "FP_01_built_form_baseline",
+      "FP_02_activity_opportunity",
+      "ME_01_rf_baseline",
+      "DI_01_residual_spatial_autocorrelation",
+      "MX_01_shap_pdp_explanation",
+      "RC_01_route_comparison",
+      "CS_01_claim_synthesis"
+    ],
+    "completed_branch": [
+      "RO_02_weekday_weekend_contrast",
+      "MX_01_shap_pdp_explanation",
+      "DI_01_residual_spatial_autocorrelation",
+      "RC_01_route_comparison",
+      "CS_01_claim_synthesis"
+    ],
+    "suggested": [],
+    "deferred": [
+      "RO_03_day_period_split",
+      "RO_04_population_profile_aggregation",
+      "FP_03_accessibility_connectivity",
+      "FP_04_full_multimodal"
+    ],
+    "blocked": [
+      "ME_02_gwrf_spatial_heterogeneity"
+    ],
+    "merged": []
+  },
+  "human_choices": {
+    "plan_was_shown": true,
+    "user_response": "Approve RO_01 main + RO_02 comparison; defer RO_03, RO_04; approve FP_01 + FP_02 core; defer FP_03, FP_04; use ME_01 then review residuals",
+    "decision": "approve_with_selections",
+    "approved_steps": [
+      "S1",
+      "S2",
+      "S3_ME_01",
+      "S4_DI_01",
+      "S4_MX_01"
+    ],
+    "deferred_steps": [
+      "RO_03",
+      "RO_04",
+      "FP_03",
+      "FP_04",
+      "ME_02",
+      "MX_01_initial"
+    ],
+    "timestamp": "2026-05-27T02:10:00"
+  },
+  "plan_decision": {
+    "plan_was_shown": true,
+    "user_response": "Approve RO_01 main + RO_02 comparison; defer RO_03, RO_04; approve FP_01 + FP_02 core; defer FP_03, FP_04; use ME_01 then review residuals",
+    "decision": "approve_with_selections",
+    "approved_steps": [
+      "S1",
+      "S2",
+      "S3_ME_01",
+      "S4_DI_01",
+      "S4_MX_01"
+    ],
+    "deferred_steps": [
+      "RO_03",
+      "RO_04",
+      "FP_03",
+      "FP_04",
+      "ME_02",
+      "MX_01_initial"
+    ],
+    "timestamp": "2026-05-27T02:10:00"
+  },
+  "reviewer_records": [
+    {
+      "step_id": "plan_gate",
+      "review_target_type": "plan",
+      "time_implications": "7-day LBS panel; temporal generalizability limited",
+      "space_implications": "500m grid; MAUP acknowledged",
+      "people_implications": "Device-user aggregate; no demographic stratification",
+      "artifact_readiness": "plan_ready",
+      "claim_impact": "approved for descriptive association only",
+      "decision": "proceed",
+      "timestamp": "2026-05-27T02:10:00"
+    },
+    {
+      "step_id": "S1_S2_review",
+      "review_target_type": "worker_output",
+      "time_implications": "Outcome reflects 7-day aggregate; weekday/weekend contrast based on 5 vs 2 days",
+      "space_implications": "516 grid cells cover AOI; no islands in weights",
+      "people_implications": "Vitality proxy = LBS stay intensity",
+      "artifact_readiness": "ready_with_caveats",
+      "claim_impact": "VIF>10 and r>0.7 noted; proceed with tree-based model",
+      "decision": "proceed",
+      "timestamp": "2026-05-27T02:22:30"
+    },
+    {
+      "step_id": "S4_residual_review",
+      "review_target_type": "diagnostic",
+      "time_implications": "Residual spatial structure may reflect unmeasured temporal or historical factors",
+      "space_implications": "Moran's I=0.191 significant; spatial model warranted but blocked by multicollinearity",
+      "people_implications": "Unexplained spatial clusters may correspond to unobserved activity generators",
+      "artifact_readiness": "ready",
+      "claim_impact": "GWRF branch blocked; RF remains primary model",
+      "decision": "branch_blocked",
+      "timestamp": "2026-05-27T02:34:20"
+    }
+  ],
+  "worker_records": [
+    {
+      "task": "S1_outcome_artifacts",
+      "worker": "delegate_task_leaf_1",
+      "status": "completed",
+      "files_written": 5,
+      "artifacts_dir": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s1_outcome",
+      "timestamp": "2026-05-27T02:19:22"
+    },
+    {
+      "task": "S2_feature_artifacts",
+      "worker": "delegate_task_leaf_2",
+      "status": "completed",
+      "files_written": 5,
+      "artifacts_dir": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s2_features",
+      "timestamp": "2026-05-27T02:19:22"
+    },
+    {
+      "task": "S4_residual_check",
+      "worker": "delegate_task_leaf_3",
+      "status": "completed",
+      "files_written": 3,
+      "artifacts_dir": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s4_diagnostics",
+      "timestamp": "2026-05-27T02:28:29"
+    },
+    {
+      "task": "S4_shap_pdp_explanation",
+      "worker": "delegate_task_leaf_4",
+      "status": "completed",
+      "files_written": 4,
+      "artifacts_dir": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s4_explanation",
+      "timestamp": "2026-05-27T02:28:29"
+    },
+    {
+      "task": "S3_gwrf_model",
+      "worker": "delegate_task_leaf_5",
+      "status": "requirements_not_met",
+      "files_written": 1,
+      "artifacts_dir": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s3_gwrf",
+      "abort_reason": "50.2% local windows with condition number >=30 exceeds 20% threshold",
+      "timestamp": "2026-05-27T02:34:20"
+    }
+  ],
+  "claim_gates": {
+    "allowed_claims": [
+      "descriptive_association",
+      "model_behavior_description"
+    ],
+    "blocked_claims": [
+      "causal_effect",
+      "individual_behavior",
+      "people_specific",
+      "perception_effect",
+      "local_mechanism"
+    ],
+    "downgraded_claims": [
+      "spatial_heterogeneity: insufficient (GWRF blocked)"
+    ]
+  },
+  "memory_retrieval_log": [
+    {
+      "query": "Shanghai street vitality drivers research design",
+      "layer": "research_design",
+      "scope": "global",
+      "result": "data_contract_only"
+    }
+  ],
+  "reflections": {
+    "worker_reflection": "S1 and S2 workers produced clean artifacts on first attempt. S4 residual worker correctly used CV predictions and queen contiguity. S4 explanation worker noted collinearity caveats appropriately. S3 GWRF worker correctly aborted on local multicollinearity check rather than producing unreliable coefficients.",
+    "reviewer_reflection": "Plan review approved descriptive-association scope. S1/S2 reviewer noted VIF/correlation warnings. Residual reviewer confirmed Moran's I significance and recommended GWRF branch activation. GWRF requirements review correctly blocked the branch. No independent reviewer was delegated for S4 explanation artifacts — this is a gap.",
+    "main_reflection": "The workflow successfully navigated from plan gate through claim synthesis with 5 delegated workers. Key decision points: human approved RO_01+RO_02 and FP_01+FP_02; residual autocorrelation triggered GWRF branch; GWRF blocked by local multicollinearity; final claims calibrated to 'stable' and 'conditional' levels only. Missing: independent reviewer for SHAP/PDP artifacts; QGIS workspace packaging; spatial reasoning manifest.",
+    "memory_carryover": [
+      "Shanghai inner-ring 500m grid: 516 cells, CMAB 2020 + OSM + LBS 7-day panel",
+      "RF baseline cv_r2=0.49; residual Moran's I=0.19 significant",
+      "GWRF blocked at bandwidth=150 due to 50% windows with condition number>=30",
+      "Core predictors: building_coverage_ratio, poi_type_entropy (top by SHAP and permutation)",
+      "Collinearity pairs: density-coverage (r=0.71), poi_count-entropy (r=0.70)"
+    ]
+  },
+  "artifact_index": [
+    {
+      "node_id": "RO_01_all_window_aggregate",
+      "artifacts": [
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s1_outcome\\outcome_distribution_map.png",
+          "type": "map",
+          "title": "Outcome distribution map (log stays)",
+          "review_status": "reviewed"
+        },
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s1_outcome\\outcome_summary_stats.json",
+          "type": "table",
+          "title": "Outcome summary statistics",
+          "review_status": "reviewed"
+        },
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s1_outcome\\study_area_map.png",
+          "type": "map",
+          "title": "study_area_map.png",
+          "review_status": "reviewed"
+        },
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s1_outcome\\study_area_locator_map.png",
+          "type": "map",
+          "title": "Study area locator map (two-panel publication layout)",
+          "review_status": "reviewed"
+        },
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s1_outcome\\study_area_locator_map_note.json",
+          "type": "metadata",
+          "title": "Study area locator map artifact note",
+          "review_status": "reviewed"
+        }
+      ]
+    },
+    {
+      "node_id": "RO_02_weekday_weekend_contrast",
+      "artifacts": [
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s1_outcome\\weekday_weekend_contrast.csv",
+          "type": "table",
+          "title": "Weekday/weekend contrast table",
+          "review_status": "reviewed"
+        },
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s1_outcome\\weekday_weekend_map_pair.png",
+          "type": "map",
+          "title": "Weekday/weekend map pair",
+          "review_status": "reviewed"
+        },
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s1_outcome\\study_area_map.png",
+          "type": "map",
+          "title": "study_area_map.png",
+          "review_status": "reviewed"
+        }
+      ]
+    },
+    {
+      "node_id": "FP_01_built_form_baseline",
+      "artifacts": [
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s2_features\\feature_correlation_matrix.csv",
+          "type": "table",
+          "title": "Feature correlation matrix",
+          "review_status": "reviewed"
+        },
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s2_features\\feature_correlation_heatmap.png",
+          "type": "figure",
+          "title": "Feature correlation heatmap",
+          "review_status": "reviewed"
+        },
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s2_features\\vif_table.csv",
+          "type": "table",
+          "title": "VIF table",
+          "review_status": "reviewed"
+        }
+      ]
+    },
+    {
+      "node_id": "FP_02_activity_opportunity",
+      "artifacts": [
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s2_features\\feature_coverage_map.png",
+          "type": "map",
+          "title": "Feature coverage map",
+          "review_status": "reviewed"
+        },
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s2_features\\feature_summary_stats.json",
+          "type": "table",
+          "title": "Feature summary statistics",
+          "review_status": "reviewed"
+        }
+      ]
+    },
+    {
+      "node_id": "ME_02_gwrf_spatial_heterogeneity",
+      "artifacts": [
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s3_gwrf\\gwrf_requirements_check.json",
+          "type": "model_output",
+          "title": "gwrf_requirements_check.json",
+          "review_status": "reviewed"
+        }
+      ]
+    },
+    {
+      "node_id": "MX_01_shap_pdp_explanation",
+      "artifacts": [
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s4_explanation\\feature_importance_comparison.csv",
+          "type": "explanation_output",
+          "title": "feature_importance_comparison.csv",
+          "review_status": "reviewed"
+        }
+      ]
+    },
+    {
+      "node_id": "DI_01_residual_spatial_autocorrelation",
+      "artifacts": [
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s4_diagnostics\\residual_moran_i_report.json",
+          "type": "diagnostic_output",
+          "title": "residual_moran_i_report.json",
+          "review_status": "reviewed"
+        }
+      ]
+    },
+    {
+      "node_id": "RC_01_route_comparison",
+      "artifacts": [
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s5_claims\\calibrated_claims.json",
+          "type": "comparison_output",
+          "title": "calibrated_claims.json",
+          "review_status": "reviewed"
+        }
+      ]
+    },
+    {
+      "node_id": "CS_01_claim_synthesis",
+      "artifacts": [
+        {
+          "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s5_claims\\calibrated_claims.json",
+          "type": "claim_output",
+          "title": "calibrated_claims.json",
+          "review_status": "reviewed"
+        }
+      ]
+    }
+  ],
+  "validation": {
+    "status": "valid",
+    "issues": []
+  }
+}

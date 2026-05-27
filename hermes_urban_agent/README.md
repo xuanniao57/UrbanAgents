@@ -98,6 +98,17 @@ Use `urban_qgis_workspace` after a GIS-heavy run to package loose layers into a
 QGIS workbench: source layers, derived metric layers, `.qgz/.qgs`, README, and
 `spatial_reasoning_manifest.json` for later agent reasoning.
 
+For mechanism ablations, remove registered Urban-Hermes tools at CLI startup
+instead of relying on prompt-only instructions:
+
+```powershell
+urban-hermes --toolsets urban,todo,memory --disable-urban-tool urban_ground_task
+urban-hermes --toolsets urban,todo,memory --disable-urban-tool urban_review
+```
+
+The resulting session is still a normal Urban-Hermes CLI session; the selected
+tool is absent from `--list-tools` and cannot be called by the agent.
+
 ## Launch Hermes with the explicit launcher
 
 ```powershell

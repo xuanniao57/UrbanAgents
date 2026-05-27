@@ -1,0 +1,211 @@
+{
+  "main_workflow_plan": {
+    "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\plan\\main_workflow_plan.json",
+    "plan_id": "case2_vitality_drivers_20260527",
+    "steps": [
+      {
+        "step": "S1",
+        "title": "Research object and outcome definition",
+        "status": "completed",
+        "artifacts": "study_area_map, outcome_distribution, weekday_weekend_contrast"
+      },
+      {
+        "step": "S2",
+        "title": "Feature package construction",
+        "status": "completed",
+        "artifacts": "correlation_matrix, vif_table, feature_coverage_map"
+      },
+      {
+        "step": "S3",
+        "title": "Model route execution",
+        "status": "completed",
+        "artifacts": "RF baseline (existing), GWRF (blocked)"
+      },
+      {
+        "step": "S4",
+        "title": "Explanation and diagnostics",
+        "status": "completed",
+        "artifacts": "SHAP/PDP, Moran's I residual check"
+      },
+      {
+        "step": "S5",
+        "title": "Route comparison",
+        "status": "completed",
+        "artifacts": "route_comparison_table.json"
+      },
+      {
+        "step": "S6",
+        "title": "Claim synthesis",
+        "status": "completed",
+        "artifacts": "calibrated_claims.json"
+      }
+    ]
+  },
+  "human_plan_decision": {
+    "plan_was_shown": true,
+    "user_response": "Approve RO_01 main + RO_02 comparison; defer RO_03, RO_04; approve FP_01 + FP_02 core; defer FP_03, FP_04; use ME_01 then review residuals",
+    "decision": "approve_with_selections",
+    "approved_steps": [
+      "S1",
+      "S2",
+      "S3_ME_01",
+      "S4_DI_01",
+      "S4_MX_01"
+    ],
+    "deferred_steps": [
+      "RO_03",
+      "RO_04",
+      "FP_03",
+      "FP_04",
+      "ME_02",
+      "MX_01_initial"
+    ],
+    "timestamp": "2026-05-27T02:10:00"
+  },
+  "worker_task_records": [
+    {
+      "task": "S1_outcome_artifacts",
+      "worker": "delegate_task_leaf_1",
+      "status": "completed",
+      "files_written": 5,
+      "artifacts_dir": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s1_outcome",
+      "timestamp": "2026-05-27T02:19:22"
+    },
+    {
+      "task": "S2_feature_artifacts",
+      "worker": "delegate_task_leaf_2",
+      "status": "completed",
+      "files_written": 5,
+      "artifacts_dir": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s2_features",
+      "timestamp": "2026-05-27T02:19:22"
+    },
+    {
+      "task": "S4_residual_check",
+      "worker": "delegate_task_leaf_3",
+      "status": "completed",
+      "files_written": 3,
+      "artifacts_dir": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s4_diagnostics",
+      "timestamp": "2026-05-27T02:28:29"
+    },
+    {
+      "task": "S4_shap_pdp_explanation",
+      "worker": "delegate_task_leaf_4",
+      "status": "completed",
+      "files_written": 4,
+      "artifacts_dir": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s4_explanation",
+      "timestamp": "2026-05-27T02:28:29"
+    },
+    {
+      "task": "S3_gwrf_model",
+      "worker": "delegate_task_leaf_5",
+      "status": "requirements_not_met",
+      "files_written": 1,
+      "artifacts_dir": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s3_gwrf",
+      "abort_reason": "50.2% local windows with condition number >=30 exceeds 20% threshold",
+      "timestamp": "2026-05-27T02:34:20"
+    }
+  ],
+  "parent_verification": {
+    "verified_artifacts": [
+      "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s1_outcome\\study_area_map.png",
+      "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s4_diagnostics\\residual_moran_i_report.json",
+      "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s3_gwrf\\gwrf_requirements_check.json",
+      "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s5_claims\\route_comparison_table.json",
+      "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s5_claims\\calibrated_claims.json"
+    ],
+    "verification_status": "verified",
+    "timestamp": "2026-05-27T02:35:00"
+  },
+  "per_step_review_records": [
+    {
+      "step_id": "plan_gate",
+      "review_target_type": "plan",
+      "time_implications": "7-day LBS panel; temporal generalizability limited",
+      "space_implications": "500m grid; MAUP acknowledged",
+      "people_implications": "Device-user aggregate; no demographic stratification",
+      "artifact_readiness": "plan_ready",
+      "claim_impact": "approved for descriptive association only",
+      "decision": "proceed",
+      "timestamp": "2026-05-27T02:10:00"
+    },
+    {
+      "step_id": "S1_S2_review",
+      "review_target_type": "worker_output",
+      "time_implications": "Outcome reflects 7-day aggregate; weekday/weekend contrast based on 5 vs 2 days",
+      "space_implications": "516 grid cells cover AOI; no islands in weights",
+      "people_implications": "Vitality proxy = LBS stay intensity",
+      "artifact_readiness": "ready_with_caveats",
+      "claim_impact": "VIF>10 and r>0.7 noted; proceed with tree-based model",
+      "decision": "proceed",
+      "timestamp": "2026-05-27T02:22:30"
+    },
+    {
+      "step_id": "S4_residual_review",
+      "review_target_type": "diagnostic",
+      "time_implications": "Residual spatial structure may reflect unmeasured temporal or historical factors",
+      "space_implications": "Moran's I=0.191 significant; spatial model warranted but blocked by multicollinearity",
+      "people_implications": "Unexplained spatial clusters may correspond to unobserved activity generators",
+      "artifact_readiness": "ready",
+      "claim_impact": "GWRF branch blocked; RF remains primary model",
+      "decision": "branch_blocked",
+      "timestamp": "2026-05-27T02:34:20"
+    }
+  ],
+  "claim_gates": {
+    "allowed_claims": [
+      "descriptive_association",
+      "model_behavior_description"
+    ],
+    "blocked_claims": [
+      "causal_effect",
+      "individual_behavior",
+      "people_specific",
+      "perception_effect",
+      "local_mechanism"
+    ],
+    "downgraded_claims": [
+      "spatial_heterogeneity: insufficient (GWRF blocked)"
+    ]
+  },
+  "artifact_manifest": {
+    "total_artifacts": 22,
+    "by_stage": {
+      "S1_outcome": 5,
+      "S2_features": 5,
+      "S3_gwrf": 1,
+      "S4_diagnostics": 3,
+      "S4_explanation": 4,
+      "S5_claims": 2,
+      "plan_trace": 2
+    },
+    "key_files": [
+      "artifacts\\s1_outcome\\study_area_map.png",
+      "artifacts\\s4_diagnostics\\residual_moran_i_report.json",
+      "artifacts\\s4_explanation\\feature_importance_comparison.csv",
+      "artifacts\\s3_gwrf\\gwrf_requirements_check.json",
+      "artifacts\\s5_claims\\calibrated_claims.json"
+    ]
+  },
+  "worker_reflection": "S1 and S2 workers produced clean artifacts on first attempt. S4 residual worker correctly used CV predictions and queen contiguity. S4 explanation worker noted collinearity caveats appropriately. S3 GWRF worker correctly aborted on local multicollinearity check rather than producing unreliable coefficients.",
+  "reviewer_reflection": "Plan review approved descriptive-association scope. S1/S2 reviewer noted VIF/correlation warnings. Residual reviewer confirmed Moran's I significance and recommended GWRF branch activation. GWRF requirements review correctly blocked the branch. No independent reviewer was delegated for S4 explanation artifacts — this is a gap.",
+  "main_reflection": "The workflow successfully navigated from plan gate through claim synthesis with 5 delegated workers. Key decision points: human approved RO_01+RO_02 and FP_01+FP_02; residual autocorrelation triggered GWRF branch; GWRF blocked by local multicollinearity; final claims calibrated to 'stable' and 'conditional' levels only. Missing: independent reviewer for SHAP/PDP artifacts; QGIS workspace packaging; spatial reasoning manifest.",
+  "memory_carryover": [
+    "Shanghai inner-ring 500m grid: 516 cells, CMAB 2020 + OSM + LBS 7-day panel",
+    "RF baseline cv_r2=0.49; residual Moran's I=0.19 significant",
+    "GWRF blocked at bandwidth=150 due to 50% windows with condition number>=30",
+    "Core predictors: building_coverage_ratio, poi_type_entropy (top by SHAP and permutation)",
+    "Collinearity pairs: density-coverage (r=0.71), poi_count-entropy (r=0.70)"
+  ],
+  "memory_retrieval_log": [
+    {
+      "query": "Shanghai street vitality drivers research design",
+      "layer": "research_design",
+      "scope": "global",
+      "result": "data_contract_only"
+    }
+  ],
+  "delegation_recovery": {
+    "events": [],
+    "note": "No worker failures requiring main-agent fallback."
+  }
+}

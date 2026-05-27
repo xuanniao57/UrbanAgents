@@ -1,0 +1,76 @@
+{
+  "artifacts": [
+    {
+      "node_id": "RO_01_all_window_aggregate",
+      "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s1_outcome\\outcome_distribution_map.png",
+      "type": "map",
+      "title": "Outcome distribution map (log stays)"
+    },
+    {
+      "node_id": "RO_01_all_window_aggregate",
+      "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s1_outcome\\outcome_summary_stats.json",
+      "type": "table",
+      "title": "Outcome summary statistics"
+    },
+    {
+      "node_id": "RO_02_weekday_weekend_contrast",
+      "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s1_outcome\\weekday_weekend_contrast.csv",
+      "type": "table",
+      "title": "Weekday/weekend contrast table"
+    },
+    {
+      "node_id": "RO_02_weekday_weekend_contrast",
+      "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s1_outcome\\weekday_weekend_map_pair.png",
+      "type": "map",
+      "title": "Weekday/weekend map pair"
+    },
+    {
+      "node_id": "FP_01_built_form_baseline",
+      "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s2_features\\feature_correlation_matrix.csv",
+      "type": "table",
+      "title": "Feature correlation matrix"
+    },
+    {
+      "node_id": "FP_01_built_form_baseline",
+      "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s2_features\\feature_correlation_heatmap.png",
+      "type": "figure",
+      "title": "Feature correlation heatmap"
+    },
+    {
+      "node_id": "FP_01_built_form_baseline",
+      "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s2_features\\vif_table.csv",
+      "type": "table",
+      "title": "VIF table"
+    },
+    {
+      "node_id": "FP_02_activity_opportunity",
+      "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s2_features\\feature_coverage_map.png",
+      "type": "map",
+      "title": "Feature coverage map"
+    },
+    {
+      "node_id": "FP_02_activity_opportunity",
+      "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s2_features\\feature_summary_stats.json",
+      "type": "table",
+      "title": "Feature summary statistics"
+    },
+    {
+      "node_id": "RO_01_all_window_aggregate",
+      "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s1_outcome\\study_area_locator_map.png",
+      "type": "map",
+      "title": "Study area locator map (two-panel publication layout)",
+      "produced_at": "2026-05-27T03:18:00Z",
+      "produced_by": "urban_host_python"
+    },
+    {
+      "node_id": "RO_01_all_window_aggregate",
+      "path": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009\\artifacts\\s1_outcome\\study_area_locator_map_note.json",
+      "type": "metadata",
+      "title": "Study area locator map artifact note",
+      "produced_at": "2026-05-27T03:18:00Z",
+      "produced_by": "urban_host_python"
+    }
+  ],
+  "review_status": "passed_with_warnings",
+  "reviewer_notes": "Locator map produced with approximate broader context frame (no Shanghai boundary or river layer locally). Scalebar approximate at 31.2N."
+}

@@ -36,7 +36,8 @@ CONTENT_LAYERS = {
 }
 
 DEFAULT_MEMORY_SCOPE = "reflective"
-PLANNING_CONTENT_LAYERS = {"research_design", "urban_method"}
+PLANNING_CONTENT_LAYERS = {"research_design"}
+METHOD_CONTENT_LAYERS = {"urban_method"}
 EXECUTION_CONTENT_LAYERS = {"tool_artifact"}
 EXECUTION_CHAIN_LAYERS = {"tool_artifact", "feedback_correction"}
 
@@ -48,6 +49,28 @@ def _json(data: dict[str, Any]) -> str:
 def _tokens(value: Any) -> set[str]:
     text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
     return set(re.findall(r"[a-z0-9_\-]+|[\u4e00-\u9fff]+", text.lower()))
+
+
+def _record_search_text(record: dict[str, Any]) -> str:
+    fields = [
+        "summary",
+        "method_hint",
+        "domain",
+        "triggers",
+        "caveats",
+        "place",
+        "correction",
+        "evidence_scope",
+        "problem_data_algorithm",
+        "temporal_scope",
+        "spatial_scope",
+        "population_scope",
+    ]
+    return json.dumps(
+        [record.get(field) for field in fields if record.get(field) not in (None, [], {})],
+        ensure_ascii=False,
+        default=str,
+    )
 
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -349,11 +372,76 @@ class UrbanMemoryProvider(MemoryProvider):
             "Urban memory provider is active. Use retrieval facets rather than loading everything. "
             "memory_chain separates research-facing records from execution-facing records; content_layer narrows "
             "the slice to research-design, urban-method, tool-artifact, place/case, or feedback-correction memory. "
-            "Before urban analysis, recall task-relevant cards progressively: first compact research and "
-            "method cues for the main plan, then selected tool-artifact procedures for execution and review. "
+            "Before urban analysis, recall task-relevant cards progressively: first compact research-design "
+            "cues for the main plan, then branch-local method cards only after a concrete method branch exists, "
+            "then selected tool-artifact procedures for execution and review. "
             "Treat recalled lessons as professional cues, not automatic facts or hard-coded rules. Store "
             "new reusable lessons when the user changes a spatial unit, data source, scale, stakeholder "
-            "caveat, variable operationalization, artifact validation rule, or rerun instruction."
+            "caveat, variable operationalization, artifact validation rule, or rerun instruction. "
+            "After each major analysis step, use urban_review as a reviewer pause: ask what the step "
+            "implies about time, space, and people; what it ignores; what assumptions it carries; "
+            "and what further analysis would be possible before moving to the next claim. "
+            "For concrete urban-analysis tasks with an output directory, maintain an observable workflow "
+            "trace instead of only a final answer: save the main workflow plan, worker or tool-task records, "
+            "per-step reviewer pauses, artifact readiness, claim gates, and main/worker reflections. "
+            "The main plan must name each step, why that step is needed, expected artifacts, and review risks. "
+            "After saving the main plan, show a compact human-readable plan in the CLI before execution: "
+            "steps, expected artifacts, review risks, delegation plan, claim gates, and branch choices. "
+            "Do not rely on a todo count or hidden workflow_plan.json as the user's only view of the plan. "
+            "Wait for the user to approve, revise, or block the plan before starting artifact-producing "
+            "worker/model/GIS execution beyond basic grounding and inventory. Record that decision in the "
+            "trace as human_plan_decision or plan_approval, including whether the plan was shown, the user "
+            "response, requested changes, approved steps, and timestamp. "
+            "Do not let recalled memory or the capability catalog silently create the main workflow. "
+            "For prepared data canvases, first audit data roles, spatial and temporal units, existing "
+            "model/map artifacts, and claim boundaries. Propose density, connectivity, accessibility, "
+            "topology, or GIS-packaging work only as optional branches when the current canvas and the "
+            "user's question justify them. Treat tool-artifact memories such as QGIS packaging, layer naming, "
+            "renderer checks, and manifest validation as downstream readiness constraints rather than "
+            "automatic analysis steps. "
+            "When delegation is available, do not keep all artifact-producing analysis in the main context: "
+            "use delegate_task for at least one bounded worker task unless the task is only a single tool call; "
+            "record worker input, worker output, and parent verification in the trace. "
+            "For multi-step artifact-producing analysis, call delegate_task before doing all worker-suitable "
+            "analysis yourself; a record that labels parent_agent as the worker does not satisfy delegation. "
+            "When calling delegate_task for urban analysis, pass a self-contained context: exact data paths, "
+            "the worker output subdirectory, allowed toolsets such as urban, the expected file handles, and "
+            "a required JSON-style return with status, files_written, assumptions, and errors. "
+            "For delegated worker packets, explicitly tell the child it is an Urban-Hermes worker, not the "
+            "main planner; require role=worker, status, files_written, operations, time_space_people_notes, "
+            "assumptions, errors, and claim_boundaries. The worker should write artifacts but not make final "
+            "paper claims. For delegated reviewer packets, explicitly tell the child it is an independent "
+            "Urban-Hermes reviewer; require role=reviewer, status, checked_files, time_review, space_review, "
+            "people_review, artifact_readiness, claim_gates, hard_failures, and recommendation. The reviewer "
+            "should inspect and judge artifacts, not silently repair them. "
+            "For worker-reviewer dialogue, use distinct delegated roles when feasible: one worker produces "
+            "analysis artifacts, a separate reviewer inspects those artifacts, and the main agent verifies both. "
+            "Do not implement the worker and reviewer as sections of one main-agent script and label that as "
+            "multi-agent dialogue. If a worker returns no usable artifacts, retry a narrower delegated worker "
+            "once before any main-agent fallback; if fallback is used, record actual_executor=main_agent_fallback "
+            "and mark the trace not fully delegated. "
+            "Call urban_review after each execution step, not only at the end, and save one review record per step. "
+            "Separate worker_reflection, reviewer_reflection, main_reflection, and memory_carryover notes. "
+            "A per-step review record is incomplete if it only contains a score or warnings; it must name "
+            "time, space, and people implications, ignored or missing evidence, assumptions, further analysis, "
+            "artifact readiness, claim impact, and the next action. "
+            "If a delegated worker fails, times out, or is interrupted, preserve the raw failure, record the "
+            "recovery path, and distinguish worker-produced artifacts from main-agent fallback artifacts. "
+            "Claim gates must be claim-level: descriptive association may proceed when supported, while causal, "
+            "policy, people-specific, perception, or local-mechanism claims should be downgraded or blocked when "
+            "the evidence or diagnostics are missing. "
+            "Before finalizing, validate the trace itself: require main_workflow_plan, worker_task_records, "
+            "human_plan_decision or plan_approval, parent_verification, per_step_review_records, claim_gates, "
+            "artifact_manifest, worker_reflection, reviewer_reflection, main_reflection, and memory_carryover. "
+            "Artifact readiness is not ready unless reusable downstream files are inventoried, including tables, "
+            "maps or GIS layers, model diagnostics when used, and a manifest such as spatial_reasoning_manifest.json. "
+            "For spatial analysis with reusable outputs, produce or package at least one map/GIS layer plus a "
+            "spatial reasoning manifest; otherwise mark artifact readiness as not ready. "
+            "After writing or repairing the final trace, call urban_review on that saved trace. If the final "
+            "review does not pass the threshold, do not call the trace validated; either repair and review again "
+            "or report the run as failed with reasons. "
+            "If delegation or per-step review is skipped, record why in the trace. "
+            "Do not hard-code a case-specific step list; let the main plan fit the user's task."
         )
 
     def prefetch(self, query: str, *, session_id: str = "") -> str:
@@ -396,6 +484,13 @@ class UrbanMemoryProvider(MemoryProvider):
             "planning_memory_cards": planning,
             "feedback_lessons": feedback,
             "place_context": places,
+            "deferred_method_memory_instruction": (
+                "Do not load urban_method cards into the global main plan. When a branch, worker, or reviewer "
+                "needs a concrete method such as GWR, GWRF, SHAP/PDP, temporal stratification, or street-view "
+                "alignment, call urban_research_memory with content_layer='urban_method', branch_id, "
+                "retrieval_scope='branch_local', and record the result in memory_retrieval_log. Treat the "
+                "retrieved card as temporary context for that branch, not as a template for unrelated branches."
+            ),
             "deferred_tool_artifact_index": tool_artifact_index,
             "deferred_tool_artifact_instruction": "Fetch full tool_artifact procedures with urban_research_memory only when execution or review needs concrete software/artifact rules.",
         }
@@ -468,12 +563,33 @@ class UrbanMemoryProvider(MemoryProvider):
             action = str(args.get("action") or "search")
             limit = int(args.get("limit") or 5)
             content_layers, memory_scopes, memory_chains = _filters_from_args(args)
+            branch_id = str(args.get("branch_id") or "").strip()
+            retrieval_scope = str(args.get("retrieval_scope") or "").strip() or ("branch_local" if content_layers & METHOD_CONTENT_LAYERS else "global")
+            retrieval_context = {
+                "branch_id": branch_id,
+                "retrieval_scope": retrieval_scope,
+                "review_target_type": args.get("review_target_type"),
+                "expires_after": args.get("expires_after") or ("branch_review" if retrieval_scope in {"branch_local", "worker_local", "reviewer_local"} else None),
+                "context_policy": (
+                    "Use retrieved urban_method records only for the named branch/review target. "
+                    "Do not promote them into the global plan unless the user explicitly approves that branch."
+                )
+                if content_layers & METHOD_CONTENT_LAYERS
+                else "Use retrieved records as task-relevant cues, not fixed workflow steps.",
+            }
             if action == "record":
                 return _json({"success": True, "result": {"record": self.research.record(args), "memory_root": str(self.root)}})
             if action == "list":
-                return _json({"success": True, "result": {"records": self.research.list(limit=limit, content_layers=content_layers, memory_scopes=memory_scopes, memory_chains=memory_chains), "memory_root": str(self.root), "memory_axes": _memory_axes_payload()}})
-            query = str(args.get("query") or args.get("task") or "")
-            return _json({"success": True, "result": {"query": query, "records": self.research.search(query, limit=limit, content_layers=content_layers, memory_scopes=memory_scopes, memory_chains=memory_chains), "memory_root": str(self.root), "memory_axes": _memory_axes_payload(), "loading_order": _memory_loading_order()}})
+                return _json({"success": True, "result": {"records": self.research.list(limit=limit, content_layers=content_layers, memory_scopes=memory_scopes, memory_chains=memory_chains), "memory_root": str(self.root), "memory_axes": _memory_axes_payload(), "retrieval_context": retrieval_context}})
+            query = str(
+                args.get("query")
+                or args.get("task")
+                or args.get("method_hint")
+                or " ".join(_string_list(args.get("triggers") or []))
+                or args.get("domain")
+                or ""
+            )
+            return _json({"success": True, "result": {"query": query, "records": self.research.search(query, limit=limit, content_layers=content_layers, memory_scopes=memory_scopes, memory_chains=memory_chains), "memory_root": str(self.root), "memory_axes": _memory_axes_payload(), "loading_order": _memory_loading_order(), "retrieval_context": retrieval_context}})
         if tool_name == "urban_memory_reflect":
             return _json({"success": True, "result": self.reflect_execution(args)})
         return _json({"success": False, "error": f"UrbanMemoryProvider does not handle {tool_name}"})
@@ -563,7 +679,7 @@ def _memory_loading_order() -> list[dict[str, Any]]:
         {
             "stage": "urban_prefetch",
             "scope": "reflective",
-            "content": "Compact task-relevant research_design, urban_method, place_case, and feedback_correction cards.",
+            "content": "Compact task-relevant research_design, place_case, and feedback_correction cards. urban_method cards are deferred until a branch-local retrieval is requested.",
             "recipient": "main_agent_planning",
         },
         {
@@ -586,10 +702,13 @@ def _rank_records(records: list[dict[str, Any]], query: str, *, limit: int) -> l
     lowered = query.lower()
     scored: list[tuple[float, dict[str, Any]]] = []
     for record in records:
-        haystack = json.dumps(record, ensure_ascii=False, default=str).lower()
+        haystack = _record_search_text(record).lower()
         triggers = [str(item).lower() for item in record.get("triggers", [])]
         trigger_score = 1.0 if any(trigger and trigger in lowered for trigger in triggers) else 0.0
-        overlap = len(query_tokens & _tokens(record)) / max(len(query_tokens), 1)
+        overlap_count = len(query_tokens & _tokens(haystack))
+        if not trigger_score and len(query_tokens) >= 3 and overlap_count < 2:
+            continue
+        overlap = overlap_count / max(len(query_tokens), 1)
         score = trigger_score + overlap
         if score > 0:
             scored.append((score, record))
@@ -807,6 +926,10 @@ URBAN_MEMORY_SEARCH_SCHEMA = {
             "content_layers": {"type": "array", "items": {"type": "string", "enum": list(CONTENT_LAYERS)}},
             "memory_scopes": {"type": "array", "items": {"type": "string", "enum": list(MEMORY_SCOPES)}},
             "memory_chains": {"type": "array", "items": {"type": "string", "enum": list(MEMORY_CHAINS)}},
+            "branch_id": {"type": "string"},
+            "review_target_type": {"type": "string"},
+            "retrieval_scope": {"type": "string", "enum": ["global", "branch_local", "worker_local", "reviewer_local"]},
+            "expires_after": {"type": "string"},
             "limit": {"type": "integer", "default": 5},
         },
         "required": ["query"],

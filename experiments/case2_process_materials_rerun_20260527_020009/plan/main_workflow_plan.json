@@ -1,0 +1,255 @@
+{
+  "plan_id": "case2_vitality_drivers_20260527",
+  "task": "Assess Shanghai street-vitality drivers using prepared data canvas",
+  "data_contract": {
+    "aoi": "Shanghai inner ring, ~157 km2",
+    "spatial_unit": "500m nominal grid, 516 cells",
+    "temporal_window": "2024-09-19 to 2024-09-25 (7 days)",
+    "periods": [
+      "morning_peak",
+      "daytime",
+      "evening_peak",
+      "night"
+    ],
+    "outcome_fields": [
+      "lbs_total_stays",
+      "lbs_vitality_index_log_stays",
+      "lbs_device_count_approx",
+      "lbs_stay_duration_hours"
+    ],
+    "built_environment_X": [
+      "cmab_building_density_per_ha",
+      "cmab_building_coverage_ratio",
+      "cmab_mean_height_m",
+      "cmab_function_entropy",
+      "cmab_age_entropy",
+      "osm_road_density_m_per_ha",
+      "osm_poi_count",
+      "osm_poi_type_entropy"
+    ],
+    "population_attributes": "uuid-level: gender, age_group, education_level, income_level, job, have_car, kids_stage, live/work coords, subway_times",
+    "existing_model": "RF baseline cv_r2=0.493, cv_mae=0.508"
+  },
+  "steps": [
+    {
+      "step_id": "S1",
+      "name": "Outcome branch selection (research_object)",
+      "why": "Street-vitality is not a single column; the Y definition changes time, space, and people meaning",
+      "branches": [
+        {
+          "id": "RO_01",
+          "name": "All-window aggregate",
+          "status": "suggested",
+          "data_ready": true,
+          "claim_type": "descriptive association"
+        },
+        {
+          "id": "RO_02",
+          "name": "Weekday/weekend contrast",
+          "status": "suggested",
+          "data_ready": true,
+          "claim_type": "temporal heterogeneity (limited by 1 weekend)"
+        },
+        {
+          "id": "RO_03",
+          "name": "Day-period split",
+          "status": "suggested",
+          "data_ready": true,
+          "claim_type": "diurnal variation"
+        },
+        {
+          "id": "RO_04",
+          "name": "Population-profile aware",
+          "status": "suggested_but_high_risk",
+          "data_ready": false,
+          "claim_type": "people-specific composition (requires raw UUID join)"
+        }
+      ],
+      "expected_artifacts": [
+        "outcome_distribution_map",
+        "temporal_profile",
+        "weekday_weekend_map",
+        "period_map_quadrant"
+      ],
+      "review_risks": [
+        "RO_04 requires raw LBS stay records not in canvas",
+        "Only 1 weekend limits RO_02 generalizability"
+      ]
+    },
+    {
+      "step_id": "S2",
+      "name": "Feature package selection",
+      "why": "Explanatory variables are grouped by interpretation, not dumped into one model",
+      "branches": [
+        {
+          "id": "FP_01",
+          "name": "Built-form baseline",
+          "status": "suggested",
+          "variables": [
+            "cmab_building_density_per_ha",
+            "cmab_building_coverage_ratio",
+            "cmab_mean_height_m",
+            "cmab_function_entropy",
+            "cmab_age_entropy"
+          ]
+        },
+        {
+          "id": "FP_02",
+          "name": "Activity-opportunity",
+          "status": "suggested",
+          "variables": [
+            "osm_road_density_m_per_ha",
+            "osm_poi_count",
+            "osm_poi_type_entropy"
+          ]
+        },
+        {
+          "id": "FP_03",
+          "name": "Accessibility add-on",
+          "status": "deferred",
+          "variables": [
+            "network_density",
+            "intersection_count",
+            "connectivity_index"
+          ],
+          "note": "Requires GIS processing from OSM roads"
+        },
+        {
+          "id": "FP_04",
+          "name": "Full multimodal",
+          "status": "suggested",
+          "variables": "FP_01 + FP_02 + optional FP_03"
+        }
+      ],
+      "expected_artifacts": [
+        "feature_correlation_matrix",
+        "VIF_table",
+        "feature_coverage_map"
+      ],
+      "review_risks": [
+        "Collinearity between density and road variables",
+        "CMAB data is 2020 snapshot"
+      ]
+    },
+    {
+      "step_id": "S3",
+      "name": "Model execution",
+      "why": "Association models only; no causal claims without design support",
+      "branches": [
+        {
+          "id": "ME_01",
+          "name": "RF baseline",
+          "status": "existing",
+          "result": "cv_r2=0.493, cv_mae=0.508"
+        },
+        {
+          "id": "ME_02",
+          "name": "GWRF spatial heterogeneity",
+          "status": "deferred",
+          "note": "Needs residual autocorrelation motivation"
+        }
+      ],
+      "expected_artifacts": [
+        "cv_results",
+        "permutation_importance",
+        "local_coefficient_maps"
+      ],
+      "review_risks": [
+        "GWRF bandwidth choice critical",
+        "Small n=516 for local estimation"
+      ]
+    },
+    {
+      "step_id": "S4",
+      "name": "Explanation and diagnostics",
+      "why": "Model outputs need interpretation boundaries before claims",
+      "branches": [
+        {
+          "id": "MX_01",
+          "name": "SHAP/PDP",
+          "status": "deferred",
+          "depends_on": "ME_01"
+        },
+        {
+          "id": "DI_01",
+          "name": "Residual spatial autocorrelation",
+          "status": "deferred",
+          "depends_on": "ME_01"
+        }
+      ],
+      "expected_artifacts": [
+        "shap_summary",
+        "pdp_curves",
+        "moran_i_report"
+      ],
+      "review_risks": [
+        "SHAP can misattribute with correlated features"
+      ]
+    },
+    {
+      "step_id": "S5",
+      "name": "Route comparison",
+      "why": "Compare outcome/feature combinations before final claims",
+      "status": "pending",
+      "expected_artifacts": [
+        "comparison_table",
+        "claim_calibration_report"
+      ]
+    },
+    {
+      "step_id": "S6",
+      "name": "Claim synthesis",
+      "why": "Calibrate claims as stable, conditional, insufficient, or unsupported",
+      "status": "pending",
+      "expected_artifacts": [
+        "calibrated_claims",
+        "claim_boundary_document"
+      ]
+    }
+  ],
+  "claim_gates": {
+    "allowed": [
+      "Descriptive association between built environment and grid-level LBS activity intensity"
+    ],
+    "blocked": [
+      "Causal effect of built environment on individual behavior",
+      "General population demographics from LBS panel",
+      "Long-term vitality trends",
+      "Perception effects without street-view data"
+    ]
+  },
+  "delegation_plan": {
+    "worker_tasks": [
+      "Outcome artifact generation (maps, profiles)",
+      "Feature package preparation (correlation, VIF)",
+      "Model execution (RF, GWRF)",
+      "Explanation/diagnostic generation (SHAP, Moran's I)"
+    ],
+    "reviewer_tasks": [
+      "Per-step artifact review",
+      "Claim gate check"
+    ]
+  },
+  "memory_retrieval_log": [
+    {
+      "record_id": "seed_case2_vitality_outcome_operationalization",
+      "used_for": "RO branch design",
+      "branch_ids": [
+        "RO_01",
+        "RO_02",
+        "RO_03",
+        "RO_04"
+      ]
+    },
+    {
+      "record_id": "seed_case2_vitality_feature_package_design",
+      "used_for": "FP branch design",
+      "branch_ids": [
+        "FP_01",
+        "FP_02",
+        "FP_03",
+        "FP_04"
+      ]
+    }
+  ]
+}

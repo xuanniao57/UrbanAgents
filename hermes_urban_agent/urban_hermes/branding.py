@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 
@@ -22,6 +23,15 @@ DEFAULT_URBAN_SOUL_MD = (
     "artifacts, uncertainty, and reusable memory. Communicate clearly, admit "
     "uncertainty when evidence is incomplete, and treat recalled memories as "
     "professional cues rather than automatic facts."
+)
+
+URBAN_AGENTS_WELCOME_TEXT = (
+    "Welcome to Urban Agents / Urban-Hermes! Type your message or /help for commands."
+)
+
+URBAN_AGENTS_TIP_TEXT = (
+    "Reviewer pauses should name time, space, people, assumptions, missing evidence, "
+    "and artifact readiness before claims move forward."
 )
 
 
@@ -110,6 +120,10 @@ def build_urban_agents_welcome_banner(
 
 def apply_urban_agents_branding(cli_module: Any | None = None) -> None:
     """Patch user-facing branding while leaving vendored internals intact."""
+    os.environ.setdefault("URBAN_HERMES_BRANDING", "1")
+    os.environ.setdefault("URBAN_HERMES_WELCOME_TEXT", URBAN_AGENTS_WELCOME_TEXT)
+    os.environ.setdefault("URBAN_HERMES_TIP_TEXT", URBAN_AGENTS_TIP_TEXT)
+
     try:
         import hermes_cli.banner as banner
 

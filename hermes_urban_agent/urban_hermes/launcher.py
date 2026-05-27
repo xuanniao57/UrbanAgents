@@ -25,6 +25,37 @@ HERMES_COMMANDS = {
 }
 
 
+def _disable_urban_tools(tool_names: list[str], *, quiet: bool = False) -> list[str]:
+    """Remove selected Urban-Hermes tools before the CLI session starts."""
+    env_names = [
+        item.strip()
+        for item in os.getenv("URBAN_HERMES_DISABLED_TOOLS", "").split(",")
+        if item.strip()
+    ]
+    requested = [*env_names, *tool_names]
+    if not requested:
+        return []
+
+    from tools.registry import registry
+
+    removed: list[str] = []
+    for name in dict.fromkeys(requested):
+        if not name.startswith("urban_"):
+            if not quiet:
+                print(f"[urban-hermes] Skipping non-urban tool disable request: {name}")
+            continue
+        if registry.get_entry(name):
+            registry.deregister(name)
+            removed.append(name)
+        elif not quiet:
+            print(f"[urban-hermes] Tool not registered, cannot disable: {name}")
+    if removed:
+        os.environ["URBAN_HERMES_DISABLED_TOOLS_ACTIVE"] = ",".join(removed)
+        if not quiet:
+            print(f"[urban-hermes] Disabled urban tools: {', '.join(removed)}")
+    return removed
+
+
 def _run_hermes_command(argv: list[str]) -> None:
     ensure_paths()
     apply_urban_agents_branding()
@@ -111,6 +142,50 @@ def _configure_windows_native_mode(args: argparse.Namespace) -> None:
             )
 
 
+def _install_runtime_prompt(args: argparse.Namespace) -> None:
+    """Inject the Urban-Hermes workflow contract as a system prompt.
+
+    The memory provider can also contribute these instructions when configured
+    globally, but dogfood experiments should not depend on a user's
+    ~/.hermes/config.yaml. Keep this prompt generic and task-shaped rather than
+    case-specific.
+    """
+    if os.getenv("URBAN_HERMES_DISABLE_RUNTIME_PROMPT"):
+        return
+    toolsets = {item.strip() for item in str(args.toolsets or "").split(",") if item.strip()}
+    if "urban" not in toolsets:
+        return
+    parts: list[str] = []
+    skill_prompt = os.path.join(os.path.dirname(__file__), "urban_skill_prompt.md")
+    try:
+        with open(skill_prompt, "r", encoding="utf-8") as handle:
+            parts.append(handle.read().strip())
+    except OSError:
+        pass
+    try:
+        from .memory_provider import UrbanMemoryProvider
+
+        parts.append(UrbanMemoryProvider().system_prompt_block())
+    except Exception:
+        pass
+    if parts:
+        runtime_prompt = "\n\n".join(part for part in parts if part).strip()
+        existing = os.getenv("URBAN_HERMES_SYSTEM_PROMPT", "").strip()
+        combined = "\n\n".join(
+            part for part in (existing, runtime_prompt) if part
+        ).strip()
+        os.environ["URBAN_HERMES_SYSTEM_PROMPT"] = combined
+
+        # Also feed the contract through Hermes' native ephemeral prompt path.
+        # This makes the source-runtime instructions visible to the agent before
+        # session creation, instead of relying only on a later vendored-CLI hook.
+        existing_ephemeral = os.getenv("HERMES_EPHEMERAL_SYSTEM_PROMPT", "").strip()
+        if combined and combined not in existing_ephemeral:
+            os.environ["HERMES_EPHEMERAL_SYSTEM_PROMPT"] = "\n\n".join(
+                part for part in (existing_ephemeral, combined) if part
+            ).strip()
+
+
 def main(argv: list[str] | None = None) -> None:
     raw_args = list(sys.argv[1:] if argv is None else argv)
     if raw_args and raw_args[0] in HERMES_COMMANDS:
@@ -133,11 +208,14 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--plain", action="store_true", help="Force plain non-prompt_toolkit output for scripted runs.")
     parser.add_argument("--yolo", action="store_true", help="Bypass Hermes dangerous-command approval prompts for this process.")
     parser.add_argument("--allow-wsl-tools", action="store_true", help="Keep upstream generic file/terminal toolsets on Windows. By default Hermes-Urban filters them to avoid Git Bash/WSL path issues.")
+    parser.add_argument("--disable-urban-tool", action="append", default=[], help="Remove a registered Urban-Hermes tool before starting the CLI session; intended for ablation runs.")
     args = parser.parse_args(argv)
 
     ensure_paths()
     bootstrap()
+    _disable_urban_tools(args.disable_urban_tool, quiet=args.quiet)
     _configure_windows_native_mode(args)
+    _install_runtime_prompt(args)
 
     if args.yolo:
         os.environ["HERMES_YOLO_MODE"] = "1"

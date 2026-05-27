@@ -1,0 +1,188 @@
+{
+  "dimensions": [
+    "machine_readable_trace",
+    "task_coverage",
+    "data_fit_stop_rule",
+    "typed_route_tree",
+    "dependency_review",
+    "time_space_people_review",
+    "method_requirement_review",
+    "claim_calibration",
+    "artifact_reproducibility"
+  ],
+  "variants": [
+    {
+      "variant": "full",
+      "status": "completed",
+      "elapsed_s": 891.26,
+      "session_ids": [
+        "20260524_112014_007443",
+        "20260524_112212_41734b",
+        "20260524_112602_b47ccf"
+      ],
+      "row_count": 60,
+      "decision_counts": {
+        "proceed_lightweight": 30,
+        "defer_heavy_execution": 5,
+        "design_only_missing_data": 16,
+        "blocked_mismatch": 9
+      },
+      "domain_counts": {
+        "street_vitality": 6,
+        "transport_accessibility": 6,
+        "housing_services": 6,
+        "sustainability_energy": 6,
+        "climate_resilience": 6,
+        "public_health_safety": 6,
+        "heritage_culture": 6,
+        "urban_rural_integration": 6,
+        "blue_green_ecology": 6,
+        "tourism_perception": 6
+      },
+      "stop_or_defer_task_count": 30,
+      "stop_or_defer_examples": [
+        "UWB60-05",
+        "UWB60-07",
+        "UWB60-10",
+        "UWB60-11",
+        "UWB60-12",
+        "UWB60-21",
+        "UWB60-23",
+        "UWB60-26",
+        "UWB60-27",
+        "UWB60-29",
+        "UWB60-30",
+        "UWB60-33"
+      ],
+      "scores": {
+        "machine_readable_trace": 2,
+        "task_coverage": 2,
+        "data_fit_stop_rule": 2,
+        "typed_route_tree": 2,
+        "dependency_review": 2,
+        "time_space_people_review": 2,
+        "method_requirement_review": 2,
+        "claim_calibration": 2,
+        "artifact_reproducibility": 2
+      },
+      "total_score": 18,
+      "max_score": 18,
+      "has_stdout_only_trace": false
+    },
+    {
+      "variant": "generic",
+      "status": "completed",
+      "elapsed_s": 607.25,
+      "session_ids": [
+        "20260524_115701_3ddac2"
+      ],
+      "row_count": 0,
+      "decision_counts": {
+        "proceed_lightweight": 38,
+        "design_only_missing_data": 10,
+        "blocked_mismatch": 7,
+        "defer_heavy_execution": 5
+      },
+      "domain_counts": {},
+      "stop_or_defer_task_count": 22,
+      "stop_or_defer_examples": [],
+      "scores": {
+        "machine_readable_trace": 1,
+        "task_coverage": 1,
+        "data_fit_stop_rule": 0,
+        "typed_route_tree": 1,
+        "dependency_review": 0,
+        "time_space_people_review": 1,
+        "method_requirement_review": 1,
+        "claim_calibration": 1,
+        "artifact_reproducibility": 1
+      },
+      "total_score": 7,
+      "max_score": 18,
+      "has_stdout_only_trace": true
+    },
+    {
+      "variant": "no_planner",
+      "status": "timeout",
+      "elapsed_s": 900.04,
+      "session_ids": [
+        "20260524_114144_cb6e81"
+      ],
+      "row_count": 0,
+      "decision_counts": {},
+      "domain_counts": {},
+      "stop_or_defer_task_count": 0,
+      "stop_or_defer_examples": [],
+      "scores": {
+        "machine_readable_trace": 1,
+        "task_coverage": 1,
+        "data_fit_stop_rule": 0,
+        "typed_route_tree": 1,
+        "dependency_review": 0,
+        "time_space_people_review": 1,
+        "method_requirement_review": 1,
+        "claim_calibration": 1,
+        "artifact_reproducibility": 0
+      },
+      "total_score": 6,
+      "max_score": 18,
+      "has_stdout_only_trace": true
+    },
+    {
+      "variant": "no_reviewer",
+      "status": "completed",
+      "elapsed_s": 325.64,
+      "session_ids": [
+        "20260524_113556_28f6e6"
+      ],
+      "row_count": 60,
+      "decision_counts": {
+        "proceed_lightweight": 33,
+        "defer_heavy_execution": 6,
+        "design_only_missing_data": 16,
+        "blocked_mismatch": 5
+      },
+      "domain_counts": {
+        "street_vitality": 6,
+        "transport_accessibility": 6,
+        "housing_services": 6,
+        "sustainability_energy": 6,
+        "climate_resilience": 6,
+        "public_health_safety": 6,
+        "heritage_culture": 6,
+        "urban_rural_integration": 6,
+        "blue_green_ecology": 6,
+        "tourism_perception": 6
+      },
+      "stop_or_defer_task_count": 27,
+      "stop_or_defer_examples": [
+        "UWB60-05",
+        "UWB60-07",
+        "UWB60-10",
+        "UWB60-11",
+        "UWB60-12",
+        "UWB60-17",
+        "UWB60-19",
+        "UWB60-21",
+        "UWB60-22",
+        "UWB60-23",
+        "UWB60-26",
+        "UWB60-29"
+      ],
+      "scores": {
+        "machine_readable_trace": 2,
+        "task_coverage": 2,
+        "data_fit_stop_rule": 2,
+        "typed_route_tree": 2,
+        "dependency_review": 2,
+        "time_space_people_review": 2,
+        "method_requirement_review": 2,
+        "claim_calibration": 2,
+        "artifact_reproducibility": 2
+      },
+      "total_score": 18,
+      "max_score": 18,
+      "has_stdout_only_trace": false
+    }
+  ]
+}

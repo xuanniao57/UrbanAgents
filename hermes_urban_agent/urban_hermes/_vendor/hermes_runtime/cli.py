@@ -13407,6 +13407,12 @@ def main(
             ).strip()
             cli.preloaded_skills = loaded_skills
 
+    extra_system_prompt = os.getenv("URBAN_HERMES_SYSTEM_PROMPT", "").strip()
+    if extra_system_prompt and extra_system_prompt not in (cli.system_prompt or ""):
+        cli.system_prompt = "\n\n".join(
+            part for part in (cli.system_prompt, extra_system_prompt) if part
+        ).strip()
+
     # Inject worktree context into agent's system prompt
     if wt_info:
         wt_note = (

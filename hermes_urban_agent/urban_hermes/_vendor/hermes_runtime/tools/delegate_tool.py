@@ -675,6 +675,51 @@ def _strip_blocked_tools(toolsets: List[str]) -> List[str]:
     return [t for t in toolsets if t not in blocked_toolset_names]
 
 
+def _sanitize_urban_hermes_child_toolsets(
+    requested: Optional[List[str]],
+    expanded_parent_toolsets: set,
+    goal: str,
+    context: Optional[str],
+) -> Optional[List[str]]:
+    """Keep Urban-Hermes host-path workers on the Urban toolset.
+
+    The upstream delegation schema suggests ``terminal``/``file`` for code
+    tasks. In the Urban-Hermes Windows adapter, those generic toolsets often
+    cannot access native ``D:/...`` paths reliably, while ``urban_host_fs`` and
+    ``urban_host_python`` can. If the model asks for terminal/file on an
+    Urban-Hermes host-path task, rewrite that request to ``urban`` rather than
+    letting the child lose the tools it needs.
+    """
+    if not requested:
+        return requested
+    if os.getenv("URBAN_HERMES_BRANDING", "").strip().lower() not in {"1", "true", "yes", "on"}:
+        return requested
+    text = f"{goal}\n{context or ''}".lower()
+    looks_like_host_path_task = any(
+        marker in text
+        for marker in (
+            "d:/",
+            "d:\\",
+            "c:/",
+            "c:\\",
+            "urban_host_fs",
+            "urban_host_python",
+            "urban-hermes",
+        )
+    )
+    if not looks_like_host_path_task:
+        return requested
+    if "urban" not in expanded_parent_toolsets:
+        return requested
+    generic = {"terminal", "file"}
+    if not any(item in generic for item in requested):
+        return requested
+    rewritten = [item for item in requested if item not in generic]
+    if "urban" not in rewritten:
+        rewritten.insert(0, "urban")
+    return rewritten
+
+
 def _build_child_progress_callback(
     task_index: int,
     goal: str,
@@ -942,6 +987,9 @@ def _build_child_agent(
         # Expand composite toolsets (e.g. hermes-cli) so that individual
         # toolset names (e.g. web, terminal) are recognised during intersection.
         expanded_parent = _expand_parent_toolsets(parent_toolsets)
+        toolsets = _sanitize_urban_hermes_child_toolsets(
+            toolsets, expanded_parent, goal, context
+        )
         child_toolsets = [t for t in toolsets if t in expanded_parent]
         if _get_inherit_mcp_toolsets():
             child_toolsets = _preserve_parent_mcp_toolsets(
@@ -2664,6 +2712,7 @@ DELEGATE_TASK_SCHEMA = {
                     "Toolsets to enable for this subagent. "
                     "Default: inherits your enabled toolsets. "
                     f"Available toolsets: {_TOOLSET_LIST_STR}. "
+                    "For Urban-Hermes native Windows paths (D:/... or C:/...), use ['urban'] or omit this field so urban_host_fs/urban_host_python remain available. "
                     "Common patterns: ['terminal', 'file'] for code work, "
                     "['web'] for research, ['browser'] for web interaction, "
                     "['terminal', 'file', 'web'] for full-stack tasks."
@@ -2682,7 +2731,7 @@ DELEGATE_TASK_SCHEMA = {
                         "toolsets": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": f"Toolsets for this specific task. Available: {_TOOLSET_LIST_STR}. Use 'web' for network access, 'terminal' for shell, 'browser' for web interaction.",
+                            "description": f"Toolsets for this specific task. Available: {_TOOLSET_LIST_STR}. For Urban-Hermes native Windows paths, use 'urban' or omit this field; use 'web' for network access, 'terminal' for shell, 'browser' for web interaction.",
                         },
                         "acp_command": {
                             "type": "string",

@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from .paths import ensure_paths
+from .route_tree_state import run_action as run_route_tree_action
 
 
 TOOLSET = "urban"
@@ -36,6 +37,7 @@ def register_all_urban_tools() -> list[str]:
         ("urban_export_geojson", GEOJSON_SCHEMA, _handle_geojson),
         ("urban_build_topology", TOPOLOGY_SCHEMA, _handle_topology),
         ("urban_ground_task", GROUND_TASK_SCHEMA, _handle_ground_task),
+        ("urban_route_tree", ROUTE_TREE_SCHEMA, _handle_route_tree),
         ("urban_review", REVIEW_SCHEMA, _handle_review),
         ("urban_quality_control", QUALITY_SCHEMA, _handle_quality),
         ("urban_record_feedback", RECORD_FEEDBACK_SCHEMA, _handle_record_feedback),
@@ -155,6 +157,21 @@ def _json_summary(value: Any) -> dict[str, Any]:
     return {"type": type(value).__name__, "repr": repr(value)[:200]}
 
 
+def _redact_sensitive_host_value(value: Any, *, key: str = "") -> Any:
+    key_lower = key.lower()
+    if any(token in key_lower for token in ("raw_lbs", "lbs_parquet", "parquet_dir", "uuid_level")):
+        return "[REDACTED_RAW_LBS_REFERENCE]"
+    if isinstance(value, dict):
+        return {nested_key: _redact_sensitive_host_value(nested_value, key=str(nested_key)) for nested_key, nested_value in value.items()}
+    if isinstance(value, list):
+        return [_redact_sensitive_host_value(item, key=key) for item in value]
+    if isinstance(value, str):
+        value_lower = value.lower()
+        if ".parquet" in value_lower or ("parquet" in value_lower and "lbs" in value_lower):
+            return "[REDACTED_RAW_LBS_REFERENCE]"
+    return value
+
+
 def _handle_host_fs(args: dict[str, Any], **_: Any) -> str:
     action = str(args.get("action") or "stat")
     path = _host_path(args.get("path") or ".")
@@ -185,6 +202,7 @@ def _handle_host_fs(args: dict[str, Any], **_: Any) -> str:
             if len(text) > max_chars:
                 text = text[:max_chars]
                 truncated = True
+            text = str(_redact_sensitive_host_value(text))
             return _ok({"path": str(path), "encoding": used_encoding, "chars": len(text), "truncated": truncated, "text": text}, action=action, host=os.name)
 
         if action in {"read_json", "json_summary", "geojson_summary"}:
@@ -193,6 +211,7 @@ def _handle_host_fs(args: dict[str, Any], **_: Any) -> str:
             if truncated:
                 return _fail(f"JSON file exceeds max_bytes={max_bytes}: {path}", action=action)
             data = json.loads(text)
+            data = _redact_sensitive_host_value(data)
             result = {"path": str(path), "encoding": used_encoding, "summary": _json_summary(data)}
             if action == "read_json":
                 result["data"] = data
@@ -278,15 +297,7 @@ def _handle_host_python(args: dict[str, Any], **_: Any) -> str:
 def _handle_capabilities(args: dict[str, Any], **_: Any) -> str:
     task = args.get("task") or args.get("query") or "urban spatial analysis"
     limit = int(args.get("limit") or 6)
-    try:
-        from urban_agent.capabilities import get_default_capability_registry
-
-        registry = get_default_capability_registry()
-        selected = registry.select_for_task(str(task), limit=limit)
-        return _ok(selected, source="urban_agent.capability_registry")
-    except Exception as exc:
-        fallback = _fallback_capabilities(str(task), limit=limit)
-        return _ok(fallback, source="fallback", warning=str(exc))
+    return _ok(_fallback_capabilities(str(task), limit=limit), source="urban_hermes.capability_catalog")
 
 
 def _handle_fetch_osm(args: dict[str, Any], **_: Any) -> str:
@@ -484,19 +495,848 @@ def _handle_ground_task(args: dict[str, Any], **_: Any) -> str:
     return _ok(grounding)
 
 
+def _handle_route_tree(args: dict[str, Any], **_: Any) -> str:
+    """Maintain a generic planner route tree and export it for CLI/frontend review."""
+    try:
+        result = run_route_tree_action(args)
+        return _ok(result, action=args.get("action") or "export", host=os.name)
+    except Exception as exc:
+        return _fail(str(exc), action=args.get("action") or "export", host=os.name)
+
+
+def _flatten_review_terms(value: Any, *, prefix: str = "") -> list[str]:
+    terms: list[str] = []
+    if isinstance(value, dict):
+        for key, nested_value in value.items():
+            key_text = f"{prefix}.{key}" if prefix else str(key)
+            terms.append(key_text)
+            terms.extend(_flatten_review_terms(nested_value, prefix=key_text))
+    elif isinstance(value, list):
+        for index, nested_value in enumerate(value[:50]):
+            terms.extend(_flatten_review_terms(nested_value, prefix=f"{prefix}[{index}]"))
+    elif isinstance(value, (str, int, float, bool)) and value is not None:
+        terms.append(str(value))
+    return terms
+
+
+def _score_artifact_readiness(results: Any) -> dict[str, Any]:
+    payload = results if isinstance(results, dict) else {}
+    issues: list[str] = []
+    review_text = "\n".join(_flatten_review_terms(payload)).lower()
+    spatial_like = any(token in review_text for token in ("spatial", "map", "geojson", "gis", "qgis", "layer", ".qgs", ".qgz"))
+    signals = {
+        "tables": any(token in review_text for token in ("csv", "table", "dataframe")),
+        "figures": any(token in review_text for token in ("figure", "plot", "map", ".png", ".svg", ".pdf")),
+        "gis_layers": any(token in review_text for token in ("geojson", "layer", "qgis", ".qgs", ".qgz", "shapefile", "filegdb")),
+        "manifest": any(token in review_text for token in ("manifest", "schema", "metadata")),
+        "model_outputs": any(token in review_text for token in ("model", "diagnostic", "residual", "pdp", "shap", "cross-validation", "cv")),
+    }
+    artifact_paths = payload.get("artifact_paths") or payload.get("outputs") or payload.get("artifacts") or []
+    if isinstance(artifact_paths, dict):
+        artifact_paths = list(artifact_paths.values())
+    if artifact_paths:
+        signals["declared_paths"] = True
+    if not any(signals.values()):
+        issues.append("no explicit downstream artifact, table, map, model, GIS layer, or manifest signal was provided")
+
+    artifact_manifest = payload.get("artifact_manifest")
+    if isinstance(artifact_manifest, dict):
+        manifest_counts: dict[str, int] = {}
+        for key, value in artifact_manifest.items():
+            if isinstance(value, list):
+                manifest_counts[key] = len(value)
+            elif value:
+                manifest_counts[key] = 1
+            else:
+                manifest_counts[key] = 0
+        signals["artifact_manifest_counts"] = manifest_counts
+        if sum(manifest_counts.values()) == 0:
+            issues.append("artifact_manifest is present but empty")
+        map_count = manifest_counts.get("figures", 0) + manifest_counts.get("maps", 0)
+        gis_count = manifest_counts.get("gis_layers", 0) + manifest_counts.get("layers", 0)
+        manifest_count = manifest_counts.get("manifests", 0)
+        if spatial_like and map_count == 0 and gis_count == 0:
+            issues.append("spatial artifact package has no reusable map, figure, or GIS layer")
+        if spatial_like and "spatial_reasoning_manifest" not in review_text:
+            issues.append("spatial artifact package has no spatial reasoning manifest")
+        score = max(0.0, 1.0 - 0.18 * len(issues))
+        if spatial_like and (map_count == 0 and gis_count == 0 or "spatial_reasoning_manifest" not in review_text):
+            score = min(score, 0.55)
+    else:
+        if spatial_like and "manifest" not in review_text:
+            issues.append("spatial artifact output has no manifest")
+        score = 1.0 if any(signals.values()) and not issues else max(0.0, 0.75 - 0.15 * len(issues)) if any(signals.values()) else 0.45
+    return {"score": score, "issues": issues, "signals": signals, "applicable": True}
+
+
+def _score_method_requirements(results: Any) -> dict[str, Any]:
+    """Check model-specific inputs/parameters without hard-coding a case workflow."""
+    review_text = "\n".join(_flatten_review_terms(results if isinstance(results, dict) else {})).lower()
+    if not review_text:
+        review_text = json.dumps(results, ensure_ascii=False, default=str).lower()
+    method_terms = (
+        "gwr",
+        "mgwr",
+        "gtwr",
+        "gwrf",
+        "random forest",
+        "rf",
+        "shap",
+        "pdp",
+        "partial dependence",
+        "temporal regression",
+        "period-specific",
+        "weekday",
+        "weekend",
+        "morning_peak",
+        "evening_peak",
+        "street-view",
+        "street view",
+        "perception",
+        "image-grid",
+    )
+    if not any(term in review_text for term in method_terms):
+        return {"score": 1.0, "issues": [], "signals": {}, "applicable": False}
+
+    issues: list[str] = []
+    has_gwr = bool(re.search(r"(?<![a-z0-9_])(?:gwr|mgwr|gtwr)(?![a-z0-9_])", review_text))
+    has_gwrf = bool(re.search(r"(?<![a-z0-9_])gwrf(?![a-z0-9_])", review_text))
+    signals: dict[str, Any] = {
+        "mentions_gwr": has_gwr,
+        "mentions_gwrf": has_gwrf,
+        "mentions_explainability": any(term in review_text for term in ("shap", "pdp", "partial dependence")),
+        "mentions_temporal_model": any(term in review_text for term in ("temporal regression", "period-specific", "weekday", "weekend", "morning_peak", "evening_peak", "fixed effect", "panel")),
+        "mentions_perception": any(term in review_text for term in ("street-view", "street view", "perception", "image-grid")),
+    }
+
+    if signals["mentions_gwr"]:
+        if not any(term in review_text for term in ("bandwidth", "bw", "adaptive", "fixed bandwidth")):
+            issues.append("GWR/MGWR/GTWR branch mentions the method but not spatial bandwidth")
+        if "kernel" not in review_text:
+            issues.append("GWR/MGWR/GTWR branch does not state kernel")
+        if not any(term in review_text for term in ("crs", "projected", "centroid", "coordinate", "geometry")):
+            issues.append("GWR/MGWR/GTWR branch does not state projected coordinates or geometry basis")
+        if "local multicollinearity" not in review_text and "condition number" not in review_text:
+            issues.append("GWR/MGWR/GTWR branch does not mention local multicollinearity or condition-number diagnostics")
+
+    if signals["mentions_gwrf"]:
+        if not any(term in review_text for term in ("bandwidth", "neighbor", "neighbour", "k=", "k-neighbor", "local window", "adaptive")):
+            issues.append("GWRF branch does not state spatial bandwidth/neighborhood")
+        if not any(term in review_text for term in ("local rf", "local random forest", "geographically weighted", "sample_weight", "weighted")):
+            issues.append("GWRF branch does not clarify the local/weighted RF design")
+        if not any(term in review_text for term in ("local importance", "local feature", "local prediction", "residual")):
+            issues.append("GWRF branch lacks expected local prediction/importance/residual artifacts")
+
+    if signals["mentions_explainability"]:
+        if not any(term in review_text for term in ("fitted model", "trained model", "rf model", "local rf", "model output")):
+            issues.append("SHAP/PDP branch does not state the fitted model it explains")
+        if not any(term in review_text for term in ("model explanation", "model behavior", "not causal", "not mechanism", "downgrade")):
+            issues.append("SHAP/PDP branch lacks model-explanation claim boundary")
+
+    if signals["mentions_temporal_model"]:
+        if not any(term in review_text for term in ("weekday", "weekend", "period", "morning", "evening", "night", "daytime", "date", "time split", "fixed effect")):
+            issues.append("temporal model branch does not state time split or temporal grouping")
+        if not any(term in review_text for term in ("aggregate", "panel", "grid-date", "grid_date", "period-specific", "stratified")):
+            issues.append("temporal model branch does not state whether it is stratified, aggregate, or panel-like")
+
+    perception_blocked = signals["mentions_perception"] and any(term in review_text for term in ("blocked", "block until", "missing", "not supplied", "absent"))
+    if signals["mentions_perception"] and not perception_blocked:
+        if not any(term in review_text for term in ("alignment", "image-grid", "image grid", "coordinate", "lon", "lat", "geotag")):
+            issues.append("street-view/perception branch does not state image-coordinate or image-grid alignment")
+        if not any(term in review_text for term in ("coverage", "images per grid", "grid coverage", "manifest", "inventory")):
+            issues.append("street-view/perception branch lacks image coverage or alignment manifest artifact")
+
+    score = max(0.0, 1.0 - 0.10 * len(issues))
+    if any("bandwidth" in issue or "image-coordinate" in issue for issue in issues):
+        score = min(score, 0.70)
+    return {"score": score, "issues": issues, "signals": signals, "applicable": True}
+
+
+def _has_review_field(review: dict[str, Any], aliases: Iterable[str]) -> bool:
+    for alias in aliases:
+        if alias in review and review[alias] not in (None, "", [], {}):
+            return True
+    return False
+
+
+def _load_json_path(value: Any, *, max_bytes: int = 5_000_000) -> Any:
+    if not isinstance(value, str):
+        return value
+    candidate = value.strip().strip('"')
+    if not candidate.lower().endswith(".json"):
+        return value
+    try:
+        path = Path(candidate)
+        if not path.is_file() or path.stat().st_size > max_bytes:
+            return value
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return value
+
+
+def _as_record_list(value: Any) -> list[dict[str, Any]]:
+    value = _load_json_path(value)
+    if isinstance(value, dict):
+        if any(isinstance(nested, dict) for nested in value.values()):
+            return [nested for nested in value.values() if isinstance(nested, dict)]
+        return [value]
+    if isinstance(value, list):
+        records: list[dict[str, Any]] = []
+        for item in value:
+            loaded = _load_json_path(item)
+            if isinstance(loaded, dict):
+                records.append(loaded)
+        return records
+    return []
+
+
+ROUTE_NODE_TYPES = {
+    "research_object",
+    "feature_package",
+    "data_preparation",
+    "model_execution",
+    "model_explanation",
+    "diagnostic",
+    "route_comparison",
+    "claim_synthesis",
+    "report_option",
+}
+
+
+def _extract_route_nodes(route_tree: Any) -> list[dict[str, Any]]:
+    route_tree = _load_json_path(route_tree)
+    if isinstance(route_tree, dict):
+        for key in ("nodes", "route_nodes", "branches", "routes"):
+            nodes = route_tree.get(key)
+            if isinstance(nodes, list):
+                return [node for node in nodes if isinstance(node, dict)]
+        return [route_tree] if any(key in route_tree for key in ("node_type", "branch_id", "node_id")) else []
+    if isinstance(route_tree, list):
+        return [node for node in route_tree if isinstance(node, dict)]
+    return []
+
+
+def _text_has_any(value: Any, terms: tuple[str, ...]) -> bool:
+    text = json.dumps(value, ensure_ascii=False, default=str).lower()
+    return any(term in text for term in terms)
+
+
+def _validate_typed_route_tree(route_tree: Any) -> list[str]:
+    nodes = _extract_route_nodes(route_tree)
+    if not nodes:
+        return []
+
+    issues: list[str] = []
+    node_types: dict[str, str] = {}
+    for index, node in enumerate(nodes, start=1):
+        node_id = str(node.get("node_id") or node.get("branch_id") or node.get("id") or f"node_{index}")
+        node_type = str(node.get("node_type") or node.get("type") or "").strip()
+        if not node_type:
+            issues.append(f"route node {node_id} has no node_type")
+        elif node_type not in ROUTE_NODE_TYPES:
+            issues.append(f"route node {node_id} has unsupported node_type '{node_type}'")
+        node_types[node_id] = node_type
+
+        parent_nodes = node.get("parent_nodes") or node.get("depends_on") or node.get("parents") or []
+        if isinstance(parent_nodes, str):
+            parent_nodes = [parent_nodes]
+        dependency_list = node.get("requires") or parent_nodes
+
+        if node_type != "research_object" and dependency_list in (None, "", [], {}):
+            issues.append(f"route node {node_id} has no requires/dependency list")
+        if (
+            node.get("expected_artifacts") in (None, "", [], {})
+            and node.get("expected_outputs") in (None, "", [], {})
+            and node.get("outputs") in (None, "", [], {})
+        ):
+            issues.append(f"route node {node_id} has no outputs or expected_artifacts")
+
+        meaning = node.get("time_space_people") or node.get("meaning_review") or {}
+        has_tsp = isinstance(meaning, dict) and all(key in meaning for key in ("time", "space", "people"))
+        has_tsp = has_tsp or all(node.get(key) not in (None, "", [], {}) for key in ("time", "space", "people"))
+        if not has_tsp:
+            issues.append(f"route node {node_id} does not state time, space, and people meaning")
+
+        if node_type == "research_object":
+            if not _text_has_any(node, ("spatial unit", "grid", "hex", "segment", "block", "空间", "网格")):
+                issues.append(f"research_object node {node_id} does not declare spatial unit")
+            if not _text_has_any(node, ("time", "week", "weekday", "weekend", "period", "temporal", "时间", "时段")):
+                issues.append(f"research_object node {node_id} does not declare temporal design")
+            if not _text_has_any(node, ("outcome", "dependent", "activity", "vitality", "因变量")):
+                issues.append(f"research_object node {node_id} does not declare outcome meaning")
+
+        if node_type in {"feature_package", "data_preparation"} and not parent_nodes:
+            issues.append(f"{node_type} node {node_id} has no parent research_object")
+
+        if node_type == "model_execution":
+            if not parent_nodes and not _text_has_any(node.get("requires"), (" y", "outcome", " x", "feature", "aligned")):
+                issues.append(f"model_execution node {node_id} does not depend on research object and feature package")
+            if _text_has_any(node, ("gwr", "gwrf", "spatial heterogeneity")):
+                if not _text_has_any(node, ("bandwidth", "kernel", "neighbor", "projected", "crs", "coordinate")):
+                    issues.append(f"spatial model node {node_id} does not expose bandwidth/kernel/coordinate requirements")
+
+        if node_type == "model_explanation":
+            if not parent_nodes and not _text_has_any(node.get("requires"), ("fitted model", "trained model", "model output")):
+                issues.append(f"model_explanation node {node_id} does not depend on a fitted model")
+            if _text_has_any(node, ("shap", "pdp", "partial dependence")) and not _text_has_any(node, ("fitted", "trained", "model version")):
+                issues.append(f"SHAP/PDP node {node_id} does not state fitted-model dependency")
+
+        if node_type == "diagnostic" and not parent_nodes:
+            issues.append(f"diagnostic node {node_id} has no fitted model or artifact parent")
+
+        if node_type in {"route_comparison", "report_option"}:
+            if not parent_nodes and not _text_has_any(dependency_list, ("route", "branch", "review", "artifact", "claim gate")):
+                issues.append(f"{node_type} node {node_id} does not depend on completed route outputs or reviews")
+
+        if node_type == "claim_synthesis":
+            if not parent_nodes and not _text_has_any(dependency_list, ("completed", "route output", "branch output", "review", "claim gate", "route_comparison", "report_option")):
+                issues.append(f"claim_synthesis node {node_id} does not require completed route outputs and reviews")
+
+    has_explanation = any(node_type == "model_explanation" for node_type in node_types.values())
+    has_model = any(node_type == "model_execution" for node_type in node_types.values())
+    if has_explanation and not has_model:
+        issues.append("route tree contains model_explanation but no model_execution node")
+    return issues
+
+
+def _is_workflow_trace_payload(value: Any) -> bool:
+    return isinstance(value, dict) and any(
+        key in value
+        for key in (
+            "workflow_trace",
+            "main_workflow_plan",
+            "human_plan_decision",
+            "plan_approval",
+            "worker_task_records",
+            "per_step_review_records",
+            "branch_tree",
+            "branch_progress",
+            "human_branch_decisions",
+            "claim_gates",
+            "artifact_manifest",
+        )
+    )
+
+
+def _score_trace_completeness(results: Any, args: dict[str, Any]) -> dict[str, Any]:
+    payload = results if isinstance(results, dict) else {}
+    review_text = "\n".join(_flatten_review_terms(payload)).lower()
+    trace_markers = {
+        "main_workflow_plan",
+        "human_plan_decision",
+        "plan_approval",
+        "worker_task_records",
+        "parent_verification",
+        "per_step_review_records",
+        "claim_gates",
+        "artifact_manifest",
+        "branch_tree",
+        "branch_progress",
+        "human_branch_decisions",
+        "memory_retrieval_log",
+        "worker_reflection",
+        "reviewer_reflection",
+        "main_reflection",
+        "memory_carryover",
+        "workflow_trace",
+        "steps",
+    }
+    stage = str(args.get("stage") or "").lower()
+    trace_like = (
+        any(marker in payload for marker in trace_markers)
+        or "final" in stage
+        or "trace" in stage
+        or "workflow_trace" in review_text
+    )
+    if not trace_like:
+        return {"score": 1.0, "issues": [], "signals": {}, "applicable": False}
+
+    issues: list[str] = []
+    required_trace_fields = [
+        "main_workflow_plan",
+        "worker_task_records",
+        "parent_verification",
+        "per_step_review_records",
+        "claim_gates",
+        "artifact_manifest",
+        "worker_reflection",
+        "reviewer_reflection",
+        "main_reflection",
+        "memory_carryover",
+    ]
+    for field in required_trace_fields:
+        if payload.get(field) in (None, "", [], {}):
+            issues.append(f"trace missing or empty: {field}")
+
+    plan_decision = (
+        payload.get("human_plan_decision")
+        or payload.get("plan_approval")
+        or payload.get("human_plan_approval")
+    )
+    if plan_decision in (None, "", [], {}):
+        issues.append("trace missing or empty: human_plan_decision/plan_approval")
+    elif isinstance(plan_decision, dict):
+        decision_text = json.dumps(plan_decision, ensure_ascii=False, default=str).lower()
+        if not any(term in decision_text for term in ("approve", "approved", "revise", "revision", "block", "blocked", "continue")):
+            issues.append("human_plan_decision/plan_approval does not record approve, revise, block, or continue")
+        if not any(term in decision_text for term in ("shown", "visible", "cli", "presented", "rendered")):
+            issues.append("human_plan_decision/plan_approval does not state that the plan was visibly shown to the user")
+
+    worker_records = _as_record_list(payload.get("worker_task_records"))
+    delegation_skipped = payload.get("delegation_skipped_reason") or payload.get("delegation_omission_reason")
+    if worker_records:
+        worker_ids = {str(record.get("worker_id") or record.get("agent_id") or record.get("executor") or "").lower() for record in worker_records}
+        actual_executors = {str(record.get("actual_executor") or record.get("executor") or "").lower() for record in worker_records}
+        has_real_worker = any(worker_id and worker_id not in {"parent_agent", "main_agent", "parent", "main"} for worker_id in worker_ids)
+        has_delegated_executor = any("delegate" in executor or "subagent" in executor for executor in actual_executors)
+        has_main_fallback = any("fallback" in executor or "main_agent" in executor or "parent_agent" in executor for executor in actual_executors)
+        if not (has_real_worker or has_delegated_executor) and not delegation_skipped:
+            issues.append("worker_task_records only contain the parent/main agent; no real delegated worker or skip reason is recorded")
+        if has_main_fallback and not payload.get("delegation_recovery"):
+            issues.append("main-agent fallback is recorded without a delegation_recovery record")
+
+    if any(term in review_text for term in ("worker-reviewer", "worker reviewer", "dialogue_turns", "reviewer_critique")):
+        if "delegate_subagent" not in review_text and "delegate_task" not in review_text and "subagent" not in review_text:
+            issues.append("worker-reviewer dialogue trace has no delegated worker/reviewer executor evidence")
+
+    branch_like = any(
+        term in review_text
+        for term in (
+            "branch_tree",
+            "branch progress",
+            "branch_candidates",
+            "suggested branch",
+            "deferred branch",
+            "gwr",
+            "gwrf",
+            "shap",
+            "pdp",
+            "street-view",
+            "perception",
+            "weekday",
+            "weekend",
+            "period-specific",
+        )
+    )
+    if branch_like:
+        if payload.get("branch_tree") in (None, "", [], {}):
+            issues.append("branch-like workflow has no branch_tree")
+        if payload.get("branch_progress") in (None, "", [], {}):
+            issues.append("branch-like workflow has no branch_progress")
+        branch_decision = payload.get("human_branch_decisions") or payload.get("human_plan_decision") or payload.get("plan_approval")
+        if branch_decision in (None, "", [], {}):
+            issues.append("branch-like workflow has no human branch or plan decision record")
+        if payload.get("memory_retrieval_log") in (None, "", [], {}) and any(term in review_text for term in ("gwr", "gwrf", "shap", "pdp", "perception")):
+            issues.append("method-branch workflow has no memory_retrieval_log for on-demand method memory")
+        route_tree = payload.get("typed_route_tree") or payload.get("branch_tree") or payload.get("route_tree")
+        issues.extend(_validate_typed_route_tree(route_tree))
+
+    if "in_progress" in review_text:
+        issues.append("trace still contains an in_progress status")
+
+    step_records = _as_record_list(payload.get("per_step_review_records"))
+    if not step_records:
+        step_records = [
+            step.get("review")
+            for step in _as_record_list(payload.get("steps"))
+            if isinstance(step.get("review"), dict)
+        ]
+    if not step_records:
+        issues.append("trace has no structured per-step reviewer pause records")
+
+    required_step_fields = {
+        "actual_executor": ("actual_executor", "executor", "worker_or_tool_task"),
+        "review_target_type": ("review_target_type", "target_type", "review_object"),
+        "time_implications": ("time_implications", "time", "temporal_implications", "temporal_review", "time_review"),
+        "space_implications": ("space_implications", "space", "spatial_implications", "spatial_review", "space_review"),
+        "people_implications": ("people_implications", "people", "population_implications", "stakeholder_implications", "people_review"),
+        "method_requirement_review": ("method_requirement_review", "method_review", "method_requirements"),
+        "ignored_or_missing_evidence": ("ignored_or_missing_evidence", "missing_evidence", "ignored_evidence", "evidence_gaps"),
+        "assumptions": ("assumptions", "assumption_boundary", "working_assumptions"),
+        "further_analysis": ("further_analysis", "next_analysis", "additional_analysis", "could_analyze"),
+        "branch_candidates": ("branch_candidates", "suggested_branches", "new_branches", "branch_progress_update"),
+        "artifact_readiness": ("artifact_readiness", "artifact_review", "readiness"),
+        "claim_impact": ("claim_impact", "claim_gate", "claim_boundary", "claim_gates"),
+        "next_action": ("next_action", "decision", "intervention_decision"),
+    }
+    for index, review in enumerate(step_records, start=1):
+        missing = [
+            field
+            for field, aliases in required_step_fields.items()
+            if not _has_review_field(review, aliases)
+        ]
+        if missing:
+            step_id = review.get("step_id") or review.get("main_plan_step") or f"step_{index}"
+            issues.append(f"per-step review {step_id} missing fields: {', '.join(missing)}")
+
+    risky_claim_terms = (
+        "causal",
+        "causality",
+        "policy",
+        "intervention",
+        "people-specific",
+        "demographic",
+        "perception",
+        "street-view",
+        "gwr",
+        "gwrf",
+        "shap",
+        "mechanism",
+        "local mechanism",
+    )
+    gate_terms = ("downgrade", "block", "gated", "gate", "unsupported")
+    if any(term in review_text for term in risky_claim_terms) and not any(term in review_text for term in gate_terms):
+        issues.append("risky causal, policy, people-specific, perception, or local-mechanism claims appear without downgrade/block gates")
+
+    failure_terms = ("worker_failed", "worker failure", "worker failed", "timeout", "timed out", "interrupted", "delegate error", "subagent error")
+    recovery_terms = ("recovery", "fallback", "main-agent fallback", "parent recovery", "takeover")
+    if any(term in review_text for term in failure_terms) and not any(term in review_text for term in recovery_terms):
+        issues.append("worker failure/interruption appears without an explicit recovery path")
+
+    spatial_terms = ("spatial", "map", "geojson", "gis", "qgis", "layer", ".qgs", ".qgz")
+    if any(term in review_text for term in spatial_terms) and "manifest" not in review_text:
+        issues.append("spatial artifact trace is missing a reusable manifest")
+
+    people_review_text = "\n".join(
+        str(record.get(alias) or "")
+        for record in step_records
+        for alias in (
+            "people_implications",
+            "people",
+            "population_implications",
+            "stakeholder_implications",
+            "people_review",
+        )
+    ).lower()
+    if any(term in review_text for term in ("people", "population", "stakeholder")):
+        if not people_review_text.strip():
+            issues.append("people/stakeholder lens is named but no per-step people implications are recorded")
+        elif not any(term in people_review_text for term in ("proxy", "missing", "not individual", "activity", "stakeholder", "user", "demographic", "behavior")):
+            issues.append("people/stakeholder review does not state whether people evidence is direct, proxied, missing, or activity-based")
+
+    reviewer_reflection = payload.get("reviewer_reflection")
+    if isinstance(reviewer_reflection, dict):
+        reviewer_text = json.dumps(reviewer_reflection, ensure_ascii=False, default=str).lower()
+        if "revise" in reviewer_text or "hard_failures" in reviewer_text:
+            issues.append("reviewer_reflection records unresolved revise recommendation or hard failures")
+
+    validation_status = payload.get("validation_status")
+    positive_validation_claim = payload.get("validated") is True
+    if isinstance(validation_status, dict):
+        positive_validation_claim = positive_validation_claim or validation_status.get("validated") is True
+        positive_validation_claim = positive_validation_claim or str(validation_status.get("overall") or "").lower() in {
+            "valid",
+            "validated",
+            "pass",
+            "passed",
+            "ready",
+            "fully_validated",
+        }
+    elif isinstance(validation_status, str):
+        positive_validation_claim = positive_validation_claim or validation_status.lower() in {
+            "valid",
+            "validated",
+            "pass",
+            "passed",
+            "ready",
+            "fully_validated",
+        }
+    if not positive_validation_claim:
+        positive_validation_claim = any(
+            phrase in review_text
+            for phrase in ("fully validated", "trace validated", "run validated", "validation passed")
+        ) and not any(
+            phrase in review_text
+            for phrase in ("not validated", "not_validated", "validated: false", '"validated": false')
+        )
+    if positive_validation_claim and any(term in review_text for term in ("revise", "below threshold", "hard failure", "hard_failures")):
+        issues.append("trace claims validation while unresolved review failures remain")
+
+    score = max(0.0, 1.0 - 0.08 * len(issues))
+    if any(
+        issue.startswith("worker_task_records only contain")
+        or issue.startswith("worker-reviewer dialogue trace has no delegated")
+        for issue in issues
+    ):
+        score = min(score, 0.50)
+    signals = {
+        "trace_like": trace_like,
+        "per_step_review_count": len(step_records),
+        "required_trace_fields_present": [field for field in required_trace_fields if payload.get(field) not in (None, "", [], {})],
+        "human_plan_decision_present": plan_decision not in (None, "", [], {}),
+    }
+    return {"score": score, "issues": issues, "signals": signals, "applicable": True}
+
+
+REVIEWER_PAUSE_GUIDANCE: dict[str, Any] = {
+    "purpose": (
+        "Pause before the workflow moves on. This is a review hub: choose the review lens "
+        "from the target being inspected instead of applying one fixed checklist."
+    ),
+    "target_types": {
+        "plan": "Review research meaning, data-method fit, branch tree, human choices, and time-space-people implications before execution.",
+        "route_tree": "Review node types, parent dependencies, allowed child nodes, human choices, and whether analysis routes are at the right research-design level.",
+        "method_branch": "Review model-specific input requirements, parameters, diagnostics, and interpretation boundaries.",
+        "worker_output": "Review concrete artifacts, schemas, model outputs, maps/layers, and whether the output can be a downstream input.",
+        "claim_synthesis": "Review whether multiple analysis routes support the same claim, condition it by time or space, or require downgrade.",
+        "final_trace": "Review trace completeness, branch progress, human decisions, memory retrieval, claim gates, and artifact manifest.",
+    },
+    "lenses": [
+        {
+            "lens_id": "time",
+            "label": "Time",
+            "questions": [
+                "What temporal meaning does this step introduce or rely on?",
+                "What time window, granularity, freshness, dynamics, or long-term claim is missing or ignored?",
+                "What temporal assumptions should be carried into the next step?",
+                "What further temporal analysis would be possible if more evidence were available?",
+            ],
+        },
+        {
+            "lens_id": "space",
+            "label": "Space",
+            "questions": [
+                "What spatial meaning does this step introduce or rely on?",
+                "What AOI, CRS, spatial unit, scale, boundary effect, or heterogeneity is missing or ignored?",
+                "What spatial assumptions should be carried into the next step?",
+                "What further spatial analysis would be possible if more evidence were available?",
+            ],
+        },
+        {
+            "lens_id": "people",
+            "label": "People",
+            "questions": [
+                "What people, activity, stakeholder, or urban-use meaning does this step imply?",
+                "Which users, behaviors, demographics, or stakeholder voices are missing or only proxied?",
+                "What people-related assumptions should be carried into the next step?",
+                "What further people or activity analysis would be possible if more evidence were available?",
+            ],
+        },
+    ],
+    "claim_boundary": (
+        "Use the pause to decide whether the next claim should proceed, branch, be downgraded, "
+        "or be blocked until stronger evidence or artifacts exist."
+    ),
+    "dynamic_branching": (
+        "Review can discover new branches during execution, not only during planning. Save candidate "
+        "branches with required inputs, method parameters, time-space-people meaning, expected artifacts, "
+        "claim boundary, and status such as suggested, approved, active, deferred, blocked, or completed."
+    ),
+    "typed_route_tree": {
+        "node_types": sorted(ROUTE_NODE_TYPES),
+        "required_node_fields": [
+            "node_id",
+            "node_type",
+            "parent_nodes",
+            "requires",
+            "expected_artifacts or outputs",
+            "time_space_people",
+            "claim_boundary",
+            "status",
+            "human_choice",
+        ],
+        "dependency_rule": (
+            "research_object defines spatial unit, temporal design, and outcome meaning; feature_package "
+            "depends on a research_object; model_execution depends on research_object + feature_package; "
+            "model_explanation depends on a fitted model; diagnostic depends on a fitted model or artifact; "
+            "claim_synthesis depends on completed route outputs and reviews."
+        ),
+        "reject_examples": [
+            "SHAP/PDP listed as a peer of GWR instead of as an explanation node for a fitted RF/GWRF model",
+            "street-view alignment treated as a perception-effect claim before perception features exist",
+            "GWR/GWRF branch missing bandwidth, kernel, coordinates, or neighborhood requirements",
+        ],
+    },
+    "analysis_route_comparison": (
+        "When multiple approved branches address the same urban question, compare their outputs in a shared "
+        "claim-calibration table. The planner should check whether a candidate claim is supported globally, "
+        "stable across time splits, spatially consistent or local, and valid under people/data-proxy boundaries. "
+        "Use plain decisions such as stable support, conditional support, insufficient interpretation, or unsupported."
+    ),
+    "method_requirement_review": {
+        "GWR_MGWR_GTWR": [
+            "Y and X aligned to the same spatial unit",
+            "projected coordinates or geometry basis",
+            "spatial bandwidth and selection rule",
+            "kernel and fixed/adaptive choice",
+            "local multicollinearity or condition-number diagnostics",
+            "local coefficients downgraded to association diagnostics unless causal design exists",
+        ],
+        "GWRF": [
+            "Y and X aligned to the same spatial unit",
+            "projected coordinates or geometry basis",
+            "spatial bandwidth/neighborhood size",
+            "local/weighted RF design and validation scheme",
+            "local prediction, local feature reliance, and residual artifacts",
+            "feature reliance downgraded to model behavior unless stronger evidence exists",
+        ],
+        "temporal_regression": [
+            "time split design such as weekday/weekend, period-specific, grid-date-period, or fixed effects",
+            "whether X varies over time or is time-invariant",
+            "whether the branch is descriptive, stratified association, panel-like, or causal",
+            "claim boundary for seasonality, events, long-term dynamics, and individual behavior",
+        ],
+        "SHAP_PDP": [
+            "fitted model being explained",
+            "global vs local explanation scope",
+            "feature support and collinearity caveats",
+            "model explanation distinguished from urban mechanism or intervention effect",
+        ],
+        "street_view_perception": [
+            "image inventory and coordinate parsing",
+            "image-grid or image-segment alignment manifest",
+            "grid coverage and images-per-unit distribution",
+            "perception scorer/features and aggregation rule",
+            "sampling, timestamp, viewpoint, and people-claim boundaries",
+        ],
+    },
+    "save_record": {
+        "recommended_file": "workflow_trace.json or step_reviews/<step_id>_review.json",
+        "granularity": "Save one reviewer pause record for each execution step, not only one final review.",
+        "minimum_fields": [
+            "step_id",
+            "main_plan_step",
+            "review_target_type",
+            "worker_or_tool_task",
+            "actual_executor",
+            "time_implications",
+            "space_implications",
+            "people_implications",
+            "method_requirement_review",
+            "ignored_or_missing_evidence",
+            "assumptions",
+            "further_analysis",
+            "branch_candidates",
+            "branch_progress_update",
+            "artifact_readiness",
+            "claim_impact",
+            "claim_gate",
+            "decision",
+            "next_action",
+            "reflection_note",
+        ],
+        "trace_fields": [
+            "main_workflow_plan",
+            "human_plan_decision",
+            "plan_approval",
+            "worker_task_records",
+            "parent_verification",
+            "per_step_review_records",
+            "branch_tree",
+            "branch_progress",
+            "human_branch_decisions",
+            "claim_gates",
+            "artifact_manifest",
+            "delegation_recovery",
+            "worker_reflection",
+            "reviewer_reflection",
+            "main_reflection",
+            "memory_carryover",
+            "memory_retrieval_log",
+        ],
+        "final_trace_self_check": (
+            "Before finalizing, run urban_review on the saved trace. If trace_completeness_review "
+            "or artifact_readiness_review fails, repair the trace or explicitly mark the run as not ready."
+        ),
+        "human_plan_gate": {
+            "instruction": (
+                "After writing workflow_plan.json, show a concise plan summary in the CLI and wait for "
+                "approve, revise, or block before artifact-producing execution."
+            ),
+            "required_record_fields": [
+                "plan_was_shown",
+                "user_response",
+                "decision",
+                "requested_changes",
+                "approved_steps",
+                "timestamp",
+            ],
+        },
+        "delegation_recovery": (
+            "If any worker fails, times out, or is interrupted, preserve raw failure text, parent recovery, "
+            "fallback artifacts, and verification status."
+        ),
+        "delegated_worker_packet": {
+            "role": "worker",
+            "instruction": "Use only the provided inputs, write artifacts into the assigned subdirectory, and do not make final claims.",
+            "required_return_fields": [
+                "role",
+                "status",
+                "files_written",
+                "operations",
+                "time_space_people_notes",
+                "assumptions",
+                "errors",
+                "claim_boundaries",
+            ],
+        },
+        "delegated_reviewer_packet": {
+            "role": "reviewer",
+            "instruction": "Inspect the named artifacts independently; judge readiness and claims instead of repairing artifacts silently.",
+            "required_return_fields": [
+                "role",
+                "status",
+                "checked_files",
+                "time_review",
+                "space_review",
+                "people_review",
+                "artifact_readiness",
+                "claim_gates",
+                "hard_failures",
+                "recommendation",
+            ],
+        },
+        "claim_gate_policy": (
+            "Gate claims by claim type: allow supported descriptive associations; downgrade or block causal, "
+            "policy/action, people-specific, perception, or local-mechanism claims when evidence is missing."
+        ),
+        "claim_gate_values": ["allow", "branch", "downgrade", "block"],
+        "decision_values": ["proceed", "branch", "downgrade", "block"],
+    },
+}
+
+
 def _handle_review(args: dict[str, Any], **_: Any) -> str:
-    results = args.get("results") or args.get("analysis") or args
+    results = _load_json_path(args.get("results") or args.get("analysis") or args)
     evidence = args.get("evidence_manifest") or _find_evidence(results)
+    trace_review = _score_trace_completeness(results, args)
     policy_scores = {
         "spatial_structural_review": _score_spatial(evidence, results),
         "temporal_consistency_review": _score_temporal(evidence, results),
         "population_and_stakeholder_review": _score_population(evidence, results),
+        "method_requirement_review": _score_method_requirements(results),
         "evidence_and_governance_review": _score_governance(evidence, results),
+        "trace_completeness_review": trace_review,
+    }
+    semantic_review = {
+        "description": "Meaning-level review of the time, space, people, and governance assumptions carried into downstream reasoning.",
+        "reviewer_pause_guidance": REVIEWER_PAUSE_GUIDANCE,
+        "policies": {
+            name: policy_scores[name]
+            for name in (
+                "spatial_structural_review",
+                "temporal_consistency_review",
+                "population_and_stakeholder_review",
+                "method_requirement_review",
+                "evidence_and_governance_review",
+            )
+        },
+    }
+    artifact_review = {
+        "description": "Format-level review of whether outputs are usable as downstream tables, maps, model diagnostics, GIS layers, reports, or manifests.",
+        "artifact_readiness_review": _score_artifact_readiness(results),
     }
     applicable_scores = [item["score"] for item in policy_scores.values() if item.get("applicable", True)]
     validity = sum(applicable_scores) / len(applicable_scores) if applicable_scores else 1.0
     issues = [issue for item in policy_scores.values() for issue in item.get("issues", [])]
+    issues.extend(artifact_review["artifact_readiness_review"].get("issues", []))
     hard_failures = [name for name, item in policy_scores.items() if item["score"] < 0.55 and item.get("applicable", True)]
+    artifact_score = artifact_review["artifact_readiness_review"].get("score", 1.0)
+    if trace_review.get("applicable") and trace_review.get("score", 1.0) < 0.70:
+        hard_failures.append("trace_completeness_review")
+    if trace_review.get("applicable") and artifact_score < 0.70:
+        hard_failures.append("artifact_readiness_review")
+    hard_failures = list(dict.fromkeys(hard_failures))
     passed = validity >= float(args.get("threshold") or 0.70) and not hard_failures
     return _ok(
         {
@@ -504,6 +1344,8 @@ def _handle_review(args: dict[str, Any], **_: Any) -> str:
             "quality_score": validity,
             "passed": passed,
             "policy_scores": policy_scores,
+            "semantic_review": semantic_review,
+            "artifact_review": artifact_review,
             "issues": issues,
             "hard_failures": hard_failures,
             "recommendation": "accept" if passed and not issues else "accept_with_warnings" if passed else "revise",
@@ -587,7 +1429,7 @@ def _handle_qgis_workspace(args: dict[str, Any], **_: Any) -> str:
     """Package GIS outputs into a QGIS project plus agent-readable manifest."""
     from .paths import PAPER4_ROOT
 
-    workspace_type = str(args.get("workspace_type") or "case1_nanjing_200m")
+    workspace_type = str(args.get("workspace_type") or "custom")
     run_dir_raw = args.get("run_dir")
     if not run_dir_raw:
         return _fail("run_dir is required so the workspace packager does not guess which experiment to package")
@@ -598,11 +1440,16 @@ def _handle_qgis_workspace(args: dict[str, Any], **_: Any) -> str:
     if args.get("packager_script"):
         packager_script = _host_path(args["packager_script"])
     elif workspace_type == "case1_nanjing_200m":
+        if not args.get("allow_case_template"):
+            return _fail(
+                "case1_nanjing_200m packager is case-specific and disabled by default",
+                hint="For Case 2 or any new run, author a task-specific packager with urban_host_python and pass packager_script. Set allow_case_template=true only for the original Case 1 Nanjing 200m run.",
+            )
         packager_script = PAPER4_ROOT / "scripts" / "package_case1_qgis_workspace.py"
     else:
         return _fail(
-            f"unsupported workspace_type: {workspace_type}",
-            hint="Author a workspace packager with urban_host_python, then call this tool with packager_script.",
+            f"no reusable packager selected for workspace_type: {workspace_type}",
+            hint="Author a task-specific workspace packager with urban_host_python, then call urban_qgis_workspace with packager_script. Do not reuse case-specific templates across cases.",
         )
     if not packager_script.exists():
         return _fail(
@@ -649,7 +1496,7 @@ def _handle_qgis_workspace(args: dict[str, Any], **_: Any) -> str:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
         except Exception as exc:
             manifest = {"read_warning": str(exc), "path": str(manifest_path)}
-    project_qgz = Path(str(manifest.get("project_qgz"))) if isinstance(manifest, dict) and manifest.get("project_qgz") else workspace / "project" / "case1_nanjing_road_200m_grid_workspace.qgz"
+    project_qgz = Path(str(manifest.get("project_qgz"))) if isinstance(manifest, dict) and manifest.get("project_qgz") else None
     result = {
         "workspace_type": workspace_type,
         "command": command,
@@ -660,8 +1507,8 @@ def _handle_qgis_workspace(args: dict[str, Any], **_: Any) -> str:
         "workspace": str(workspace),
         "manifest_path": str(manifest_path),
         "manifest_exists": manifest_path.exists(),
-        "project_qgz": str(project_qgz),
-        "project_qgz_exists": project_qgz.exists(),
+        "project_qgz": str(project_qgz) if project_qgz else "",
+        "project_qgz_exists": project_qgz.exists() if project_qgz else False,
         "layer_count": len(manifest.get("layers", [])) if isinstance(manifest, dict) else None,
         "started_at": started,
         "finished_at": datetime.now().isoformat(),
@@ -881,17 +1728,29 @@ def _write_qgis_log(
 
 def _fallback_capabilities(task: str, *, limit: int) -> dict[str, Any]:
     catalog = [
-        _capability("osm_acquisition", "OpenStreetMap acquisition", "data", "Fetch roads, buildings, POIs, land use", ["location"], ["osm_features"], ["osm", "open-data"]),
-        _capability("network_connectivity", "Network connectivity", "analysis", "Measure node degree, density, isolated nodes", ["road_graph"], ["connectivity_metrics"], ["network", "topology"]),
-        _capability("accessibility", "Accessibility measurement", "analysis", "Measure origin-to-target access distances", ["origins", "targets"], ["coverage", "distance_metrics"], ["walkability"]),
-        _capability("density", "Urban density", "analysis", "Compute grid density and uniformity", ["features"], ["density_grid"], ["morphology"]),
-        _capability("svg_overlay", "SVG overlay", "cartography", "Generate reviewable map artifact", ["features", "bbox"], ["svg"], ["cartography", "artifact"]),
-        _capability("review_hub", "Urban Review Hub", "review", "Review spatial, temporal, population and governance evidence", ["analysis", "evidence_manifest"], ["review_report"], ["review", "governance"]),
+        _capability("review_hub", "Urban Review Hub", "review", "Review spatial, temporal, people, governance, and artifact-readiness implications", ["analysis", "evidence_manifest"], ["review_report"], ["review", "governance", "trace", "reasoning"]),
+        _capability("data_canvas_audit", "Data canvas audit", "research_design", "Audit available layers, tables, time windows, spatial units, and people proxies before analysis", ["data_canvas"], ["canvas_inventory", "evidence_roles"], ["canvas", "data", "audit", "vitality", "drivers"]),
+        _capability("variable_role_audit", "Variable-role audit", "research_design", "Classify variables as direct, proxy, missing, or gated evidence for the research question", ["variable_table"], ["role_audit"], ["variables", "evidence", "claim", "drivers"]),
+        _capability("branch_tree_design", "Research branch-tree design", "research_design", "Create and maintain approved, active, deferred, blocked, and suggested analysis branches with human decisions", ["data_contract", "method_memory"], ["branch_tree", "branch_progress"], ["branch", "plan", "hypothesis", "drivers", "method"]),
+        _capability("typed_route_tree_design", "Typed research-route tree design", "research_design", "Create route nodes with node_type, dependencies, inputs, outputs, time-space-people meaning, and allowed downstream nodes", ["data_contract", "research_design_memory", "method_memory"], ["typed_route_tree", "dependency_review"], ["route", "dependency", "research_object", "feature_package", "model_execution", "model_explanation"]),
+        _capability("claim_synthesis", "Analysis-route comparison and claim calibration", "review", "Compare completed branch outputs to decide which urban claims are stable, conditional, insufficient, or unsupported", ["branch_outputs", "claim_gates"], ["branch_comparison", "claim_synthesis"], ["branch", "comparison", "claim", "synthesis", "review"]),
+        _capability("method_requirement_review", "Method requirement review", "review", "Check model-specific required inputs, parameters, diagnostics, and claim boundaries", ["method_branch", "artifacts"], ["method_review", "branch_candidates"], ["gwr", "gwrf", "shap", "pdp", "temporal", "perception"]),
+        _capability("street_view_alignment", "Street-view image-grid alignment", "multimodal_data", "Inventory geotagged street-view images, align them to grids or segments, and report coverage before perception claims", ["image_folder_or_zip", "spatial_units"], ["image_inventory", "alignment_manifest", "coverage_table"], ["street-view", "perception", "image", "multimodal", "alignment"]),
+        _capability("temporal_stratified_modeling", "Temporal stratified modeling", "analysis", "Design weekday/weekend, period-specific, or grid-date-period association branches when aggregate temporal data exist", ["grid_date_period_table", "X_variables"], ["temporal_branch_plan", "stratified_model_diagnostics"], ["temporal", "weekday", "weekend", "period", "morning", "evening"]),
+        _capability("descriptive_mapping", "Descriptive mapping", "analysis", "Map observed spatial patterns and branch interpretations without over-claiming mechanisms", ["grid_metrics"], ["maps", "branch_notes"], ["map", "spatial", "pattern", "vitality"]),
+        _capability("model_diagnostics", "Model diagnostics", "analysis", "Review baseline model artifacts, residuals, importance, and explanation readiness", ["model_outputs"], ["diagnostics", "claim_gates"], ["model", "diagnostic", "rf", "shap", "pdp"]),
+        _capability("artifact_manifest", "Artifact manifest", "artifact", "Inventory reusable tables, maps, GIS layers, model outputs, and manifests", ["outputs"], ["artifact_manifest"], ["artifact", "manifest", "readiness"]),
+        _capability("osm_acquisition", "OpenStreetMap acquisition", "data", "Fetch roads, buildings, POIs, land use when missing from the current canvas", ["location"], ["osm_features"], ["osm", "open-data"]),
+        _capability("network_connectivity", "Network connectivity", "optional_analysis", "Measure node degree, density, isolated nodes only when network structure is an approved branch", ["road_graph"], ["connectivity_metrics"], ["network", "topology"]),
+        _capability("accessibility", "Accessibility measurement", "optional_analysis", "Measure origin-to-target access distances only when accessibility is an approved branch", ["origins", "targets"], ["coverage", "distance_metrics"], ["walkability"]),
+        _capability("density", "Urban density", "optional_analysis", "Compute grid density and uniformity only when not already supplied by the data canvas", ["features"], ["density_grid"], ["morphology"]),
+        _capability("svg_overlay", "SVG overlay", "optional_cartography", "Generate reviewable map artifacts after the map branch is approved", ["features", "bbox"], ["svg"], ["cartography", "artifact"]),
     ]
     terms = set(_tokens(task))
-    ranked = sorted(catalog, key=lambda item: -len(terms & set(item["tags"] + [item["name"]])))[:limit]
+    ranked = sorted(catalog, key=lambda item: (-len(terms & set(item["tags"] + [item["name"]])), catalog.index(item)))[:limit]
     return {
         "disclosure_policy": "progressive",
+        "planning_warning": "Selected capabilities are candidates for human-approved planning, not mandatory workflow steps. Do not turn optional analysis operators into the main plan without data-role justification.",
         "level0_index_size": len(catalog),
         "selected_names": [item["name"] for item in ranked],
         "selected_level0": [{key: item[key] for key in ("name", "title", "family", "summary", "tags")} for item in ranked],
@@ -1102,11 +1961,13 @@ def _execution_plan(
         ],
         "steps": [
             {"id": "ground", "tool": "urban_ground_task", "purpose": "make data/method/evidence requirements explicit"},
-            {"id": "recall", "tool": "urban_research_memory", "purpose": "retrieve reusable research-design cues when the task is still under-specified"},
-            {"id": "acquire", "tool": "urban_fetch_osm", "purpose": "collect open spatial evidence when needed"},
-            {"id": "expand_artifact_memory", "tool": "urban_research_memory", "purpose": "retrieve tool_artifact procedures only when concrete GIS/model/artifact execution or review needs them"},
-            {"id": "analyze", "tool": "urban_analyze_connectivity|urban_measure_accessibility|urban_calculate_density", "purpose": "run reviewable operators"},
-            {"id": "review", "tool": "urban_review", "purpose": "score spatial/temporal/population/governance assumptions"},
+            {"id": "data_contract", "tool": "urban_host_fs|urban_review", "purpose": "summarize Y/X/G/T/P or equivalent data contract before choosing methods"},
+            {"id": "typed_route_tree_gate", "tool": "urban_route_tree|urban_review|assistant_response", "purpose": "initialize and show a typed route tree with node types, dependencies, required inputs and parameters, expected artifacts, time-space-people meaning, claim gates, and human choices"},
+            {"id": "human_route_decision", "tool": "urban_route_tree|assistant_response", "purpose": "ask the analyst to approve, defer, block, or revise route nodes before artifact-producing execution; record choices through urban_route_tree"},
+            {"id": "branch_local_method_memory", "tool": "urban_research_memory", "purpose": "retrieve only the method cards needed by approved active route nodes, then record memory_retrieval_log with branch id and expiry"},
+            {"id": "approved_route_execution", "tool": "delegate_task|urban_host_python|urban_host_fs", "purpose": "execute approved worker-sized route nodes and save worker artifacts, not unapproved optional analyses"},
+            {"id": "dynamic_review_branching", "tool": "urban_review|urban_route_tree", "purpose": "pause after each major step; if worker/reviewer feedback reveals new research hypotheses, patch the route tree with suggested/deferred/blocked branch candidates"},
+            {"id": "route_comparison", "tool": "urban_route_tree|urban_review", "purpose": "merge completed route outputs into report-option and claim-calibration nodes; compare claims as stable, conditional, insufficient, or unsupported"},
             {"id": "reuse", "tool": "urban_record_feedback", "purpose": "store human corrections as reusable memory"},
         ],
         "known_gaps": gaps,
@@ -1148,6 +2009,32 @@ def _score_temporal(evidence: dict[str, Any], results: Any) -> dict[str, Any]:
 
 def _score_population(evidence: dict[str, Any], results: Any) -> dict[str, Any]:
     population = (evidence or {}).get("population", {}) if isinstance(evidence, dict) else {}
+    if _is_workflow_trace_payload(results) and not any(value for value in population.values()):
+        step_records = _as_record_list(results.get("per_step_review_records"))
+        people_text = "\n".join(
+            str(record.get(alias) or "")
+            for record in step_records
+            for alias in (
+                "people_implications",
+                "people",
+                "population_implications",
+                "stakeholder_implications",
+                "people_review",
+            )
+        ).lower()
+        if not people_text.strip():
+            return {
+                "score": 0.65,
+                "issues": ["workflow trace has no per-step people implications"],
+                "applicable": True,
+            }
+        issues: list[str] = []
+        score = 1.0
+        if not any(term in people_text for term in ("proxy", "missing", "not individual", "activity", "stakeholder", "user", "demographic", "behavior")):
+            issues.append("people implications do not clarify direct/proxy/missing or activity/stakeholder meaning")
+            score -= 0.15
+        return {"score": max(0.0, score), "issues": issues, "applicable": True}
+
     applicable = _result_mentions(results, ["walk", "people", "pedestrian", "stakeholder", "population", "access"])
     if not applicable and not any(value for value in population.values()):
         return {"score": 1.0, "issues": [], "applicable": False}
@@ -1168,6 +2055,20 @@ def _score_population(evidence: dict[str, Any], results: Any) -> dict[str, Any]:
 def _score_governance(evidence: dict[str, Any], results: Any) -> dict[str, Any]:
     governance = (evidence or {}).get("governance", {}) if isinstance(evidence, dict) else {}
     tags = (evidence or {}).get("tags", []) if isinstance(evidence, dict) else []
+    if _is_workflow_trace_payload(results) and not any(value for value in governance.values()):
+        issues: list[str] = []
+        score = 1.0
+        if results.get("artifact_manifest") in (None, "", [], {}):
+            issues.append("workflow trace has no artifact_manifest")
+            score -= 0.20
+        if results.get("claim_gates") in (None, "", [], {}):
+            issues.append("workflow trace has no claim_gates")
+            score -= 0.20
+        if results.get("parent_verification") in (None, "", [], {}):
+            issues.append("workflow trace has no parent_verification")
+            score -= 0.15
+        return {"score": max(0.0, score), "issues": issues, "applicable": True}
+
     issues = []
     score = 1.0
     for field in ("provenance", "license", "collection_method", "uncertainty"):
@@ -1418,7 +2319,41 @@ SVG_SCHEMA = {"name": "urban_generate_svg_overlay", "description": "Generate a r
 GEOJSON_SCHEMA = {"name": "urban_export_geojson", "description": "Export features as GeoJSON FeatureCollection.", "parameters": {"type": "object", "properties": {"features": {"type": "array"}, "crs": {"type": "string", "default": "EPSG:4326"}}, "required": ["features"]}}
 TOPOLOGY_SCHEMA = {"name": "urban_build_topology", "description": "Build a lightweight topology graph from urban features.", "parameters": {"type": "object", "properties": {"features": {"type": "array"}, "relation_threshold": {"type": "number", "default": 100}}, "required": ["features"]}}
 GROUND_TASK_SCHEMA = {"name": "urban_ground_task", "description": "Ground an urban question in capabilities, dataset cards, research-design memory, evidence manifest, and explicit gaps.", "parameters": {"type": "object", "properties": {"task": {"type": "string"}, "location": {"type": "string"}, "bbox": {"type": "array"}, "task_data": {"type": "object"}, "capability_limit": {"type": "integer", "default": 6}, "research_memory_limit": {"type": "integer", "default": 4}}, "required": ["task"]}}
-REVIEW_SCHEMA = {"name": "urban_review", "description": "Review an urban analysis under spatial, temporal, population, and governance policies.", "parameters": {"type": "object", "properties": {"analysis": {"type": "object"}, "results": {"type": "object"}, "evidence_manifest": {"type": "object"}, "threshold": {"type": "number", "default": 0.7}}, "required": []}}
+ROUTE_TREE_SCHEMA = {
+    "name": "urban_route_tree",
+    "description": "Create and maintain the generic Urban-Hermes planner route tree. Use this as the backend git-like state manager for research-route nodes, dependencies, user choices, worker/reviewer patches, artifact links, route comparison, and frontend export. It writes route_tree_state.json, route_tree_events.jsonl, route_tree_frontend_state.json, route_tree_visual_spec.json, and human_choice_request.md in the run directory.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "action": {
+                "type": "string",
+                "enum": ["init", "patch", "apply_patch", "choose", "human_choice", "attach_artifact", "sync_trace", "validate", "export"],
+                "default": "export",
+            },
+            "run_dir": {"type": "string", "description": "Experiment run directory receiving the route-tree state files."},
+            "task": {"type": "string", "description": "Research task, required for action=init."},
+            "metadata": {"type": "object", "description": "Optional state metadata such as session id, data contract path, or paper figure id."},
+            "todo_steps": {"type": "array", "items": {"type": "object"}, "description": "Planner-level workflow scaffold. It is task-derived, not hard-coded; for model-oriented cases it often maps to research object, variables, model route, explanation/diagnostics, and claim synthesis."},
+            "nodes": {"type": "array", "items": {"type": "object"}, "description": "Typed route nodes for initialization. Each node should include node_id, node_type, question/title, depends_on, required_inputs, required_parameters, expected_outputs, time_space_people, claim_boundary, status."},
+            "patch": {"type": "object", "description": "Single route-tree patch event."},
+            "patches": {"type": "array", "items": {"type": "object"}, "description": "Patch events. patch_type may be add_node, add_branch, update_node, update_status, add_edge, attach_artifact, request_human_choice, merge_branches, revise_dependency, or add_report_option."},
+            "choice": {"type": "object", "description": "Single human choice for one route node."},
+            "choices": {"type": "array", "items": {"type": "object"}, "description": "Human choices with node_id, decision approve/defer/block/revise, and reason."},
+            "actor": {"type": "string", "description": "planner, reviewer, worker, human, or main_agent."},
+            "node_id": {"type": "string", "description": "Node id for attach_artifact or status update."},
+            "path": {"type": "string", "description": "Artifact path for action=attach_artifact."},
+            "artifact_type": {"type": "string", "description": "figure, table, map, model_output, review_json, manifest, report, etc."},
+            "role": {"type": "string", "description": "Artifact role, e.g. input, intermediate_output, reviewer_output, downstream_input."},
+            "title": {"type": "string", "description": "Human-readable artifact title."},
+            "review_status": {"type": "string", "description": "pending_review, passed, warning, failed."},
+            "trace_path": {"type": "string", "description": "Workflow trace JSON path for action=sync_trace."},
+            "workflow_trace": {"type": "object", "description": "Workflow trace object for action=sync_trace. Synchronizes human decisions, worker records, reviewer records, claim gates, selected route, and artifact manifest back into route_tree_state.json."},
+            "trace": {"type": "object", "description": "Alias for workflow_trace."},
+        },
+        "required": ["run_dir"],
+    },
+}
+REVIEW_SCHEMA = {"name": "urban_review", "description": "Pause after a major urban-analysis step and review two coupled layers: semantic implications of time, space, people, and governance assumptions, plus artifact readiness for downstream tables, maps, model outputs, GIS layers, manifests, and reports. Use it after intermediate steps and before final claims. When reviewing a workflow trace, also check trace completeness: main plan, visible human plan decision or approval, worker records, parent verification, per-step reviewer pauses, claim gates, artifact manifest, layered reflections, and memory carryover.", "parameters": {"type": "object", "properties": {"analysis": {"type": "object"}, "results": {"type": "object"}, "evidence_manifest": {"type": "object"}, "step_id": {"type": "string"}, "stage": {"type": "string"}, "threshold": {"type": "number", "default": 0.7}}, "required": []}}
 QUALITY_SCHEMA = {"name": "urban_quality_control", "description": "Run lightweight configurator-style quality checks on an urban output.", "parameters": {"type": "object", "properties": {"output": {"type": "object"}, "required_fields": {"type": "array", "items": {"type": "string"}}}, "required": ["output"]}}
 RECORD_FEEDBACK_SCHEMA = {"name": "urban_record_feedback", "description": "Record a human correction or review finding into the Urban Hermes memory store.", "parameters": {"type": "object", "properties": {"summary": {"type": "string"}, "triggers": {"type": "array", "items": {"type": "string"}}, "place": {"type": "string"}, "correction": {"type": "string"}, "session_id": {"type": "string"}, "content_layer": {"type": "string", "enum": ["research_design", "urban_method", "tool_artifact", "place_case", "feedback_correction"]}, "memory_scope": {"type": "string", "enum": ["working", "reflective"], "default": "reflective"}, "memory_chain": {"type": "string", "enum": ["research_chain", "execution_chain"]}, "linked_memory_chains": {"type": "array", "items": {"type": "string", "enum": ["research_chain", "execution_chain"]}}, "source_kind": {"type": "string"}}, "required": ["summary"]}}
 RESEARCH_MEMORY_SCHEMA = {
@@ -1447,6 +2382,10 @@ RESEARCH_MEMORY_SCHEMA = {
             "content_layers": {"type": "array", "items": {"type": "string", "enum": ["research_design", "urban_method", "tool_artifact", "place_case", "feedback_correction"]}},
             "memory_scopes": {"type": "array", "items": {"type": "string", "enum": ["working", "reflective"]}},
             "memory_chains": {"type": "array", "items": {"type": "string", "enum": ["research_chain", "execution_chain"]}},
+            "branch_id": {"type": "string", "description": "Optional branch id when retrieving method memory for a branch-local worker or reviewer context."},
+            "review_target_type": {"type": "string", "description": "Optional review target such as plan, method_branch, worker_output, or final_trace."},
+            "retrieval_scope": {"type": "string", "enum": ["global", "branch_local", "worker_local", "reviewer_local"], "description": "Use branch_local/worker_local/reviewer_local for concrete method cards to avoid global context pollution."},
+            "expires_after": {"type": "string", "description": "Optional expiry marker such as branch_review, worker_task, or final_trace."},
             "limit": {"type": "integer", "default": 5},
             "session_id": {"type": "string"},
         },
@@ -1558,11 +2497,12 @@ QGIS_WORKSPACE_SCHEMA = {
             "workspace_type": {
                 "type": "string",
                 "enum": ["case1_nanjing_200m", "custom"],
-                "default": "case1_nanjing_200m",
-                "description": "Known reusable workspace packager. For custom tasks, pass packager_script.",
+                "default": "custom",
+                "description": "Workspace packager type. Use custom with packager_script for all new cases. The case1_nanjing_200m packager is disabled unless allow_case_template=true.",
             },
             "run_dir": {"type": "string", "description": "Experiment run directory containing outputs/ and receiving qgis_workspace/."},
             "packager_script": {"type": "string", "description": "Optional task-specific Python packager authored during the run."},
+            "allow_case_template": {"type": "boolean", "default": False, "description": "Explicitly allow a case-specific built-in packager. Leave false for new cases to avoid cross-case template contamination."},
             "qgis_python": {"type": "string", "description": "Optional QGIS Python .bat/.exe path for writing .qgz/.qgs projects."},
             "timeout": {"type": "integer", "default": 600},
         },

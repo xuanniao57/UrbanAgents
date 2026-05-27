@@ -1,0 +1,194 @@
+{
+  "schema_version": "urban_visual_spec_v1",
+  "layout": "hierarchical",
+  "node_styles": {
+    "research_object": {
+      "color": "#4a90d9",
+      "shape": "ellipse"
+    },
+    "feature_package": {
+      "color": "#50c878",
+      "shape": "rect"
+    },
+    "model_execution": {
+      "color": "#e67e22",
+      "shape": "diamond"
+    },
+    "model_explanation": {
+      "color": "#9b59b6",
+      "shape": "hexagon"
+    },
+    "diagnostic": {
+      "color": "#f1c40f",
+      "shape": "triangle"
+    },
+    "route_comparison": {
+      "color": "#34495e",
+      "shape": "octagon"
+    },
+    "claim_synthesis": {
+      "color": "#e74c3c",
+      "shape": "star"
+    }
+  },
+  "status_styles": {
+    "approved": {
+      "border": "2px solid #27ae60",
+      "opacity": 1.0
+    },
+    "completed": {
+      "border": "2px solid #2980b9",
+      "opacity": 1.0
+    },
+    "suggested": {
+      "border": "1px dashed #7f8c8d",
+      "opacity": 0.7
+    },
+    "deferred": {
+      "border": "1px dotted #95a5a6",
+      "opacity": 0.5
+    },
+    "blocked": {
+      "border": "2px solid #c0392b",
+      "opacity": 0.4
+    },
+    "pending": {
+      "border": "1px solid #bdc3c7",
+      "opacity": 0.6
+    }
+  },
+  "main_path_highlight": {
+    "color": "#2c3e50",
+    "width": 3
+  },
+  "nodes": [
+    {
+      "id": "RO_01_all_window_aggregate",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "RO_02_weekday_weekend_contrast",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "RO_03_day_period_split",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "RO_04_population_profile_aggregation",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "FP_01_built_form_baseline",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "FP_02_activity_opportunity",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "FP_03_accessibility_connectivity",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "FP_04_full_multimodal",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "ME_01_rf_baseline",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "ME_02_gwrf_spatial_heterogeneity",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "MX_01_shap_pdp_explanation",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "DI_01_residual_spatial_autocorrelation",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "RC_01_route_comparison",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "CS_01_claim_synthesis",
+      "x": 0,
+      "y": 0
+    }
+  ],
+  "edges": [
+    {
+      "source": "RO_01_all_window_aggregate",
+      "target": "FP_01_built_form_baseline"
+    },
+    {
+      "source": "RO_01_all_window_aggregate",
+      "target": "FP_02_activity_opportunity"
+    },
+    {
+      "source": "RO_01_all_window_aggregate",
+      "target": "FP_03_accessibility_connectivity"
+    },
+    {
+      "source": "RO_01_all_window_aggregate",
+      "target": "FP_04_full_multimodal"
+    },
+    {
+      "source": "FP_01_built_form_baseline",
+      "target": "ME_01_rf_baseline"
+    },
+    {
+      "source": "FP_02_activity_opportunity",
+      "target": "ME_01_rf_baseline"
+    },
+    {
+      "source": "FP_04_full_multimodal",
+      "target": "ME_02_gwrf_spatial_heterogeneity"
+    },
+    {
+      "source": "ME_01_rf_baseline",
+      "target": "MX_01_shap_pdp_explanation"
+    },
+    {
+      "source": "ME_01_rf_baseline",
+      "target": "DI_01_residual_spatial_autocorrelation"
+    },
+    {
+      "source": "RO_02_weekday_weekend_contrast",
+      "target": "RC_01_route_comparison"
+    },
+    {
+      "source": "RO_03_day_period_split",
+      "target": "RC_01_route_comparison"
+    },
+    {
+      "source": "RC_01_route_comparison",
+      "target": "CS_01_claim_synthesis"
+    },
+    {
+      "source": "MX_01_shap_pdp_explanation",
+      "target": "RC_01_route_comparison"
+    },
+    {
+      "source": "DI_01_residual_spatial_autocorrelation",
+      "target": "RC_01_route_comparison"
+    }
+  ]
+}

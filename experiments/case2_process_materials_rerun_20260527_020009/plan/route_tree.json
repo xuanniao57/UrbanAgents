@@ -1,0 +1,789 @@
+{
+  "task": "Assess Shanghai street-vitality drivers using prepared data canvas with LBS activity data and population attributes",
+  "run_dir": "D:\\GitHub_1\\world_agent\\urban-mobility-agent\\paper4_urban_svgagent\\experiments\\case2_process_materials_rerun_20260527_020009",
+  "data_contract": {
+    "aoi": {
+      "name": "Shanghai inner ring",
+      "area_sq_km": 157.16,
+      "bbox": [
+        121.405,
+        31.18,
+        121.57,
+        31.289
+      ],
+      "crs": "EPSG:4326"
+    },
+    "spatial_unit": {
+      "type": "500m nominal grid",
+      "cells": 516,
+      "crs": "EPSG:4326"
+    },
+    "temporal_window": {
+      "start": "2024-09-19",
+      "end": "2024-09-25",
+      "days": 7
+    },
+    "periods_available": [
+      "morning_peak",
+      "daytime",
+      "evening_peak",
+      "night"
+    ],
+    "outcome_fields": [
+      "lbs_total_stays",
+      "lbs_vitality_index_log_stays",
+      "lbs_device_count_approx",
+      "lbs_stay_duration_hours"
+    ],
+    "built_environment_X": [
+      "cmab_building_density_per_ha",
+      "cmab_building_coverage_ratio",
+      "cmab_mean_height_m",
+      "cmab_function_entropy",
+      "cmab_age_entropy",
+      "osm_road_density_m_per_ha",
+      "osm_poi_count",
+      "osm_poi_type_entropy"
+    ],
+    "population_attributes_raw": "D:\\wus项目\\上海7天lbs\\LBS_pop\\上海市.csv",
+    "population_attributes_fields": [
+      "gender",
+      "age_group",
+      "education_level",
+      "income_level",
+      "job",
+      "have_car",
+      "kids_stage",
+      "live_lon",
+      "live_lat",
+      "work_lon",
+      "work_lat",
+      "subway_times"
+    ],
+    "existing_model_result": {
+      "model": "RandomForestRegressor",
+      "cv_r2": 0.493,
+      "cv_mae_log_stays": 0.508,
+      "features": [
+        "cmab_building_density_per_ha",
+        "cmab_building_coverage_ratio",
+        "cmab_mean_height_m",
+        "cmab_function_entropy",
+        "osm_road_density_m_per_ha",
+        "osm_poi_count",
+        "osm_poi_type_entropy"
+      ]
+    },
+    "governance": {
+      "provenance": "CMAB 2020-12-31 + OSM extract + LBS 7-day panel 2024-09",
+      "license": "CMAB internal, OSM ODbL, LBS internal",
+      "collection_method": "CMAB building footprints, OSM download, LBS device panel aggregation",
+      "uncertainty": "LBS panel sampling bias unknown; CMAB 4-year temporal gap; OSM completeness varies"
+    }
+  },
+  "nodes": [
+    {
+      "node_id": "RO_01_all_window_aggregate",
+      "node_type": "research_object",
+      "title": "All-window aggregate LBS vitality",
+      "question": "What is the spatial pattern of total LBS stay intensity across the 7-day window?",
+      "status": "suggested",
+      "depends_on": [],
+      "required_inputs": [
+        "case2_model_ready_grid_metrics.csv",
+        "spatial_units_500m.geojson"
+      ],
+      "required_parameters": {
+        "spatial_unit": "500m grid",
+        "temporal_aggregation": "sum across 7 days",
+        "outcome_transform": "log1p(lbs_total_stays)",
+        "people_proxy": "aggregated device-user count, not census population"
+      },
+      "expected_outputs": [
+        "outcome_distribution_map",
+        "outcome_summary_stats"
+      ],
+      "time_space_people": {
+        "time": "7-day aggregate; no diurnal or weekday/weekend differentiation",
+        "space": "500m grid; MAUP-sensitive; bbox 121.405-121.570, 31.180-31.289",
+        "people": "device-user proxy; no social-attribute breakdown"
+      },
+      "claim_boundary": "Can support descriptive association between built environment and aggregate activity intensity. Cannot support individual behavior, causal effect, or temporal heterogeneity claims.",
+      "review_risks": [
+        "Weekend vs weekday patterns may differ",
+        "No population-profile breakdown"
+      ],
+      "memory_sources": [
+        "seed_case2_vitality_outcome_operationalization"
+      ]
+    },
+    {
+      "node_id": "RO_02_weekday_weekend_contrast",
+      "node_type": "research_object",
+      "title": "Weekday/weekend vitality contrast",
+      "question": "Does the spatial pattern of vitality differ between weekdays and weekends?",
+      "status": "suggested",
+      "depends_on": [],
+      "required_inputs": [
+        "lbs_grid_daily_period_metrics.csv"
+      ],
+      "required_parameters": {
+        "spatial_unit": "500m grid",
+        "temporal_aggregation": "weekday=Mon-Fri (5 days), weekend=Sat-Sun (2 days: 09-21, 09-22)",
+        "outcome_transform": "log1p(weekday_stays) vs log1p(weekend_stays)",
+        "people_proxy": "aggregated device-user count by day type"
+      },
+      "expected_outputs": [
+        "weekday_weekend_map_pair",
+        "contrast_ratio_map",
+        "contrast_summary_stats"
+      ],
+      "time_space_people": {
+        "time": "Weekday vs weekend; only one weekend in the 7-day window (2 days vs 5 days)",
+        "space": "500m grid",
+        "people": "day-type-specific device-user proxy"
+      },
+      "claim_boundary": "Can describe weekday/weekend spatial differences in aggregate activity. Cannot generalize beyond the single weekend observed. Cannot attribute differences to built environment without modeling.",
+      "review_risks": [
+        "Only one weekend (2 days) vs 5 weekdays",
+        "Small sample for weekend pattern stability"
+      ],
+      "memory_sources": [
+        "seed_case2_vitality_outcome_operationalization"
+      ]
+    },
+    {
+      "node_id": "RO_03_day_period_split",
+      "node_type": "research_object",
+      "title": "Day-period vitality (morning/day/evening/night)",
+      "question": "How does the spatial pattern of vitality vary by time of day?",
+      "status": "suggested",
+      "depends_on": [],
+      "required_inputs": [
+        "lbs_grid_daily_period_metrics.csv"
+      ],
+      "required_parameters": {
+        "spatial_unit": "500m grid",
+        "temporal_aggregation": "period = morning_peak, daytime, evening_peak, night",
+        "outcome_transform": "log1p(period_stays) per period",
+        "people_proxy": "period-specific device-user count"
+      },
+      "expected_outputs": [
+        "period_map_quadrant",
+        "period_profile_by_grid",
+        "period_correlation_matrix"
+      ],
+      "time_space_people": {
+        "time": "Four periods across 7 days; period definitions fixed by data provider",
+        "space": "500m grid",
+        "people": "period-specific device-user proxy"
+      },
+      "claim_boundary": "Can describe diurnal spatial variation in aggregate activity. Cannot infer land-use function from period intensity alone.",
+      "review_risks": [
+        "Period definitions are fixed and may not match local commuting patterns",
+        "Night period may have sparse data in some grids"
+      ],
+      "memory_sources": [
+        "seed_case2_vitality_outcome_operationalization"
+      ]
+    },
+    {
+      "node_id": "RO_04_population_profile_aggregation",
+      "node_type": "research_object",
+      "title": "Population-profile aware vitality aggregation",
+      "question": "Can we link grid-level vitality to social-attribute composition of device users?",
+      "status": "suggested",
+      "depends_on": [],
+      "required_inputs": [
+        "LBS_pop/上海市.csv (uuid-level attributes)",
+        "raw LBS stay records (uuid, grid, time)"
+      ],
+      "required_parameters": {
+        "spatial_unit": "500m grid",
+        "join_key": "uuid",
+        "privacy_min_count": 5,
+        "aggregation_rule": "group by grid + attribute category, suppress if count < 5",
+        "attributes_available": [
+          "gender",
+          "age_group",
+          "education_level",
+          "income_level",
+          "job",
+          "have_car",
+          "kids_stage",
+          "subway_times"
+        ]
+      },
+      "expected_outputs": [
+        "population_profile_coverage_table",
+        "attribute_composition_map",
+        "privacy_audit_log"
+      ],
+      "time_space_people": {
+        "time": "7-day aggregate",
+        "space": "500m grid",
+        "people": "social-attribute breakdown of sampled device users, not census population"
+      },
+      "claim_boundary": "Can describe association between built environment and device-user attribute composition. Cannot claim general population demographics. Sampling bias (device ownership, app usage) must be stated.",
+      "review_risks": [
+        "UUID-to-grid join requires raw stay records not in canvas",
+        "Privacy suppression may leave many grids with missing data",
+        "Sampling bias of LBS panel unknown"
+      ],
+      "memory_sources": [
+        "seed_case2_vitality_outcome_operationalization"
+      ]
+    },
+    {
+      "node_id": "FP_01_built_form_baseline",
+      "node_type": "feature_package",
+      "title": "Built-form baseline variables",
+      "question": "What built-environment indicators explain vitality variation?",
+      "status": "suggested",
+      "depends_on": [
+        "RO_01_all_window_aggregate"
+      ],
+      "required_inputs": [
+        "case2_model_ready_grid_metrics.csv"
+      ],
+      "required_parameters": {
+        "variables": [
+          "cmab_building_density_per_ha",
+          "cmab_building_coverage_ratio",
+          "cmab_mean_height_m",
+          "cmab_function_entropy",
+          "cmab_age_entropy"
+        ],
+        "alignment": "already grid-aggregated in canvas",
+        "collinearity_check": "required (density, coverage, height may correlate)"
+      },
+      "expected_outputs": [
+        "feature_correlation_matrix",
+        "VIF_table",
+        "feature_coverage_map"
+      ],
+      "time_space_people": {
+        "time": "static snapshot (CMAB 2020-12-31)",
+        "space": "500m grid",
+        "people": "environmental exposure proxy"
+      },
+      "claim_boundary": "Built-form association candidates. Not causal. CMAB attributes are source-derived, not validated on the ground.",
+      "review_risks": [
+        "CMAB data is from 2020; may not reflect 2024 conditions",
+        "Collinearity among density/coverage/height"
+      ],
+      "memory_sources": [
+        "seed_case2_vitality_feature_package_design"
+      ]
+    },
+    {
+      "node_id": "FP_02_activity_opportunity",
+      "node_type": "feature_package",
+      "title": "Activity-opportunity variables (POI + road)",
+      "question": "Do POI density/type diversity and road network density explain vitality?",
+      "status": "suggested",
+      "depends_on": [
+        "RO_01_all_window_aggregate"
+      ],
+      "required_inputs": [
+        "case2_model_ready_grid_metrics.csv",
+        "osm_points_inner_ring.geojson",
+        "osm_roads_inner_ring.geojson"
+      ],
+      "required_parameters": {
+        "variables": [
+          "osm_road_density_m_per_ha",
+          "osm_poi_count",
+          "osm_poi_type_entropy"
+        ],
+        "alignment": "already grid-aggregated in canvas",
+        "collinearity_check": "required"
+      },
+      "expected_outputs": [
+        "feature_correlation_matrix",
+        "VIF_table",
+        "feature_coverage_map"
+      ],
+      "time_space_people": {
+        "time": "OSM snapshot date unknown",
+        "space": "500m grid",
+        "people": "activity-opportunity proxy, not observed activity"
+      },
+      "claim_boundary": "POI and road density are opportunity proxies. Cannot equate POI count with actual visitation or economic activity.",
+      "review_risks": [
+        "OSM completeness varies by area",
+        "POI type entropy may be noisy for low-count grids"
+      ],
+      "memory_sources": [
+        "seed_case2_vitality_feature_package_design"
+      ]
+    },
+    {
+      "node_id": "FP_03_accessibility_connectivity",
+      "node_type": "feature_package",
+      "title": "Accessibility / connectivity add-on",
+      "question": "Does network accessibility improve explanation beyond density proxies?",
+      "status": "deferred",
+      "depends_on": [
+        "RO_01_all_window_aggregate"
+      ],
+      "required_inputs": [
+        "osm_roads_inner_ring.geojson",
+        "spatial_units_500m.geojson"
+      ],
+      "required_parameters": {
+        "variables": [
+          "network_density",
+          "intersection_count",
+          "connectivity_index"
+        ],
+        "alignment": "requires road-network processing from OSM roads",
+        "derivation": "sna/igraph or QGIS from osm_roads_inner_ring.geojson"
+      },
+      "expected_outputs": [
+        "accessibility_layer",
+        "connectivity_map",
+        "feature_coverage_check"
+      ],
+      "time_space_people": {
+        "time": "static",
+        "space": "500m grid",
+        "people": "network accessibility proxy"
+      },
+      "claim_boundary": "Accessibility metrics are network-structure proxies. Not pedestrian-level accessibility without sidewalk data.",
+      "review_risks": [
+        "Requires additional GIS processing",
+        "May be highly correlated with road_density"
+      ],
+      "memory_sources": [
+        "seed_case2_vitality_feature_package_design"
+      ]
+    },
+    {
+      "node_id": "FP_04_full_multimodal",
+      "node_type": "feature_package",
+      "title": "Full multimodal package (built-form + opportunity + accessibility)",
+      "question": "What is the combined explanatory power of all available built-environment indicators?",
+      "status": "suggested",
+      "depends_on": [
+        "RO_01_all_window_aggregate"
+      ],
+      "required_inputs": [
+        "case2_model_ready_grid_metrics.csv",
+        "osm_roads_inner_ring.geojson",
+        "osm_points_inner_ring.geojson"
+      ],
+      "required_parameters": {
+        "variables": "union of FP_01 + FP_02 + FP_03",
+        "collinearity_check": "required",
+        "VIF_threshold": 5.0
+      },
+      "expected_outputs": [
+        "full_feature_table",
+        "correlation_matrix",
+        "VIF_table"
+      ],
+      "time_space_people": {
+        "time": "static",
+        "space": "500m grid",
+        "people": "multimodal environmental exposure"
+      },
+      "claim_boundary": "Combined association model. Individual variable effects are not independently causal due to collinearity.",
+      "review_risks": [
+        "High collinearity risk between density and accessibility",
+        "Model interpretation requires regularization or decomposition"
+      ],
+      "memory_sources": [
+        "seed_case2_vitality_feature_package_design"
+      ]
+    },
+    {
+      "node_id": "ME_01_rf_baseline",
+      "node_type": "model_execution",
+      "title": "Random Forest baseline (all-window + built-form + opportunity)",
+      "question": "What is the baseline predictive association between built environment and aggregate vitality?",
+      "status": "existing",
+      "depends_on": [
+        "RO_01_all_window_aggregate",
+        "FP_01_built_form_baseline",
+        "FP_02_activity_opportunity"
+      ],
+      "required_inputs": [
+        "case2_model_ready_grid_metrics.csv"
+      ],
+      "required_parameters": {
+        "model": "RandomForestRegressor",
+        "cv_strategy": "5-fold",
+        "features": [
+          "cmab_building_density_per_ha",
+          "cmab_building_coverage_ratio",
+          "cmab_mean_height_m",
+          "cmab_function_entropy",
+          "osm_road_density_m_per_ha",
+          "osm_poi_count",
+          "osm_poi_type_entropy"
+        ],
+        "target": "lbs_vitality_index_log_stays"
+      },
+      "expected_outputs": [
+        "cv_r2",
+        "cv_mae",
+        "permutation_importance"
+      ],
+      "time_space_people": {
+        "time": "7-day aggregate",
+        "space": "500m grid",
+        "people": "aggregate device-user proxy"
+      },
+      "claim_boundary": "Association model only. Already run: cv_r2=0.493, cv_mae=0.508. Not causal.",
+      "review_risks": [
+        "No spatial diagnostics",
+        "No residual autocorrelation check"
+      ],
+      "memory_sources": []
+    },
+    {
+      "node_id": "ME_02_gwrf_spatial_heterogeneity",
+      "node_type": "model_execution",
+      "title": "GWRF spatial heterogeneity model",
+      "question": "Do built-environment effects vary spatially across the inner ring?",
+      "status": "deferred",
+      "depends_on": [
+        "RO_01_all_window_aggregate",
+        "FP_04_full_multimodal"
+      ],
+      "required_inputs": [
+        "model-ready feature table with coordinates"
+      ],
+      "required_parameters": {
+        "model": "GWRF (geographically weighted random forest)",
+        "bandwidth": "adaptive or fixed; to be determined by AICc or CV",
+        "kernel": "bisquare or Gaussian",
+        "coordinate_basis": "grid centroids in projected CRS (EPSG:3857 or UTM 51N)",
+        "local_diagnostics": "local R2, local residuals, local coefficient maps, local prediction/importance",
+        "validation": "spatial cross-validation or leave-one-out by distance"
+      },
+      "expected_outputs": [
+        "local_coefficient_maps",
+        "bandwidth_diagnostics",
+        "local_prediction_map",
+        "local_importance_map",
+        "residual_autocorrelation_check"
+      ],
+      "time_space_people": {
+        "time": "7-day aggregate",
+        "space": "500m grid; local coefficients per cell; projected coordinates required",
+        "people": "spatially varying association, not local causal effect"
+      },
+      "claim_boundary": "Can describe spatially varying associations. Cannot claim local causal effects without stronger design.",
+      "review_risks": [
+        "Bandwidth choice strongly affects results",
+        "Multicollinearity in local windows",
+        "Small n=516 for local estimation"
+      ],
+      "memory_sources": []
+    },
+    {
+      "node_id": "MX_01_shap_pdp_explanation",
+      "node_type": "model_explanation",
+      "title": "SHAP / PDP model explanation",
+      "question": "How do features contribute to predicted vitality at grid and aggregate levels?",
+      "status": "deferred",
+      "depends_on": [
+        "ME_01_rf_baseline"
+      ],
+      "required_inputs": [
+        "fitted RF model",
+        "feature matrix"
+      ],
+      "required_parameters": {
+        "method": "SHAP TreeExplainer + PDP",
+        "scope": "global summary + grid-level explanations"
+      },
+      "expected_outputs": [
+        "shap_summary_plot",
+        "pdp_curves",
+        "grid_shap_values"
+      ],
+      "time_space_people": {
+        "time": "7-day aggregate",
+        "space": "grid-level and aggregate explanations",
+        "people": "feature contribution to aggregate proxy"
+      },
+      "claim_boundary": "Explanations are model-dependent. SHAP values describe the fitted model, not ground-truth causal effects.",
+      "review_risks": [
+        "Correlated features can produce misleading SHAP attributions"
+      ],
+      "memory_sources": []
+    },
+    {
+      "node_id": "DI_01_residual_spatial_autocorrelation",
+      "node_type": "diagnostic",
+      "title": "Residual spatial autocorrelation check",
+      "question": "Do model residuals show unexplained spatial structure?",
+      "status": "deferred",
+      "depends_on": [
+        "ME_01_rf_baseline"
+      ],
+      "required_inputs": [
+        "model residuals with grid coordinates"
+      ],
+      "required_parameters": {
+        "test": "Moran's I on residuals",
+        "neighbor_definition": "queen contiguity or distance-based (500m threshold)",
+        "significance_threshold": 0.05
+      },
+      "expected_outputs": [
+        "moran_i_report",
+        "residual_map"
+      ],
+      "time_space_people": {
+        "time": "7-day aggregate",
+        "space": "spatial dependence in residuals",
+        "people": "unmodeled spatial process"
+      },
+      "claim_boundary": "If significant, suggests missing spatial variables or need for spatial model.",
+      "review_risks": [
+        "Significant Moran's I would motivate GWRF branch"
+      ],
+      "memory_sources": []
+    },
+    {
+      "node_id": "RC_01_route_comparison",
+      "node_type": "route_comparison",
+      "title": "Outcome and feature package comparison",
+      "question": "Which outcome definition and feature package combination best explains vitality variation?",
+      "status": "pending",
+      "depends_on": [
+        "RO_01_all_window_aggregate",
+        "RO_02_weekday_weekend_contrast",
+        "RO_03_day_period_split",
+        "FP_01_built_form_baseline",
+        "FP_02_activity_opportunity",
+        "FP_04_full_multimodal"
+      ],
+      "required_inputs": [
+        "completed model outputs per branch"
+      ],
+      "required_parameters": {
+        "comparison_dimensions": [
+          "cv_r2",
+          "cv_mae",
+          "spatial_residual_structure",
+          "interpretability"
+        ]
+      },
+      "expected_outputs": [
+        "comparison_table",
+        "claim_calibration_report"
+      ],
+      "time_space_people": {
+        "time": "varies by outcome branch",
+        "space": "varies by spatial model",
+        "people": "varies by people proxy"
+      },
+      "claim_boundary": "Comparison is evidence-calibration, not model selection for causal inference.",
+      "review_risks": [
+        "Different outcomes are not nested; comparison is descriptive"
+      ],
+      "memory_sources": []
+    },
+    {
+      "node_id": "CS_01_claim_synthesis",
+      "node_type": "claim_synthesis",
+      "title": "Final claim synthesis",
+      "question": "What can we claim about Shanghai inner-ring street-vitality drivers?",
+      "status": "pending",
+      "depends_on": [
+        "RC_01_route_comparison"
+      ],
+      "required_inputs": [
+        "route_comparison_table",
+        "claim_gates"
+      ],
+      "required_parameters": {
+        "claim_levels": [
+          "stable",
+          "conditional",
+          "insufficient",
+          "unsupported"
+        ]
+      },
+      "expected_outputs": [
+        "calibrated_claims",
+        "claim_boundary_document"
+      ],
+      "time_space_people": {
+        "time": "7-day observation window",
+        "space": "Shanghai inner ring 500m grid",
+        "people": "LBS device-user proxy"
+      },
+      "claim_boundary": "Final claims must respect all upstream claim boundaries.",
+      "review_risks": [
+        "Overclaiming is the main risk"
+      ],
+      "memory_sources": []
+    }
+  ],
+  "edges": [
+    {
+      "from": "RO_01_all_window_aggregate",
+      "to": "FP_01_built_form_baseline",
+      "operation": "outcome-to-feature alignment",
+      "reason": "built-form variables need an outcome branch for interpretation",
+      "claim_effect": "associates static built form with aggregate activity"
+    },
+    {
+      "from": "RO_01_all_window_aggregate",
+      "to": "FP_02_activity_opportunity",
+      "operation": "outcome-to-feature alignment",
+      "reason": "POI/road variables need an outcome branch",
+      "claim_effect": "associates opportunity proxies with aggregate activity"
+    },
+    {
+      "from": "RO_01_all_window_aggregate",
+      "to": "FP_03_accessibility_connectivity",
+      "operation": "outcome-to-feature alignment",
+      "reason": "accessibility needs outcome for spatial interpretation",
+      "claim_effect": "associates network structure with aggregate activity"
+    },
+    {
+      "from": "RO_01_all_window_aggregate",
+      "to": "FP_04_full_multimodal",
+      "operation": "outcome-to-feature alignment",
+      "reason": "full package combines all X groups",
+      "claim_effect": "combined association, not independent effects"
+    },
+    {
+      "from": "FP_01_built_form_baseline",
+      "to": "ME_01_rf_baseline",
+      "operation": "feature-to-model",
+      "reason": "RF baseline uses built-form + opportunity",
+      "claim_effect": "baseline association"
+    },
+    {
+      "from": "FP_02_activity_opportunity",
+      "to": "ME_01_rf_baseline",
+      "operation": "feature-to-model",
+      "reason": "RF baseline uses built-form + opportunity",
+      "claim_effect": "baseline association"
+    },
+    {
+      "from": "FP_04_full_multimodal",
+      "to": "ME_02_gwrf_spatial_heterogeneity",
+      "operation": "feature-to-model",
+      "reason": "GWRF needs full feature set",
+      "claim_effect": "spatially varying association"
+    },
+    {
+      "from": "ME_01_rf_baseline",
+      "to": "MX_01_shap_pdp_explanation",
+      "operation": "model-to-explanation",
+      "reason": "SHAP/PDP requires fitted model",
+      "claim_effect": "model-dependent explanation"
+    },
+    {
+      "from": "ME_01_rf_baseline",
+      "to": "DI_01_residual_spatial_autocorrelation",
+      "operation": "model-to-diagnostic",
+      "reason": "residual check motivates spatial model branch",
+      "claim_effect": "may suggest GWRF if significant"
+    },
+    {
+      "from": "RO_02_weekday_weekend_contrast",
+      "to": "RC_01_route_comparison",
+      "operation": "branch-to-comparison",
+      "reason": "temporal outcome branch is comparison evidence",
+      "claim_effect": "temporal heterogeneity evidence"
+    },
+    {
+      "from": "RO_03_day_period_split",
+      "to": "RC_01_route_comparison",
+      "operation": "branch-to-comparison",
+      "reason": "period outcome branch is comparison evidence",
+      "claim_effect": "diurnal heterogeneity evidence"
+    },
+    {
+      "from": "RC_01_route_comparison",
+      "to": "CS_01_claim_synthesis",
+      "operation": "comparison-to-claims",
+      "reason": "calibrated claims from compared branches",
+      "claim_effect": "stable/conditional/insufficient/unsupported"
+    }
+  ],
+  "human_choices": [
+    {
+      "choice_id": "HC_01_outcome_branch",
+      "question": "Which outcome operationalization should be active?",
+      "options": [
+        {
+          "node_id": "RO_01_all_window_aggregate",
+          "label": "All-window aggregate (existing baseline)",
+          "status": "recommended"
+        },
+        {
+          "node_id": "RO_02_weekday_weekend_contrast",
+          "label": "Weekday/weekend contrast",
+          "status": "suggested"
+        },
+        {
+          "node_id": "RO_03_day_period_split",
+          "label": "Day-period split",
+          "status": "suggested"
+        },
+        {
+          "node_id": "RO_04_population_profile_aggregation",
+          "label": "Population-profile aware",
+          "status": "suggested_but_high_risk"
+        }
+      ]
+    },
+    {
+      "choice_id": "HC_02_feature_branch",
+      "question": "Which feature package should be active?",
+      "options": [
+        {
+          "node_id": "FP_01_built_form_baseline",
+          "label": "Built-form baseline only",
+          "status": "suggested"
+        },
+        {
+          "node_id": "FP_02_activity_opportunity",
+          "label": "Activity-opportunity only",
+          "status": "suggested"
+        },
+        {
+          "node_id": "FP_03_accessibility_connectivity",
+          "label": "Accessibility add-on (requires GIS processing)",
+          "status": "deferred_until_approved"
+        },
+        {
+          "node_id": "FP_04_full_multimodal",
+          "label": "Full multimodal",
+          "status": "suggested"
+        }
+      ]
+    },
+    {
+      "choice_id": "HC_03_model_branch",
+      "question": "Which model execution should follow?",
+      "options": [
+        {
+          "node_id": "ME_01_rf_baseline",
+          "label": "RF baseline (already exists)",
+          "status": "existing"
+        },
+        {
+          "node_id": "ME_02_gwrf_spatial_heterogeneity",
+          "label": "GWRF spatial heterogeneity",
+          "status": "deferred"
+        },
+        {
+          "node_id": "MX_01_shap_pdp_explanation",
+          "label": "SHAP/PDP explanation",
+          "status": "deferred"
+        }
+      ]
+    }
+  ]
+}
