@@ -3,9 +3,9 @@ requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "urban-agent"
-version = "0.1.0"
-description = "An open framework for LLM-orchestrated urban spatial analysis"
+name = "urban-hermes"
+version = "0.2.0"
+description = "Urban-Hermes runtime for reviewable urban-analysis workflows"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {file = "LICENSE"}
@@ -68,22 +68,20 @@ Documentation = "https://github.com/xuanniao57/UrbanAgents/tree/main/docs"
 Issues = "https://github.com/xuanniao57/UrbanAgents/issues"
 
 [project.scripts]
-urban-agent = "urban_agent.cli:main"
 urban-hermes = "urban_hermes.launcher:main"
+urban-agent = "urban_hermes.launcher:main"
 urban-hermes-dogfood = "urban_hermes.dogfood:main"
 
 [tool.setuptools]
 include-package-data = true
 
 [tool.setuptools.packages.find]
-where = [".", "hermes_urban_agent"]
-include = ["urban_agent*", "web*", "urban_hermes*"]
+where = ["hermes_urban_agent"]
+include = ["urban_hermes*"]
 exclude = ["legacy*", "plugins*", "benchmarks*", "case_studies*", "examples*", "experimental*"]
 
 [tool.setuptools.package-data]
-urban_agent = ["memory/**/*.json", "memory/**/*.jsonl"]
 urban_hermes = ["research_memory_seed.json", "urban_skill_prompt.md", "_vendor/hermes_runtime/**/*"]
-web = ["README.md", "requirements.txt", "static/index.html", "static/css/*.css", "static/js/*.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,7 +1,15 @@
 # Urban-Hermes Route Workspace
 
 Static runtime viewer for Urban-Hermes route-tree state.
-It is designed as the browser-side companion to the CLI: the CLI continues the dialogue and writes state files, while this page renders the planner route tree, node-level inputs/outputs, artifacts, reviewer notes, todo status, human choice requests, and benchmark panels.
+It is designed as the browser-side companion to the CLI: the CLI continues the dialogue and writes state files, while this page renders a readable workspace for review.
+
+The release layout is intentionally sparse for paper screenshots and live review:
+
+- left: selected node, required inputs, artifacts, time-space-people meaning, and claim boundary;
+- upper right: typed planner route tree with selected, candidate, deferred, blocked, and merge states;
+- lower right: a CLI-like mirror of the same route state, todo items, human choices, patch events, and artifacts.
+
+Benchmark tables and long workflow rails are kept in the code path but hidden from the default workspace so the core review interface remains readable.
 
 ## Open with live experiment data
 
@@ -47,9 +55,9 @@ This mode reads:
 
 - A curved, node-link route tree with selected, candidate, deferred, blocked, and merge states.
 - Clickable nodes. The detail panel shows required inputs, method parameters, expected outputs, attached artifacts, time/space/people assumptions, and claim boundaries.
-- A CLI-synchronized panel for planner todo, route choice requests, patch events, and recorded human choices.
-- A selected-route rail that summarizes each executed step as input -> output -> reviewer question.
-- Benchmark condition panels and a filterable UrbanWorkflowBench-60 table.
+- A CLI-synchronized terminal mirror for planner todo, route choice requests, patch events, and recorded human choices.
+- A selected-node artifact panel for maps, plots, tables, manifests, review records, and claim boundaries.
+- Hidden support panels for selected-route rails and benchmark tables when a debugging view is needed.
 
 ## Notes
 

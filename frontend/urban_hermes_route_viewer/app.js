@@ -46,8 +46,9 @@ const state = {
   selectedNodeId: null,
   tasks: [],
   refreshTimer: null,
-  treeZoom: 0.86,
-  panning: null
+  treeZoom: 0.78,
+  panning: null,
+  didInitialFit: false
 };
 
 const ROUTE_STAGES = [
@@ -59,7 +60,7 @@ const ROUTE_STAGES = [
   { step: 6, label: "claim synthesis" }
 ];
 
-const MIN_TREE_ZOOM = 0.55;
+const MIN_TREE_ZOOM = 0.42;
 const MAX_TREE_ZOOM = 1.85;
 
 function n(node_id, node_type, question, depends_on, status) {
@@ -277,9 +278,9 @@ function buildLayout(tree) {
     1,
     ...ROUTE_STAGES.map(stageItem => tree.nodes.filter(node => (visualSteps.get(nodeId(node)) || stepOf(node)) === stageItem.step).length)
   );
-  const width = Math.max(2160, Math.round(stageWidth / Math.max(state.treeZoom, 0.72)), ROUTE_STAGES.length * 350);
-  const height = Math.max(620, 190 + maxColumnSize * 128);
-  const margin = { left: 118, right: 470, top: 92, bottom: 64 };
+  const width = Math.max(1180, Math.round(stageWidth / Math.max(state.treeZoom, 0.78)), ROUTE_STAGES.length * 196);
+  const height = Math.max(430, 150 + maxColumnSize * 100);
+  const margin = { left: 64, right: 220, top: 72, bottom: 44 };
   const stepX = step => margin.left + (step - 1) * ((width - margin.left - margin.right) / (ROUTE_STAGES.length - 1));
   const columns = new Map();
   tree.nodes.forEach(node => {
@@ -370,7 +371,7 @@ function renderTree() {
     const label = el("text", { x: textX, y: y - 5, class: "node-label", "text-anchor": textAnchor });
     label.textContent = id;
     const title = el("text", { x: textX, y: y + 13, class: "node-caption", "text-anchor": textAnchor });
-    title.textContent = shorten(nodeQuestion(node), 44);
+    title.textContent = shorten(nodeQuestion(node), 30);
     g.appendChild(circle);
     if (branchState(node, tree) === "blocked") {
       g.appendChild(el("line", { x1: x - 7, y1: y - 7, x2: x + 7, y2: y + 7 }));
@@ -638,47 +639,49 @@ function terminalLines(data) {
   }
   const lines = [];
   const task = data.tree.meta?.task || "Assess an urban-analysis question.";
-  lines.push({ role: "$", kind: "command", text: "python -m urban_hermes.launcher --toolsets urban,todo,memory,delegation --yolo" });
-  lines.push({ role: "user", kind: "user", text: task });
-  lines.push({ role: "planner", kind: "system", text: `route_state: ${data.tree.meta?.state_id || data.tree.meta?.session_id || "active"} | ${data.tree.nodes.length} nodes` });
+  const toolsets = "urban, todo, memory, delegation";
+  const session = data.tree.meta?.state_id || data.tree.meta?.session_id || "active";
+  lines.push(" _   _ ____  ____    _    _   _        _    ____ _____ _   _ _____ ____");
+  lines.push("| | | |  _ \\| __ )  / \\  | \\ | |      / \\  / ___| ____| \\ | |_   _/ ___|");
+  lines.push("| |_| | |_) |  _ \\ / _ \\ |  \\| |     / _ \\| |  _|  _| |  \\| | | | \\___ \\");
+  lines.push("|  _  |  __/| |_) / ___ \\| |\\  |    / ___ \\ |_| | |___| |\\  | | |  ___) |");
+  lines.push("|_| |_|_|   |____/_/   \\_\\_| \\_|   /_/   \\_\\____|_____|_| \\_| |_| |____/");
+  lines.push("");
+  lines.push(`Urban Agents runtime | toolsets: ${toolsets}`);
+  lines.push(`Session: ${session}`);
+  lines.push("Welcome to Urban Agents / Urban-Hermes. Type your message or /help for commands.");
+  lines.push("");
+  lines.push("────────────────────────────────────────────────");
+  lines.push(`● ${task}`);
+  lines.push("╭─ Hermes ──────────────────────────────────────╮");
+  lines.push(`  route state loaded: ${data.tree.nodes.length} nodes, ${(data.tree.edges || []).length} links`);
+  lines.push("╰────────────────────────────────────────────────╯");
   for (const item of displayPlannerTodo(asArray(workflow.planner_todo), data.tree)) {
-    lines.push({ role: "todo", kind: "tool", text: `${item.step_id || ""} :: ${item.title || item.step || ""} [${item.status || "pending"}]` });
+    lines.push(`  ┊ todo   ${item.step_id || ""}  ${item.title || item.step || ""}  [${item.status || "pending"}]`);
   }
   const choice = workflow.current_choice_request;
   if (choice) {
-    lines.push({ role: "choice", kind: "reviewer", text: choice.message || choice.question || "Human choice requested before next step." });
+    lines.push(`  ┊ choice ${choice.message || choice.question || "Human choice requested before next step."}`);
     for (const option of asArray(choice.choices)) {
-      lines.push({ role: "option", kind: "system", text: option.label || option.node_id || option.branch_id || "recorded option" });
+      lines.push(`  ┊ option ${option.label || option.node_id || option.branch_id || "recorded option"}`);
     }
   } else {
-    lines.push({ role: "choice", kind: "system", text: "No active human choice request." });
+    lines.push("  ┊ choice No active human choice request.");
   }
   for (const choiceItem of asArray(workflow.human_choices)) {
-    lines.push({
-      role: "human",
-      kind: "user",
-      text: `${choiceItem.node_id || choiceItem.branch_id || choiceItem.choice_id || "choice"} -> ${choiceItem.decision || choiceItem.choice || "recorded"}${choiceItem.reason ? ` | ${choiceItem.reason}` : ""}`
-    });
+    lines.push(`  ┊ human  ${choiceItem.node_id || choiceItem.branch_id || choiceItem.choice_id || "choice"} -> ${choiceItem.decision || choiceItem.choice || "recorded"}${choiceItem.reason ? ` | ${choiceItem.reason}` : ""}`);
   }
-  for (const artifact of workflowArtifacts(data)) {
-    lines.push({
-      role: "artifact",
-      kind: "tool",
-      text: `${artifact.node_id || artifact.branch_id || "node"} <= ${artifact.title || fileName(artifact.path || "")} (${artifact.artifact_type || artifact.type || artifact.role || "artifact"})`
-    });
+  for (const artifact of workflowArtifacts(data).slice(0, 9)) {
+    lines.push(`  ┊ artifact ${artifact.node_id || artifact.branch_id || "node"} <= ${artifact.title || fileName(artifact.path || "")} (${artifact.artifact_type || artifact.type || artifact.role || "artifact"})`);
   }
   for (const event of asArray(workflow.patch_events)) {
-    lines.push({
-      role: "patch",
-      kind: "reviewer",
-      text: `${event.patch_type || "patch"}${event.details ? ` | ${event.details}` : ""}${event.reason ? ` | ${event.reason}` : ""}`
-    });
+    lines.push(`  ┊ patch  ${event.patch_type || "patch"}${event.details ? ` | ${event.details}` : ""}${event.reason ? ` | ${event.reason}` : ""}`);
   }
   const validation = data.validation || {};
   if (validation.issues?.length) {
-    lines.push({ role: "review", kind: "reviewer", text: `${validation.issues.length} validation issue(s): ${validation.issues.join("; ")}` });
+    lines.push(`  ┊ review ${validation.issues.length} validation issue(s): ${validation.issues.join("; ")}`);
   } else {
-    lines.push({ role: "review", kind: "reviewer", text: "route state validation: no recorded issues" });
+    lines.push("  ┊ review route state validation: no recorded issues");
   }
   return lines;
 }
@@ -872,6 +875,10 @@ async function refresh() {
   document.getElementById("dataMode").textContent = loaded.mode;
   const artifacts = workflowArtifacts(state.data);
   document.getElementById("artifactCount").textContent = `${artifacts.length} artifacts`;
+  if (!state.didInitialFit) {
+    state.didInitialFit = true;
+    window.requestAnimationFrame(fitTreeToStage);
+  }
 }
 
 function setupControls() {

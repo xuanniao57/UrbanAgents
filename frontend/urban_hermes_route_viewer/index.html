@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Urban agent</title>
-  <link rel="stylesheet" href="style.css?v=20260527b">
+  <link rel="stylesheet" href="style.css?v=20260530a">
 </head>
 <body>
   <header class="topbar">
@@ -20,11 +20,22 @@
   </header>
 
   <main class="workspace">
+    <aside class="detail-panel">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">Selected node</p>
+          <h2 id="nodeTitle">No node selected</h2>
+        </div>
+        <span id="nodeStatus" class="status-pill">pending</span>
+      </div>
+      <div id="nodeDetail" class="detail-body"></div>
+    </aside>
+
     <section class="tree-panel">
       <div class="panel-head">
         <div>
           <p class="eyebrow">Planner route tree</p>
-          <h2>typed branches, dependencies, and merge gates</h2>
+          <h2>choices, route state, and merge gates</h2>
         </div>
         <div class="tree-tools" aria-label="Route tree zoom controls">
           <button id="zoomOut" type="button" title="Zoom out">-</button>
@@ -45,29 +56,18 @@
       </div>
     </section>
 
-    <aside class="detail-panel">
-      <div class="panel-head">
-        <div>
-          <p class="eyebrow">Selected node</p>
-          <h2 id="nodeTitle">No node selected</h2>
-        </div>
-        <span id="nodeStatus" class="status-pill">pending</span>
-      </div>
-      <div id="nodeDetail" class="detail-body"></div>
-    </aside>
-
     <section class="timeline-panel">
       <div class="panel-head">
         <div>
-          <p class="eyebrow">CLI terminal mirror</p>
-          <h2>live dialogue, todo, worker-review events</h2>
+          <p class="eyebrow">Urban-Hermes CLI mirror</p>
+          <h2>dialogue, todo, worker-review events</h2>
         </div>
         <span id="artifactCount" class="status-pill">0 artifacts</span>
       </div>
       <div id="cliTerminal" class="cli-terminal" role="log" aria-label="CLI synchronized terminal trace"></div>
     </section>
 
-    <section class="workflow-panel">
+    <section class="workflow-panel support-panel" hidden>
       <div class="panel-head">
         <div>
           <p class="eyebrow">Executed route</p>
@@ -77,7 +77,7 @@
       <div id="workflowRail" class="workflow-rail"></div>
     </section>
 
-    <section class="benchmark-panel">
+    <section class="benchmark-panel support-panel" hidden>
       <div class="panel-head">
         <div>
           <p class="eyebrow">Ablation overview</p>
@@ -107,6 +107,6 @@
     </section>
   </main>
 
-  <script src="app.js?v=20260527b"></script>
+  <script src="app.js?v=20260530a"></script>
 </body>
 </html>
