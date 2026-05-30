@@ -1,1 +1,0 @@
-"""Common GIS backend helpers."""

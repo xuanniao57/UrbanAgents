@@ -1,4 +1,0 @@
-﻿config,trials,success_rate,mean_latency_s,mean_est_cost_usd,mean_exec_confidence,mean_review_score,mean_warning_count,mean_artifact_count,mean_metric_row_count
-c4_wo_dualspace,3,1.0,123.7267,1.0925,0.8148,1.0,1.6667,6.0,22.0
-c5_wo_memory,3,1.0,129.66,1.1011,0.859,1.0,0.0,6.0,22.0
-c6_vanilla,3,1.0,26.6433,0.4237,,,0.0,0.0,22.0

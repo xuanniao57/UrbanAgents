@@ -1,8 +1,0 @@
-﻿config,trials,success_rate,mean_latency_s,mean_est_cost_usd,mean_exec_confidence,mean_review_score,mean_warning_count,mean_artifact_count,mean_metric_row_count
-c0_full,3,1.0,146.1367,1.205,0.8433,1.0,0.3333,4.0,29.3333
-c1_wo_planning,3,1.0,37.0933,0.432,0.8725,1.0,1.3333,0.0,22.0
-c2_wo_review,3,1.0,125.5733,1.0929,0.8429,,0.0,6.0,22.0
-c3_wo_qc,3,1.0,127.1933,1.0999,,1.0,0.0,6.0,22.0
-c4_wo_dualspace,3,1.0,130.85,1.1064,0.8173,1.0,0.0,6.0,22.0
-c5_wo_memory,3,1.0,130.4133,1.1027,0.8298,1.0,0.0,6.0,22.0
-c6_vanilla,3,1.0,24.5167,0.4191,,,0.0,0.0,22.0

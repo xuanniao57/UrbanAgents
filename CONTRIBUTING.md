@@ -1,26 +1,45 @@
-# Contributing to UrbanAgent
+# Contributing to Urban-Hermes
 
 ## Development setup
 
 1. Create or activate a Python 3.10+ environment.
-2. Install the package in editable mode: `pip install -e .[dev]`
-3. For the broader benchmark stack, install additional packages from `requirements_combined.txt` as needed.
+2. Install the current package in editable mode:
 
-## Workflow
+   ```powershell
+   python -m pip install -e .[dev]
+   ```
 
-1. Add or update tests for every user-visible change.
-2. Run `pytest` before submitting changes.
-3. Update `README.md` or docs when behavior, setup, or public APIs change.
+3. Configure a local runtime home:
+
+   ```powershell
+   urban-hermes setup
+   ```
+
+## Release checks
+
+Before opening a pull request or publishing a release, run:
+
+```powershell
+node --check frontend/urban_hermes_route_viewer/app.js
+python -m py_compile hermes_urban_agent/urban_hermes/launcher.py
+pytest tests/test_hermes_urban_memory_provider.py tests/test_urban_hermes_route_tree_state.py -q
+python -m pip install -e . --no-deps --dry-run
+```
 
 ## Scope boundaries
 
-- Keep core package changes focused and backward compatible where possible.
-- Treat benchmark assets under `third_party/` as vendored dependencies unless the task explicitly requires modification.
-- Do not commit secrets, API keys, or local machine paths.
+- Keep the public runtime centered on `hermes_urban_agent/urban_hermes`.
+- Keep the browser review surface in `frontend/urban_hermes_route_viewer`.
+- Do not reintroduce the retired `urban_agent` package as a public entry point.
+- Keep generated experiment outputs, paper drafts, API keys, and local runtime
+  folders out of release commits.
+- When adding new urban tools, include route-state or review-memory tests when
+  the behavior affects planner branches, reviewer decisions, or claim gates.
 
 ## Pull request checklist
 
-1. Tests added or updated.
-2. Documentation updated.
-3. No hard-coded local secrets or credentials.
-4. Changes validated on at least one local workflow.
+1. Tests or smoke checks updated.
+2. README or runtime docs updated when CLI, frontend, tool, or memory behavior
+   changes.
+3. No secrets, local machine paths, or large generated experiment artifacts.
+4. The release checks above pass locally.
