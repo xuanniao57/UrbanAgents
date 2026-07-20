@@ -1,7 +1,47 @@
 const DEFAULT_PATHS = {
-  state: "../../experiments/case2_process_materials_rerun_20260527_020009/route_tree_frontend_state.json",
+  state: "../../submissions/urban_cup_2026/process_evidence/route_tree_state.json",
   summary: "../../experiments/urbanworkflowbench_60tasks_20260524/condition_traces/all60_design_gate_20260524/condition_trace_score_summary.json",
-  decisions: "../../experiments/urbanworkflowbench_60tasks_20260524/condition_traces/all60_design_gate_20260524/full/all60_design_gate_decisions.csv"
+  decisions: "../../experiments/urbanworkflowbench_60tasks_20260524/condition_traces/all60_design_gate_20260524/full/all60_design_gate_decisions.csv",
+  findings: "../../submissions/urban_cup_2026/outputs/case_findings.json",
+  manifest: "../../submissions/urban_cup_2026/reproducibility_manifest.json",
+  modelSummary: "../../submissions/urban_cup_2026/outputs/model_validation_summary.csv",
+  temporalSummary: "../../submissions/urban_cup_2026/outputs/temporal_cohort_summary.csv",
+  predictions: "../../submissions/urban_cup_2026/outputs/combined_rf_oof_predictions.csv",
+  reviews: [
+    "../../submissions/urban_cup_2026/process_evidence/step_reviews/S1_review.json",
+    "../../submissions/urban_cup_2026/process_evidence/step_reviews/S2_review.json",
+    "../../submissions/urban_cup_2026/process_evidence/step_reviews/S3_review.json",
+    "../../submissions/urban_cup_2026/process_evidence/step_reviews/S4_review.json",
+    "../../submissions/urban_cup_2026/process_evidence/step_reviews/S5_review.json",
+    "../../submissions/urban_cup_2026/process_evidence/step_reviews/S6_review.json"
+  ]
+};
+
+const CASE_ARTIFACTS = {
+  results: "../../submissions/urban_cup_2026/outputs/outcome_grounded_case_results.png",
+  process: "../../submissions/urban_cup_2026/outputs/human_ai_fit_trap_process.png"
+};
+
+const fallbackFindings = {
+  analysis_status: "exploratory; sample-conditional; outcome-grounded",
+  best_spatial_model_by_scale: [
+    { scale: "200m", train_r2: 0.609, r2_mean: 0.282 },
+    { scale: "500m", train_r2: 0.731, r2_mean: 0.360 }
+  ],
+  weekday_weekend: {
+    "500m": { weekday_weekend_spatial_spearman_rho: 0.950 },
+    "200m": { weekday_weekend_spatial_spearman_rho: 0.894 }
+  },
+  spatial_oof_residual_moran: {
+    "500m": { moran_i: 0.270, permutation_p: 0.001, k: 8 },
+    "200m": { moran_i: 0.182, permutation_p: 0.001, k: 8 }
+  },
+  claim_boundaries: [
+    "The LBS sample represents observed device users, not the resident population.",
+    "Predictive associations are not causal effects.",
+    "The observation window is seven days, so long-term stability is untested.",
+    "Spatial-block validation estimates within-city transfer, not cross-city generalization."
+  ]
 };
 
 const fallback = {
@@ -45,6 +85,12 @@ const state = {
   data: fallback,
   selectedNodeId: null,
   tasks: [],
+  findings: fallbackFindings,
+  analytics: { modelSummary: [], temporalSummary: [], predictions: [] },
+  reviews: [],
+  manifest: null,
+  localMessages: [],
+  controlActions: {},
   refreshTimer: null,
   treeZoom: 0.78,
   panning: null,
@@ -103,15 +149,29 @@ async function loadData() {
   const stateParam = params.get("state");
   const statePath = resolveStatePath(stateParam || DEFAULT_PATHS.state);
   try {
-    const [routeState, summary, decisionsText] = await Promise.all([
+    const [routeState, summary, decisionsText, findings, manifest, reviews, modelSummaryText, temporalSummaryText, predictionsText] = await Promise.all([
       loadJson(statePath),
       loadJson(DEFAULT_PATHS.summary).catch(() => null),
-      loadText(DEFAULT_PATHS.decisions).catch(() => "")
+      loadText(DEFAULT_PATHS.decisions).catch(() => ""),
+      loadJson(DEFAULT_PATHS.findings).catch(() => fallbackFindings),
+      loadJson(DEFAULT_PATHS.manifest).catch(() => null),
+      Promise.all(DEFAULT_PATHS.reviews.map(path => loadJson(path).catch(() => null))),
+      loadText(DEFAULT_PATHS.modelSummary).catch(() => ""),
+      loadText(DEFAULT_PATHS.temporalSummary).catch(() => ""),
+      loadText(DEFAULT_PATHS.predictions).catch(() => "")
     ]);
     return {
       routeState,
       summary,
       tasks: decisionsText ? parseCsv(decisionsText) : [],
+      findings,
+      manifest,
+      reviews: reviews.filter(Boolean),
+      analytics: {
+        modelSummary: modelSummaryText ? parseCsv(modelSummaryText) : [],
+        temporalSummary: temporalSummaryText ? parseCsv(temporalSummaryText) : [],
+        predictions: predictionsText ? parseCsv(predictionsText) : []
+      },
       mode: stateParam ? `live route state: ${stateParam}` : "default live route state"
     };
   } catch (error) {
@@ -119,6 +179,10 @@ async function loadData() {
       routeState: fallback,
       summary: fallback.summary || null,
       tasks: fallback.tasks || [],
+      findings: fallbackFindings,
+      manifest: null,
+      reviews: [],
+      analytics: { modelSummary: [], temporalSummary: [], predictions: [] },
       mode: `embedded fallback: ${error.message}`
     };
   }
@@ -143,7 +207,9 @@ function normalizeRouteState(routeState) {
       human_choices: routeState.human_choices || [],
       current_choice_request: routeState.current_choice_request || null,
       artifact_index: routeState.artifact_index || collectNodeArtifacts(routeState.nodes || []),
-      claim_options: routeState.claim_options || []
+      claim_options: routeState.claim_options || [],
+      dialogue: routeState.dialogue || routeState.transcript || [],
+      cli_trace: routeState.cli_trace || routeState.terminal_lines || []
     },
     validation: routeState.validation || { issues: [] }
   };
@@ -444,6 +510,8 @@ function selectNode(id) {
   state.selectedNodeId = id;
   renderTree();
   renderNodeDetail();
+  renderRouteRail();
+  activateWorkbenchTab("artifacts");
 }
 
 function renderNodeDetail() {
@@ -603,7 +671,7 @@ function pathToUrl(path) {
   return cleaned;
 }
 
-function renderTodoAndDialogue() {
+function renderLegacyTerminalMirror() {
   const data = state.data;
   const terminal = document.getElementById("cliTerminal");
   terminal.innerHTML = `<pre class="terminal-raw">${escapeHtml(terminalText(data))}</pre>`;
@@ -714,6 +782,423 @@ function displayPlannerTodo(todo, tree) {
     );
   }
   return items;
+}
+
+function reviewFor(stepPrefix) {
+  return state.reviews.find(review => String(review.step_id || "").startsWith(stepPrefix)) || {};
+}
+
+function scaleFinding(scale) {
+  return (state.findings?.best_spatial_model_by_scale || []).find(item => item.scale === scale) || {};
+}
+
+function metric(value, digits = 3) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toFixed(digits) : "n/a";
+}
+
+function researchThread(data) {
+  const workflow = data.workflow || {};
+  const f500 = scaleFinding("500m");
+  const f200 = scaleFinding("200m");
+  const s1 = reviewFor("S1");
+  const s3 = reviewFor("S3");
+  const s4 = reviewFor("S4");
+  const s6 = reviewFor("S6");
+  const approved = asArray(workflow.human_choices).filter(choice => choice.decision === "approve");
+  const activeCount = (data.tree.active_path || data.tree.branch_tree?.active || []).length;
+  const candidateCount = data.tree.nodes.length;
+
+  return [
+    {
+      role: "human",
+      stage: "Research brief",
+      body: data.tree.meta?.task || "Assess scale-dependent street vitality with reviewable urban evidence.",
+      points: ["Compare 500 m and 200 m analytical units", "Separate apparent fit from spatial transfer", "Keep claims auditable and sample-conditional"]
+    },
+    {
+      role: "planner",
+      stage: "S1–S3 / route construction",
+      body: `I represented the study as a typed route graph with ${candidateCount} candidate nodes and ${activeCount} nodes on the selected path.`,
+      points: ["Two research objects: 500 m and 200 m grids", "Two feature packages: built form and activity opportunity", "Matched model and validation branches"]
+    },
+    {
+      role: "human",
+      stage: "Human choice",
+      body: approved.length
+        ? `Approved ${approved.map(choice => choice.node_id || choice.branch_id).filter(Boolean).join(", ")} and retained alternative scales for comparison.`
+        : "Approved the two-scale comparison and the matched feature packages.",
+      points: ["Alternatives remain visible rather than being overwritten"]
+    },
+    {
+      role: "worker",
+      stage: "S2–S3 / execution",
+      body: "Executed 11 of 12 matched OLS, random-forest, and GWR routes. The failed 200 m GWR route remains visible; GWRF stays deferred until its own method gate is satisfied.",
+      points: ["Every output is bound to a route node", "Validation results are stored separately from training fit", shorten(s3.claim_impact || "Model-specific limitations are carried forward to claim review.", 180)]
+    },
+    {
+      role: "reviewer",
+      failure: "passive",
+      stage: "Data-regime checkpoint",
+      body: s1.reviewer_correction || "The observed device-user sample is not a resident-population estimate.",
+      points: [s1.people_implications || "Coverage is inherited from the LBS data regime.", s1.time_implications || "The observation window is short."]
+    },
+    {
+      role: "worker",
+      stage: "Outcome-grounded validation",
+      body: `The strongest spatial-block result is R² ${metric(f500.r2_mean)} at 500 m versus ${metric(f200.r2_mean)} at 200 m. Training fit alone would report ${metric(f500.train_r2)} at 500 m.`,
+      points: ["Five repeated five-fold validation", "Contiguous spatial-block holdouts", "Scale-specific results retained"],
+      attachments: [
+        { title: "Outcome-grounded results", type: "figure", href: CASE_ARTIFACTS.results },
+        { title: "Human–AI process", type: "process trace", href: CASE_ARTIFACTS.process }
+      ]
+    },
+    {
+      role: "reviewer",
+      failure: "active",
+      stage: "Parameter & validation checkpoint",
+      body: s3.reviewer_correction || "Model and validation choices materially change the apparent strength of the result.",
+      points: [`500 m RF: train R² ${metric(f500.train_r2)} → spatial R² ${metric(f500.r2_mean)}`, `200 m RF: train R² ${metric(f200.train_r2)} → spatial R² ${metric(f200.r2_mean)}`, "Do not select a route from training fit alone"]
+    },
+    {
+      role: "reviewer",
+      failure: "active",
+      stage: "Spatial diagnostic checkpoint",
+      body: s4.reviewer_correction || "Residual spatial autocorrelation remains and constrains inference.",
+      points: [s4.space_implications || "Spatial residual structure remains significant.", s4.claim_impact || "Local and causal claims must be downgraded."]
+    },
+    {
+      role: "planner",
+      stage: "S6 / claim gate",
+      body: s6.reviewer_correction || "Claims are admitted only at the strength supported by the reviewed evidence.",
+      points: ["Allow: descriptive, sample-conditional association", "Qualify: predictive transfer and local interpretation", "Block: causal, census-representative, and cross-city claims"]
+    }
+  ];
+}
+
+function renderThreadMessage(message, index) {
+  const avatars = { human: "H", planner: "P", worker: "W", reviewer: "R" };
+  const labels = { human: "Human", planner: "Planner", worker: "Worker", reviewer: "Reviewer" };
+  const role = message.role || "planner";
+  const failure = message.failure || "";
+  const attachments = asArray(message.attachments);
+  const points = asArray(message.points).filter(Boolean);
+  return `<article class="thread-turn" data-role="${escapeAttr(role)}" data-failure="${escapeAttr(failure)}" data-local="${message.local ? "true" : "false"}">
+    <div class="thread-avatar" aria-hidden="true">${escapeHtml(avatars[role] || "A")}</div>
+    <div class="thread-card">
+      <div class="thread-meta">
+        <div><strong>${escapeHtml(labels[role] || role)}</strong>${failure ? ` <span class="thread-tag ${escapeAttr(failure)}">${escapeHtml(failure)} failure</span>` : ""}</div>
+        <time>${escapeHtml(message.stage || `turn ${index + 1}`)}</time>
+      </div>
+      <p>${escapeHtml(message.body || "")}</p>
+      ${points.length ? `<ul class="thread-points">${points.map(point => `<li>${escapeHtml(point)}</li>`).join("")}</ul>` : ""}
+      ${attachments.length ? `<div class="thread-attachments">${attachments.map(item => `<a class="thread-attachment" href="${escapeAttr(item.href)}" target="_blank" rel="noreferrer"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.type || "artifact")}</span></a>`).join("")}</div>` : ""}
+    </div>
+  </article>`;
+}
+
+function renderTodoAndDialogue() {
+  const data = state.data;
+  const messages = [...researchThread(data), ...state.localMessages];
+  const timeline = document.getElementById("dialogueTimeline");
+  timeline.innerHTML = messages.map(renderThreadMessage).join("");
+  if (state.localMessages.length) timeline.scrollTop = timeline.scrollHeight;
+
+  const terminal = document.getElementById("cliTerminal");
+  terminal.innerHTML = `<pre class="terminal-raw">${escapeHtml(cleanTerminalText(data))}</pre>`;
+}
+
+function cleanTerminalText(data) {
+  const workflow = data.workflow || {};
+  const explicit = workflow.cli_trace || workflow.terminal_lines || workflow.dialogue || workflow.transcript;
+  if (Array.isArray(explicit) && explicit.length) return explicit.map(terminalLineText).join("\n");
+  const task = data.tree.meta?.task || "Assess an urban-analysis question.";
+  const lines = [
+    "URBAN-HERMES / REVIEWABLE RESEARCH RUNTIME",
+    `session   ${data.tree.meta?.state_id || data.tree.meta?.session_id || "active"}`,
+    `question  ${task}`,
+    `route     ${data.tree.nodes.length} nodes / ${(data.tree.edges || []).length} dependencies`,
+    ""
+  ];
+  for (const item of displayPlannerTodo(asArray(workflow.planner_todo), data.tree)) {
+    lines.push(`[${String(item.status || "pending").padEnd(14, " ")}] ${item.step_id || "step"}  ${item.title || item.step || ""}`);
+  }
+  lines.push("");
+  for (const choice of asArray(workflow.human_choices)) {
+    lines.push(`human     ${choice.node_id || choice.branch_id || "choice"} -> ${choice.decision || choice.choice || "recorded"}`);
+  }
+  for (const artifact of workflowArtifacts(data).slice(0, 12)) {
+    lines.push(`artifact  ${artifact.node_id || artifact.branch_id || "node"} <= ${artifact.title || fileName(artifact.path || "")}`);
+  }
+  lines.push(`review    ${(data.validation?.issues || []).length ? data.validation.issues.join("; ") : "route state validation passed"}`);
+  return lines.join("\n");
+}
+
+function epistemicCards() {
+  const f500 = scaleFinding("500m");
+  const f200 = scaleFinding("200m");
+  const moran500 = state.findings?.spatial_oof_residual_moran?.["500m"] || {};
+  const moran200 = state.findings?.spatial_oof_residual_moran?.["200m"] || {};
+  const sampling = state.manifest?.data_governance?.sampling || "Deterministic 10% UUID sample of observed LBS device users";
+  return [
+    {
+      id: "population-coverage",
+      failure: "passive",
+      severity: "high",
+      gate: "QUALIFY",
+      title: "Population coverage",
+      source: sampling,
+      consequence: "Activity is observed only for sampled devices; excluded or unobserved residents cannot enter the outcome.",
+      preventable: "Not by tuning the current model. It requires a redesigned data regime or external population validation.",
+      action: "Keep every claim sample-conditional",
+      button: "Qualify claim"
+    },
+    {
+      id: "validation-regime",
+      failure: "active",
+      severity: "high",
+      gate: "BLOCK",
+      title: "Validation regime",
+      source: `500 m random forest: training R² ${metric(f500.train_r2)}; spatial-block R² ${metric(f500.r2_mean)}`,
+      consequence: "A train-only result overstates transfer to held-out urban zones and creates a fit-trap narrative.",
+      preventable: "Yes. Rank routes by repeated spatial validation, not training fit.",
+      action: "Block train-only superiority claims",
+      button: "Block claim"
+    },
+    {
+      id: "scale-choice",
+      failure: "active",
+      severity: "medium",
+      gate: "COMPARE",
+      title: "Spatial scale choice",
+      source: `Spatial-block R²: ${metric(f500.r2_mean)} at 500 m versus ${metric(f200.r2_mean)} at 200 m`,
+      consequence: "The analytical unit changes apparent predictability and the geography of residual error.",
+      preventable: "Yes. Preserve both branches and report scale sensitivity before selecting a claim.",
+      action: "Compare alternatives side by side",
+      button: "Record comparison"
+    },
+    {
+      id: "residual-geography",
+      failure: "active",
+      severity: "medium",
+      gate: "DOWNGRADE",
+      title: "Residual geography",
+      source: `Moran's I ${metric(moran500.moran_i)} at 500 m and ${metric(moran200.moran_i)} at 200 m; p = ${metric(moran500.permutation_p)}`,
+      consequence: "Prediction error remains spatially clustered, so local mechanisms and independent-error inference remain unsupported.",
+      preventable: "Partly. Re-specify spatial structure and rerun diagnostics; otherwise weaken the claim.",
+      action: "Downgrade local and causal inference",
+      button: "Downgrade claim"
+    }
+  ];
+}
+
+function renderEpistemicControl() {
+  const cards = epistemicCards();
+  const passive = cards.filter(card => card.failure === "passive").length;
+  const active = cards.filter(card => card.failure === "active").length;
+  const recorded = Object.keys(state.controlActions).length;
+  document.getElementById("gateSummary").innerHTML = [
+    [passive, "passive"], [active, "active"], [recorded, "recorded"]
+  ].map(([value, label]) => `<span class="gate-chip"><strong>${value}</strong><span>${label}</span></span>`).join("");
+
+  document.getElementById("epistemicLedger").innerHTML = cards.map(card => {
+    const recordedAction = state.controlActions[card.id];
+    return `<article class="failure-card" data-failure="${escapeAttr(card.failure)}">
+      <div class="failure-card-head">
+        <div><span class="failure-tag ${escapeAttr(card.failure)}">${escapeHtml(card.failure.toUpperCase())}</span><h3>${escapeHtml(card.title)}</h3></div>
+        <span class="failure-tag">${escapeHtml(card.gate)}</span>
+      </div>
+      <dl class="failure-body">
+        <dt>source</dt><dd>${escapeHtml(card.source)}</dd>
+        <dt>consequence</dt><dd>${escapeHtml(card.consequence)}</dd>
+        <dt>preventable?</dt><dd>${escapeHtml(card.preventable)}</dd>
+        <dt>human control</dt><dd>${escapeHtml(card.action)}</dd>
+      </dl>
+      <div class="failure-actions">
+        <button type="button" data-control-id="${escapeAttr(card.id)}" aria-pressed="${recordedAction ? "true" : "false"}">${escapeHtml(recordedAction ? "Recorded ✓" : card.button)}</button>
+        <button type="button" data-open-evidence="${escapeAttr(card.id)}">Inspect evidence</button>
+      </div>
+    </article>`;
+  }).join("");
+
+  document.querySelectorAll("[data-control-id]").forEach(button => {
+    button.addEventListener("click", () => recordControlAction(button.dataset.controlId));
+  });
+  document.querySelectorAll("[data-open-evidence]").forEach(button => {
+    button.addEventListener("click", () => {
+      const target = document.getElementById(`metric-${button.dataset.openEvidence}`);
+      target?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  });
+  renderCheckpointQueue(cards);
+}
+
+function recordControlAction(cardId) {
+  const card = epistemicCards().find(item => item.id === cardId);
+  if (!card || state.controlActions[cardId]) return;
+  state.controlActions[cardId] = { action: card.action, recordedAt: new Date().toISOString() };
+  state.localMessages.push({
+    role: "human",
+    stage: "Human checkpoint / local preview",
+    body: `Control recorded: ${card.action}.`,
+    points: [`${card.title}: ${card.gate}`, "This preview is not written back to the runtime route state."],
+    local: true
+  });
+  renderEpistemicControl();
+  renderTodoAndDialogue();
+}
+
+function renderCheckpointQueue(cards = epistemicCards()) {
+  const queue = cards.filter(card => !state.controlActions[card.id]);
+  document.getElementById("checkpointCount").textContent = String(queue.length);
+  document.getElementById("checkpointQueue").innerHTML = queue.length
+    ? queue.map(card => `<article class="checkpoint-card" data-severity="${escapeAttr(card.severity)}"><strong>${escapeHtml(card.gate)} / ${escapeHtml(card.title)}</strong><p>${escapeHtml(card.action)}</p></article>`).join("")
+    : "<p class=\"small\">All visible checkpoints have a recorded local decision.</p>";
+}
+
+function visualEvidenceMarkup() {
+  return `<article class="viz-hero" id="metric-residual-geography">
+    <div class="viz-hero-head">
+      <div><p class="eyebrow">spatial.residual.linked</p><h3>Where the model misses—and whether the miss is systematic</h3></div>
+      <p>500 m / random forest / spatial-block OOF</p>
+    </div>
+    <div id="vizSpatialLinked" class="viz-frame" aria-label="Linked residual map, prediction plot, and residual histogram"></div>
+  </article>
+  <div class="viz-grid">
+    <article class="viz-card" id="metric-scale-choice">
+      <div class="viz-card-head"><div><p class="eyebrow">compare.packages</p><h3>Spatial transfer by evidence package</h3></div></div>
+      <div id="vizValidation" class="viz-frame" aria-label="Spatial validation comparison"></div>
+    </article>
+    <article class="viz-card" id="metric-validation-regime">
+      <div class="viz-card-head"><div><p class="eyebrow">compare.regimes</p><h3>Training fit versus held-out geography</h3></div></div>
+      <div id="vizFitGap" class="viz-frame" aria-label="Training and spatial validation fit gap"></div>
+    </article>
+    <article class="viz-card" id="metric-population-coverage">
+      <div class="viz-card-head"><div><p class="eyebrow">compare.cohorts</p><h3>Observed activity is not population coverage</h3></div></div>
+      <div id="vizCohorts" class="viz-frame" aria-label="Weekend weekday activity by age cohort"></div>
+    </article>
+    <article class="viz-card">
+      <div class="viz-card-head"><div><p class="eyebrow">diagnose.meaning</p><h3>Stable ranking, structured error</h3></div></div>
+      <div id="vizDiagnostics" class="viz-frame" aria-label="Temporal stability and residual geography diagnostics"></div>
+    </article>
+  </div>
+  <div class="viz-caption">
+    <span><strong>Visible evidence:</strong> repeated 5×5 spatial-block validation, out-of-fold grid predictions, residual Moran tests, and cohort-level weekday/weekend counts.</span>
+    <span><strong>Claim boundary:</strong> device-user activity over seven days; predictive association, not resident-population prevalence or causal effect.</span>
+    <span><a href="${escapeAttr(CASE_ARTIFACTS.results)}" target="_blank" rel="noreferrer">case figure</a> · <a href="${escapeAttr(CASE_ARTIFACTS.process)}" target="_blank" rel="noreferrer">research trace</a></span>
+  </div>`;
+}
+
+async function embedVisualSkill(target, spec) {
+  return window.vegaEmbed(target, spec, {
+    renderer: "svg",
+    actions: { export: true, source: false, compiled: false, editor: false },
+    tooltip: true
+  });
+}
+
+async function renderVisualEvidence() {
+  const host = document.getElementById("visualEvidence");
+  const skills = window.URBAN_VIS_SKILLS;
+  const analytics = state.analytics || {};
+  host.innerHTML = visualEvidenceMarkup();
+
+  if (!window.vegaEmbed || !skills || !analytics.predictions?.length) {
+    host.innerHTML = `<div class="visual-fallback"><h3>Interactive evidence unavailable</h3><p>The Vega runtime or analytical CSV files could not be loaded. Static results remain available below.</p><p><a href="${escapeAttr(CASE_ARTIFACTS.results)}" target="_blank" rel="noreferrer">Open the outcome-grounded case figure</a></p></div>`;
+    return;
+  }
+
+  try {
+    const viewPromises = [
+      embedVisualSkill("#vizSpatialLinked", skills.render("spatial.residual.linked", analytics.predictions)),
+      embedVisualSkill("#vizValidation", skills.render("validation.packages.compare", analytics.modelSummary)),
+      embedVisualSkill("#vizFitGap", skills.render("validation.fit_gap", analytics.modelSummary)),
+      embedVisualSkill("#vizCohorts", skills.render("population.cohort_retention", analytics.temporalSummary)),
+      embedVisualSkill("#vizDiagnostics", skills.render("diagnostic.epistemic_summary", state.findings))
+    ];
+    const runtime = { viewPromises, views: [], renderedAt: new Date().toISOString() };
+    window.URBAN_VIS_RUNTIME = runtime;
+    viewPromises.forEach((promise, index) => {
+      promise.then(result => {
+        runtime.views[index] = result.view;
+        if (index !== 0) return;
+        result.view?.addSignalListener("spatialBrush", (_name, value) => {
+          const active = value && Object.keys(value).length > 0;
+          document.getElementById("selectionStatus").textContent = active
+            ? "Spatial filter active. The observed–predicted plot and residual distribution now show only the selected geography; double-click the map to reset."
+            : "All 500 m spatial-block predictions are visible. Drag across the map to inspect a subset.";
+        });
+      }).catch(error => console.error(`Visual skill ${index} failed`, error));
+    });
+  } catch (error) {
+    console.error("Visual skill rendering failed", error);
+    host.innerHTML = `<div class="visual-fallback"><h3>Interactive evidence could not be rendered</h3><p>${escapeHtml(error.message || String(error))}</p><p><a href="${escapeAttr(CASE_ARTIFACTS.results)}" target="_blank" rel="noreferrer">Open the static case figure</a></p></div>`;
+  }
+}
+
+function renderRouteRail() {
+  const tree = state.data.tree;
+  const todo = displayPlannerTodo(asArray(state.data.workflow?.planner_todo), tree);
+  const selectedStep = stepOf(tree.nodes.find(node => nodeId(node) === state.selectedNodeId) || tree.nodes[0] || {});
+  const selectedNodeCount = (tree.active_path || tree.branch_tree?.active || []).length;
+  document.getElementById("stageRail").innerHTML = ROUTE_STAGES.map(stage => {
+    const nodes = tree.nodes.filter(node => stepOf(node) === stage.step);
+    const completed = nodes.filter(node => ["completed", "approved", "selected", "active", "merged"].includes(nodeStatus(node))).length;
+    const todoItem = todo.find(item => String(item.step_id || "").startsWith(`S${stage.step}`));
+    const stageState = completed === nodes.length && nodes.length ? "reviewed" : completed ? "in review" : (todoItem?.status || "pending");
+    const progress = nodes.length ? (completed / nodes.length) * 100 : 0;
+    return `<button type="button" class="rail-step ${selectedStep === stage.step ? "is-active" : ""}" data-route-step="${stage.step}">
+      <span class="rail-index">0${stage.step}</span>
+      <span class="rail-copy"><strong>${escapeHtml(stage.label)}</strong><span>${escapeHtml(stageState)}</span><small>${completed}/${nodes.length} reviewed or selected</small><span class="stage-progress"><i style="width:${progress}%"></i></span></span>
+    </button>`;
+  }).join("");
+  document.getElementById("routeProgress").textContent = `${selectedNodeCount}/${tree.nodes.length}`;
+  document.querySelectorAll("[data-route-step]").forEach(button => {
+    button.addEventListener("click", () => {
+      const step = Number(button.dataset.routeStep);
+      const candidates = tree.nodes.filter(node => stepOf(node) === step);
+      const target = candidates.find(node => ["completed", "selected", "active", "approved"].includes(nodeStatus(node))) || candidates[0];
+      if (target) selectNode(nodeId(target));
+    });
+  });
+}
+
+function activateWorkbenchTab(name) {
+  document.querySelectorAll("[data-workbench-tab]").forEach(button => {
+    const active = button.dataset.workbenchTab === name;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-selected", String(active));
+  });
+  document.querySelectorAll("[data-workbench-view]").forEach(view => {
+    view.hidden = view.dataset.workbenchView !== name;
+  });
+  if (name === "route") window.requestAnimationFrame(() => {
+    renderTree();
+    fitTreeToStage();
+  });
+}
+
+function setupWorkspaceInteractions() {
+  document.querySelectorAll("[data-workbench-tab]").forEach(button => {
+    button.addEventListener("click", () => activateWorkbenchTab(button.dataset.workbenchTab));
+  });
+  document.querySelectorAll("[data-thread-view]").forEach(button => {
+    button.addEventListener("click", () => {
+      const raw = button.dataset.threadView === "raw";
+      document.getElementById("dialogueTimeline").hidden = raw;
+      document.getElementById("cliTerminal").hidden = !raw;
+      document.querySelectorAll("[data-thread-view]").forEach(item => item.classList.toggle("is-active", item === button));
+    });
+  });
+  document.getElementById("researchNoteForm").addEventListener("submit", event => {
+    event.preventDefault();
+    const input = document.getElementById("researchNote");
+    const note = input.value.trim();
+    if (!note) return;
+    state.localMessages.push({ role: "human", stage: "Local research note", body: note, points: ["Not written back to the runtime route state"], local: true });
+    input.value = "";
+    renderTodoAndDialogue();
+  });
 }
 
 function renderWorkflowRail() {
@@ -863,25 +1348,29 @@ async function refresh() {
   state.data = normalizeRouteState(loaded.routeState);
   state.summary = loaded.summary;
   state.tasks = loaded.tasks;
+  state.findings = loaded.findings || fallbackFindings;
+  state.reviews = loaded.reviews || [];
+  state.manifest = loaded.manifest || null;
+  state.analytics = loaded.analytics || { modelSummary: [], temporalSummary: [], predictions: [] };
   if (!state.selectedNodeId || !state.data.tree.nodes.some(node => nodeId(node) === state.selectedNodeId)) {
     state.selectedNodeId = state.data.tree.active_path?.[0] || state.data.tree.branch_tree?.active?.[0] || nodeId(state.data.tree.nodes[0]);
   }
   renderTree();
   renderNodeDetail();
   renderTodoAndDialogue();
+  renderRouteRail();
+  renderEpistemicControl();
+  renderVisualEvidence();
   renderWorkflowRail();
   renderConditions(loaded.summary);
   setupFilters(loaded.tasks);
   document.getElementById("dataMode").textContent = loaded.mode;
   const artifacts = workflowArtifacts(state.data);
-  document.getElementById("artifactCount").textContent = `${artifacts.length} artifacts`;
-  if (!state.didInitialFit) {
-    state.didInitialFit = true;
-    window.requestAnimationFrame(fitTreeToStage);
-  }
+  document.getElementById("artifactCount").textContent = `${artifacts.length + 2} artifacts`;
 }
 
 function setupControls() {
+  setupWorkspaceInteractions();
   document.getElementById("refreshButton").addEventListener("click", refresh);
   document.getElementById("zoomOut").addEventListener("click", () => setTreeZoom(state.treeZoom - 0.12));
   document.getElementById("zoomIn").addEventListener("click", () => setTreeZoom(state.treeZoom + 0.12));

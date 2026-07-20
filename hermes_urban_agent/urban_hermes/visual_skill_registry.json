@@ -1,0 +1,72 @@
+{
+  "schema_version": "1.0",
+  "registry_name": "Urban-Hermes declarative visual analytics",
+  "renderer": {
+    "frontend_module": "frontend/urban_hermes_route_viewer/visual_skills.js",
+    "grammar": "Vega-Lite 6.4.3",
+    "runtime": "Vega 6.2.0",
+    "embed": "Vega-Embed 7.1.0"
+  },
+  "design_contract": {
+    "primary_evidence": "Visual encodings must expose an analytical result or diagnostic, not decorate agent prose.",
+    "interaction": "Use linked selection when one spatial or subgroup filter should update multiple views.",
+    "coordination": "The same field keeps a consistent scale and legend across coordinated views.",
+    "layout": "Show at most six simultaneous analytical views; place the primary evidence first.",
+    "accessibility": "Use colorblind-safe accents, direct units, readable tooltips, and grayscale-interpretable structure.",
+    "prohibitions": [
+      "3D charts",
+      "decorative gradients",
+      "drop shadows that imply depth",
+      "rainbow palettes for ordered data",
+      "unlabelled axes",
+      "free-form plotting code when a registered skill fits"
+    ]
+  },
+  "skills": [
+    {
+      "skill_id": "spatial.residual.linked",
+      "use_when": "A spatial prediction has observed values, out-of-fold predictions, coordinates, and residuals.",
+      "required_fields": ["grid_id", "lon", "lat", "observed_log_stays", "predicted_log_stays", "residual"],
+      "views": ["residual grid map", "observed-versus-predicted scatter", "residual histogram"],
+      "interaction": "An interval selection on the map filters the scatter and histogram.",
+      "epistemic_control": "Reveals whether aggregate accuracy hides geographically concentrated failure."
+    },
+    {
+      "skill_id": "validation.packages.compare",
+      "use_when": "Several feature packages or scales are compared under the same held-out validation regime.",
+      "required_fields": ["scale", "package", "model", "scheme", "r2_mean", "r2_sd"],
+      "views": ["grouped validation bars", "uncertainty/error bars"],
+      "interaction": "Tooltip exposes scale, feature package, mean performance, and uncertainty.",
+      "epistemic_control": "Separates evidence-package contribution from training-fit rhetoric."
+    },
+    {
+      "skill_id": "validation.fit_gap",
+      "use_when": "The same model has in-sample and spatially held-out scores.",
+      "required_fields": ["scale", "package", "model", "train_r2", "r2_mean"],
+      "views": ["paired dot or dumbbell comparison"],
+      "interaction": "Tooltip exposes the evaluation regime and value.",
+      "epistemic_control": "Makes parameter- and validation-contingent overclaiming visible as an outcome gap."
+    },
+    {
+      "skill_id": "population.cohort_retention",
+      "use_when": "Activity or exposure is stratified across population cohorts and time regimes.",
+      "required_fields": ["cohort", "weekend_weekday_per_day_ratio"],
+      "views": ["ordered cohort bar chart", "reference rule"],
+      "interaction": "Tooltip exposes cohort-specific ratios and counts when available.",
+      "epistemic_control": "Shows which observed groups or behaviours are retained without treating the sample as census coverage."
+    },
+    {
+      "skill_id": "diagnostic.epistemic_summary",
+      "use_when": "Diagnostics with different meanings must be shown together without being conflated.",
+      "required_fields": ["scale", "metric", "value"],
+      "views": ["grouped diagnostic comparison"],
+      "interaction": "Tooltip preserves diagnostic name, scale, and coefficient.",
+      "epistemic_control": "Allows temporal stability and spatially structured error to coexist in the same evidence surface."
+    }
+  ],
+  "manifest_contract": {
+    "required": ["skill_id", "data_path", "field_map", "route_node_id", "claim_boundary"],
+    "optional": ["filters", "title", "subtitle", "parameters", "linked_to", "review_status"],
+    "artifact_type": "interactive_visual_spec"
+  }
+}
