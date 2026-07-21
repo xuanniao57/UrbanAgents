@@ -692,6 +692,25 @@ button:active { transform: none; }
 .route-node circle,
 .route-node rect { filter: none; }
 
+.route-node .node-label-bg {
+  fill: rgba(255, 255, 255, .94);
+  stroke: none;
+}
+
+.tree-focus-active .tree-dimmed {
+  opacity: .10;
+  filter: blur(.7px);
+}
+
+.tree-focus-active .tree-highlighted {
+  opacity: 1;
+  filter: none;
+}
+
+.tree-focus-active .route-node.tree-highlighted circle {
+  stroke-width: 3.5;
+}
+
 .node-evidence-view .detail-body { padding: 16px; }
 .detail-section { border-color: var(--thin); box-shadow: none; }
 
@@ -699,6 +718,120 @@ button:active { transform: none; }
 .artifact-evidence-card {
   border-color: var(--thin);
   box-shadow: none;
+}
+
+.register-section {
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--ink);
+  background: #fff;
+}
+
+.register-section .node-decision-heading {
+  padding: 13px 15px;
+  border-bottom: 1px solid var(--ink);
+}
+
+.register-table-wrap {
+  overflow: auto;
+  max-width: 100%;
+}
+
+.evidence-register {
+  width: 100%;
+  min-width: 1120px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font: 11px/1.35 var(--sans);
+  color: var(--ink);
+}
+
+.evidence-register th,
+.evidence-register td {
+  padding: 10px 11px;
+  border-right: 1px solid var(--thin);
+  border-bottom: 1px solid var(--thin);
+  text-align: left;
+  vertical-align: top;
+}
+
+.evidence-register th {
+  background: var(--ink);
+  color: #fff;
+  font: 700 10px/1.25 var(--sans);
+  letter-spacing: .02em;
+}
+
+.evidence-register td:last-child,
+.evidence-register th:last-child { border-right: 0; }
+.evidence-register tbody tr:last-child td { border-bottom: 0; }
+.evidence-register tbody tr:nth-child(even) { background: #f7f7f4; }
+
+.evidence-register td > strong,
+.evidence-register td > span {
+  display: block;
+}
+
+.evidence-register td > span {
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 10px;
+}
+
+.evidence-register code {
+  padding: 0;
+  background: transparent;
+  color: var(--ink);
+  font: 600 10px/1.35 var(--mono);
+  overflow-wrap: anywhere;
+}
+
+.variable-evidence-register th:nth-child(1) { width: 13%; }
+.variable-evidence-register th:nth-child(2) { width: 15%; }
+.variable-evidence-register th:nth-child(3) { width: 14%; }
+.variable-evidence-register th:nth-child(4) { width: 16%; }
+.variable-evidence-register th:nth-child(5) { width: 16%; }
+.variable-evidence-register th:nth-child(6) { width: 14%; }
+.variable-evidence-register th:nth-child(7) { width: 12%; }
+
+.model-decision-register { min-width: 1180px; }
+.model-decision-register th:nth-child(1) { width: 12%; }
+.model-decision-register th:nth-child(2) { width: 19%; }
+.model-decision-register th:nth-child(3) { width: 23%; }
+.model-decision-register th:nth-child(4) { width: 9%; }
+.model-decision-register th:nth-child(5) { width: 10%; }
+.model-decision-register th:nth-child(6) { width: 8%; }
+.model-decision-register th:nth-child(7) { width: 19%; }
+
+.decision-tag {
+  width: max-content;
+  padding: 2px 6px;
+  border: 1px solid var(--ink);
+  font: 700 8px/1.2 var(--mono) !important;
+}
+
+.decision-tag[data-tone="primary"] { background: #111; color: #fff; }
+.decision-tag[data-tone="local"] { background: #dff4ee; }
+
+.merge-rule-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  border-top: 1px solid var(--ink);
+  background: #fff;
+}
+
+.merge-rule-strip > * {
+  padding: 9px 12px;
+  border-right: 1px solid var(--thin);
+  color: var(--ink);
+  font: 10px/1.25 var(--sans);
+}
+
+.merge-rule-strip strong {
+  background: var(--ink);
+  color: #fff;
+  letter-spacing: .04em;
 }
 
 @media (max-width: 1450px) {
@@ -738,4 +871,97 @@ button:active { transform: none; }
   .epistemic-ledger { grid-template-columns: 1fr; }
   .failure-card:nth-child(even) { padding-left: 10px; border-left: 0; }
   .viz-caption { display: block; }
+}
+
+/* July 2026 reduction pass: keep the interface steerable at a glance.
+   Detailed metadata remains in the notebook, node evidence and raw TUI views. */
+.topbar {
+  min-height: 64px;
+  padding-block: 8px;
+}
+
+.brand .eyebrow,
+#dataMode,
+.route-key,
+.research-question-band > p:last-child,
+.thread-attachments,
+.checkpoint-card p,
+.rail-copy > span:not(.stage-progress) {
+  display: none;
+}
+
+.workspace {
+  grid-template-columns: 178px minmax(720px, 1fr) minmax(350px, 390px);
+  height: calc(100vh - 64px);
+}
+
+.panel-head,
+.compact-head,
+.conversation-head {
+  min-height: 58px;
+  padding-block: 9px;
+}
+
+.rail-step {
+  min-height: 50px;
+  padding-block: 8px;
+}
+
+.checkpoint-section { padding-block: 10px; }
+.checkpoint-card { padding-block: 6px; }
+.checkpoint-card:nth-child(n+3) { display: none; }
+
+.research-question-band {
+  grid-template-columns: 170px minmax(0, 1fr);
+  padding-block: 18px;
+}
+
+.research-question-band h3 {
+  max-width: 780px;
+  font-size: clamp(18px, 1.35vw, 25px);
+}
+
+.visual-title-row .skill-badge { color: var(--muted); }
+.selection-status { font-size: 10px; }
+
+.thread-turn {
+  grid-template-columns: 25px 1fr;
+  gap: 8px;
+  padding-block: 12px;
+}
+
+.thread-avatar {
+  width: 23px;
+  height: 23px;
+}
+
+.thread-meta { margin-bottom: 5px; }
+.thread-card > p { margin-bottom: 4px; line-height: 1.45; }
+.thread-points { margin-top: 5px; padding-left: 14px; }
+.thread-points li:nth-child(n+3) { display: none; }
+
+@media (max-width: 1450px) {
+  .workspace { grid-template-columns: 165px minmax(650px, 1fr) minmax(330px, 360px); }
+}
+
+/* Keep the primary research surface visual and legible. Explanatory
+   microcopy belongs in the notebook, evidence card, or paper caption. */
+.eyebrow,
+.run-summary,
+.rail-copy > span:not(.stage-progress),
+.rail-copy small,
+.selection-status,
+.viz-caption,
+.composer-footer span,
+.thread-meta time,
+.visual-title-row .skill-badge,
+.figure-grade span,
+.node-caption {
+  display: none !important;
+}
+
+/* Research evidence stays readable; only secondary grey microcopy is removed. */
+.thread-points {
+  color: var(--ink);
+  font-size: 11px;
 }

@@ -1,10 +1,12 @@
 const DEFAULT_PATHS = {
-  state: "../../submissions/urban_cup_2026/process_evidence/route_tree_state.json",
+  state: "../../submissions/urban_cup_2026/process_evidence/case_decision_git_tree_20260722.json",
   summary: "../../experiments/urbanworkflowbench_60tasks_20260524/condition_traces/all60_design_gate_20260524/condition_trace_score_summary.json",
   decisions: "../../experiments/urbanworkflowbench_60tasks_20260524/condition_traces/all60_design_gate_20260524/full/all60_design_gate_decisions.csv",
   findings: "../../submissions/urban_cup_2026/outputs/case_findings.json",
   manifest: "../../submissions/urban_cup_2026/reproducibility_manifest.json",
   modelSummary: "../../submissions/urban_cup_2026/outputs/model_validation_summary.csv",
+  variableAudit: "../../submissions/urban_cup_2026/outputs/variable_evidence_register.csv",
+  modelDecision: "../../submissions/urban_cup_2026/outputs/model_decision_table.csv",
   temporalSummary: "../../submissions/urban_cup_2026/outputs/temporal_cohort_summary.csv",
   predictions: "../../submissions/urban_cup_2026/outputs/combined_rf_oof_predictions.csv",
   reviews: [
@@ -47,7 +49,7 @@ const fallbackFindings = {
 const fallback = {
   schema_version: "fallback",
   tree: {
-    meta: { task: "Street-vitality route workspace fallback" },
+    meta: { task: "Street-vitality Git tree workspace fallback" },
     nodes: [
       n("RO-A", "research_object", "500 m grid with all-week aggregate activity.", [], "completed"),
       n("RO-B", "research_object", "500 m grid with weekday/weekend or day-period activity.", [], "suggested"),
@@ -57,7 +59,7 @@ const fallback = {
       n("ME-2B", "model_execution", "Time-stratified fitted models.", ["RO-B", "FP-1"], "suggested"),
       n("ME-3A", "model_execution", "Spatial heterogeneity model with bandwidth and kernel.", ["ME-1A"], "suggested"),
       n("MX-1", "model_explanation", "SHAP, PDP, importance, and residual diagnostics.", ["ME-1A"], "completed"),
-      n("RC-1", "route_comparison", "Compare completed route outputs and report options.", ["ME-1A", "MX-1"], "waiting_choice"),
+      n("RC-1", "route_comparison", "Compare completed branch outputs and report options.", ["ME-1A", "MX-1"], "waiting_choice"),
       n("CS-1", "claim_synthesis", "Calibrate final claims and write the selected report.", ["RC-1"], "pending")
     ],
     edges: [],
@@ -68,9 +70,9 @@ const fallback = {
     planner_todo: [
       { step_id: "S1", title: "Research object", status: "completed" },
       { step_id: "S2", title: "Variable package", status: "completed" },
-      { step_id: "S3", title: "Model route", status: "active" },
+      { step_id: "S3", title: "Model branch", status: "active" },
       { step_id: "S4", title: "Explanation and diagnostics", status: "pending" },
-      { step_id: "S5", title: "Route comparison and report options", status: "waiting_choice" },
+      { step_id: "S5", title: "Branch comparison, merge, and report options", status: "waiting_choice" },
       { step_id: "S6", title: "Claim synthesis and calibrated report", status: "pending" }
     ],
     patch_events: [],
@@ -86,13 +88,14 @@ const state = {
   selectedNodeId: null,
   tasks: [],
   findings: fallbackFindings,
-  analytics: { modelSummary: [], temporalSummary: [], predictions: [] },
+  analytics: { modelSummary: [], temporalSummary: [], predictions: [], variableAudit: [], modelDecision: [] },
   reviews: [],
   manifest: null,
   localMessages: [],
   controlActions: {},
   refreshTimer: null,
   treeZoom: 0.78,
+  treeFocusMode: new URLSearchParams(window.location.search).get("treeFocus") || "all",
   panning: null,
   didInitialFit: false
 };
@@ -100,9 +103,9 @@ const state = {
 const ROUTE_STAGES = [
   { step: 1, label: "research object" },
   { step: 2, label: "variable package" },
-  { step: 3, label: "model route" },
+  { step: 3, label: "model branch" },
   { step: 4, label: "explanation review" },
-  { step: 5, label: "route comparison" },
+  { step: 5, label: "compare + merge" },
   { step: 6, label: "claim synthesis" }
 ];
 
@@ -149,7 +152,7 @@ async function loadData() {
   const stateParam = params.get("state");
   const statePath = resolveStatePath(stateParam || DEFAULT_PATHS.state);
   try {
-    const [routeState, summary, decisionsText, findings, manifest, reviews, modelSummaryText, temporalSummaryText, predictionsText] = await Promise.all([
+    const [routeState, summary, decisionsText, findings, manifest, reviews, modelSummaryText, temporalSummaryText, predictionsText, variableAuditText, modelDecisionText] = await Promise.all([
       loadJson(statePath),
       loadJson(DEFAULT_PATHS.summary).catch(() => null),
       loadText(DEFAULT_PATHS.decisions).catch(() => ""),
@@ -158,7 +161,9 @@ async function loadData() {
       Promise.all(DEFAULT_PATHS.reviews.map(path => loadJson(path).catch(() => null))),
       loadText(DEFAULT_PATHS.modelSummary).catch(() => ""),
       loadText(DEFAULT_PATHS.temporalSummary).catch(() => ""),
-      loadText(DEFAULT_PATHS.predictions).catch(() => "")
+      loadText(DEFAULT_PATHS.predictions).catch(() => ""),
+      loadText(DEFAULT_PATHS.variableAudit).catch(() => ""),
+      loadText(DEFAULT_PATHS.modelDecision).catch(() => "")
     ]);
     return {
       routeState,
@@ -170,9 +175,11 @@ async function loadData() {
       analytics: {
         modelSummary: modelSummaryText ? parseCsv(modelSummaryText) : [],
         temporalSummary: temporalSummaryText ? parseCsv(temporalSummaryText) : [],
-        predictions: predictionsText ? parseCsv(predictionsText) : []
+        predictions: predictionsText ? parseCsv(predictionsText) : [],
+        variableAudit: variableAuditText ? parseCsv(variableAuditText) : [],
+        modelDecision: modelDecisionText ? parseCsv(modelDecisionText) : []
       },
-      mode: stateParam ? `live route state: ${stateParam}` : "default live route state"
+      mode: stateParam ? `live Git-tree state: ${stateParam}` : "default Git-tree state"
     };
   } catch (error) {
     return {
@@ -182,7 +189,7 @@ async function loadData() {
       findings: fallbackFindings,
       manifest: null,
       reviews: [],
-      analytics: { modelSummary: [], temporalSummary: [], predictions: [] },
+      analytics: { modelSummary: [], temporalSummary: [], predictions: [], variableAudit: [], modelDecision: [] },
       mode: `embedded fallback: ${error.message}`
     };
   }
@@ -198,8 +205,10 @@ function normalizeRouteState(routeState) {
       meta: routeState.meta || {},
       nodes: routeState.nodes || [],
       edges: routeState.edges || [],
+      visual_edges: routeState.visual_edges || routeState.edges || [],
       branch_tree: routeState.branch_tree || {},
-      active_path: routeState.active_path || []
+      active_path: routeState.active_path || [],
+      main_path: routeState.main_path || routeState.active_path || []
     },
     workflow: {
       planner_todo: routeState.planner_todo || [],
@@ -225,6 +234,68 @@ function nodeQuestion(node) {
 
 function nodeType(node) {
   return node.node_type || node.type || "route_node";
+}
+
+function nodeDisplayLabel(node) {
+  if (node.display_label || node.short_label) return node.display_label || node.short_label;
+  const id = nodeId(node);
+  const type = nodeType(node);
+  let match;
+  if (type === "research_object") {
+    match = id.match(/^RO\d+_(\d+)m_(wdwe|period)/i);
+    if (match) return `${match[1]} m scale`;
+    return "Research object";
+  }
+  if (type === "feature_package") {
+    if (/built|FP1/i.test(id)) return "Built form";
+    if (/activity|FP2/i.test(id)) return "Local opportunity";
+    return "Evidence package";
+  }
+  if (type === "model_execution") {
+    match = id.match(/^ME_RO(\d+)_FP(\d+)_(OLS|RF|GWRF|GWR)$/i);
+    if (match) {
+      const evidence = match[2] === "1" ? "BF" : "Local";
+      return `${match[1] === "1" ? "500 m" : "200 m"} · ${evidence} · ${match[3].toUpperCase()}`;
+    }
+    return "Model result";
+  }
+  if (type === "diagnostic") return "Residual spatial check";
+  if (type === "route_comparison") return "Compare + merge";
+  if (type === "claim_synthesis") return "Bounded claims";
+  return shorten(nodeQuestion(node), 22);
+}
+
+function nodeStateLabel(node, tree) {
+  const status = branchState(node, tree);
+  return ({ selected: "main", suggested: "candidate", deferred: "deferred", blocked: "blocked", merge: "merge" })[status] || status;
+}
+
+function treeFocusNode(node, mode = state.treeFocusMode) {
+  if (!mode || mode === "all") return true;
+  const id = nodeId(node);
+  const step = stepOf(node);
+  if (mode === "variables") return step <= 2;
+  if (mode === "models") {
+    return ["model_execution", "diagnostic", "route_comparison"].includes(nodeType(node));
+  }
+  return true;
+}
+
+function treeFocusStep(step, mode = state.treeFocusMode) {
+  if (!mode || mode === "all") return true;
+  if (mode === "variables") return step <= 2;
+  if (mode === "models") return step >= 3 && step <= 5;
+  return true;
+}
+
+function treeFocusEdge(source, target, mode = state.treeFocusMode) {
+  if (!mode || mode === "all") return true;
+  if (mode === "variables") return stepOf(source) <= 2 && stepOf(target) <= 2;
+  if (mode === "models") {
+    const visibleTypes = new Set(["model_execution", "diagnostic", "route_comparison"]);
+    return visibleTypes.has(nodeType(source)) && visibleTypes.has(nodeType(target));
+  }
+  return true;
 }
 
 function nodeDeps(node) {
@@ -344,8 +415,8 @@ function buildLayout(tree) {
     1,
     ...ROUTE_STAGES.map(stageItem => tree.nodes.filter(node => (visualSteps.get(nodeId(node)) || stepOf(node)) === stageItem.step).length)
   );
-  const width = Math.max(1180, Math.round(stageWidth / Math.max(state.treeZoom, 0.78)), ROUTE_STAGES.length * 196);
-  const height = Math.max(430, 150 + maxColumnSize * 100);
+  const width = Math.max(1320, Math.round(stageWidth / Math.max(state.treeZoom, 0.78)), ROUTE_STAGES.length * 228);
+  const height = Math.max(460, 160 + maxColumnSize * 112);
   // Reserve enough space for the first stage label and node captions. The
   // previous 64 px margin clipped "Step 1" in screenshots and narrow views.
   const margin = { left: 128, right: 220, top: 72, bottom: 44 };
@@ -371,6 +442,19 @@ function buildLayout(tree) {
 }
 
 function orderWeight(node, tree) {
+  const id = nodeId(node);
+  const caseOrder = [
+    "ME_RF_spatial_block",
+    "ME_GWR_local_linear",
+    "ME_GWRF_k48",
+    "ME_GWRF_k80",
+    "ME_GWRF_k120",
+    "DIAG_RF_residual",
+    "DIAG_GWR_interpretation",
+    "DIAG_GWRF_budget"
+  ];
+  const explicitIndex = caseOrder.indexOf(id);
+  if (explicitIndex >= 0) return explicitIndex;
   const stateName = branchState(node, tree);
   const weights = { selected: 0, merge: 1, suggested: 2, deferred: 3, blocked: 4 };
   return weights[stateName] ?? 2;
@@ -385,6 +469,8 @@ function renderTree() {
   svg.style.width = `${Math.round(layout.width * state.treeZoom)}px`;
   svg.style.height = `${Math.round(layout.height * state.treeZoom)}px`;
   svg.innerHTML = "";
+  svg.classList.toggle("tree-focus-active", state.treeFocusMode !== "all");
+  svg.dataset.focusMode = state.treeFocusMode;
   const zoomValue = document.getElementById("zoomValue");
   if (zoomValue) zoomValue.textContent = `${Math.round(state.treeZoom * 100)}%`;
 
@@ -399,8 +485,9 @@ function renderTree() {
       : 0;
     if (!x) return;
     const label = stageItem.label;
-    const line = el("line", { x1: x, x2: x, y1: 38, y2: layout.height - 28, class: "step-guide" });
-    const text = el("text", { x, y: 28, class: "step-label", "text-anchor": "middle" });
+    const focusClass = treeFocusStep(step) ? "tree-highlighted" : "tree-dimmed";
+    const line = el("line", { x1: x, x2: x, y1: 38, y2: layout.height - 28, class: `step-guide ${focusClass}` });
+    const text = el("text", { x, y: 28, class: `step-label ${focusClass}`, "text-anchor": "middle" });
     text.textContent = `Step ${step}: ${label}`;
     svg.appendChild(line);
     svg.appendChild(text);
@@ -422,25 +509,37 @@ function renderTree() {
     const sourceState = branchState(source.node, tree);
     const targetState = branchState(target.node, tree);
     const relationClass = String(relation || "dependency").replace(/[^a-z0-9_-]/gi, "_");
-    const cls = ["edge", sourceState, targetState, relationClass, relation === "future" ? "future" : ""].join(" ");
+    const focusClass = treeFocusEdge(source.node, target.node) ? "tree-highlighted" : "tree-dimmed";
+    const cls = ["edge", sourceState, targetState, relationClass, relation === "future" ? "future" : "", focusClass].join(" ");
     svg.appendChild(el("path", { d: path, class: cls, "marker-end": "url(#arrow)" }));
   }
 
   for (const { x, y, node } of layout.positions.values()) {
     const id = nodeId(node);
-    const g = el("g", { class: `route-node ${branchState(node, tree)} ${state.selectedNodeId === id ? "is-focused" : ""}`, tabindex: "0", role: "button" });
+    const focusClass = treeFocusNode(node) ? "tree-highlighted" : "tree-dimmed";
+    const g = el("g", { class: `route-node ${branchState(node, tree)} ${state.selectedNodeId === id ? "is-focused" : ""} ${focusClass}`, tabindex: "0", role: "button" });
     g.dataset.nodeId = id;
     g.addEventListener("keydown", event => {
       if (event.key === "Enter" || event.key === " ") selectNode(id);
     });
-    const circle = el("circle", { cx: x, cy: y, r: 14 });
-    const textX = x + 22;
+    const circle = el("circle", { cx: x, cy: y, r: 16 });
+    const textX = x + 26;
     const textAnchor = "start";
-    const label = el("text", { x: textX, y: y - 5, class: "node-label", "text-anchor": textAnchor });
-    label.textContent = id;
-    const title = el("text", { x: textX, y: y + 13, class: "node-caption", "text-anchor": textAnchor });
-    title.textContent = shorten(nodeQuestion(node), 30);
+    const displayLabel = nodeDisplayLabel(node);
+    const labelBg = el("rect", {
+      x: textX - 5,
+      y: y - 14,
+      width: Math.min(230, Math.max(54, displayLabel.length * 8.4 + 10)),
+      height: 25,
+      rx: 2,
+      class: "node-label-bg"
+    });
+    const label = el("text", { x: textX, y: y + 5, class: "node-label", "text-anchor": textAnchor });
+    label.textContent = displayLabel;
+    const tooltip = el("title");
+    tooltip.textContent = `${id} — ${nodeQuestion(node)}`;
     g.appendChild(circle);
+    g.appendChild(labelBg);
     if (branchState(node, tree) === "blocked") {
       g.appendChild(el("line", { x1: x - 7, y1: y - 7, x2: x + 7, y2: y + 7 }));
       g.appendChild(el("line", { x1: x + 7, y1: y - 7, x2: x - 7, y2: y + 7 }));
@@ -449,7 +548,7 @@ function renderTree() {
       g.appendChild(el("circle", { cx: x, cy: y, r: 20, class: "outer-ring" }));
     }
     g.appendChild(label);
-    g.appendChild(title);
+    g.appendChild(tooltip);
     svg.appendChild(g);
   }
 }
@@ -566,10 +665,16 @@ function nodeDecisionEvidenceMarkup(node) {
   const id = nodeId(node);
   const f500 = scaleFinding("500m");
   const f200 = scaleFinding("200m");
+  if (["FP1_built_form", "FP2_activity_opportunity"].includes(id)) {
+    return variableEvidenceRegisterMarkup(state.analytics.variableAudit || []);
+  }
+  if (id === "RC_model_family_merge") {
+    return modelDecisionRegisterMarkup(state.analytics.modelDecision || []);
+  }
   if (id === "RC_16route_comparison") {
     return `<section class="detail-section node-decision-evidence">
       <div class="node-decision-heading">
-        <div><p class="eyebrow">Decision evidence / expanded</p><h3>Compare candidate results before selecting the reporting route</h3></div>
+        <div><p class="eyebrow">Decision evidence / expanded</p><h3>Compare candidate results before selecting the reporting branch</h3></div>
         <span class="status-pill">human checkpoint</span>
       </div>
       <div class="node-decision-grid">
@@ -584,7 +689,7 @@ function nodeDecisionEvidenceMarkup(node) {
           <div id="nodeDecisionFitGap" class="node-decision-viz" aria-label="Training and spatial validation comparison"></div>
           <div class="node-verdict" data-tone="block">
             <span>BLOCK</span><strong>Training-fit-only claim</strong>
-            <p>Keep 500 m as the main reporting route and 200 m as scale sensitivity; do not treat training fit as transfer evidence.</p>
+            <p>Keep 500 m as the main reporting branch and 200 m as scale sensitivity; do not treat training fit as transfer evidence.</p>
           </div>
         </article>
       </div>
@@ -608,6 +713,67 @@ function nodeDecisionEvidenceMarkup(node) {
     </section>`;
   }
   return "";
+}
+
+function variableEvidenceRegisterMarkup(rows) {
+  if (!rows.length) return "";
+  const body = rows.map(row => `<tr>
+    <td><strong>${escapeHtml(row.package)}</strong><span>${escapeHtml(row.data_source)}</span></td>
+    <td><code>${escapeHtml(row.variable)}</code></td>
+    <td>${escapeHtml(row.operational_meaning)}</td>
+    <td>${escapeHtml(row.spatial_support)}</td>
+    <td>${escapeHtml(row.time_support)}</td>
+    <td>${escapeHtml(row.people_support)}</td>
+    <td>${escapeHtml(row.claim_boundary)}</td>
+  </tr>`).join("");
+  return `<section class="detail-section node-decision-evidence register-section variable-register-section">
+    <div class="node-decision-heading">
+      <div><h3>Variable evidence register</h3></div>
+      <span class="status-pill">passive evidence boundary</span>
+    </div>
+    <div class="register-table-wrap">
+      <table class="evidence-register variable-evidence-register">
+        <thead><tr><th>Evidence package / source</th><th>Variable</th><th>Operational meaning</th><th>Spatial support</th><th>Temporal support</th><th>People represented</th><th>Admitted use</th></tr></thead>
+        <tbody>${body}</tbody>
+      </table>
+    </div>
+  </section>`;
+}
+
+function modelDecisionRegisterMarkup(rows) {
+  if (!rows.length) return "";
+  const decisionLabel = value => ({
+    admit_primary: "PRIMARY",
+    admit_diagnostic: "DIAGNOSTIC",
+    retain_bounded_local_branch: "RETAIN LOCAL",
+    retain_parameter_sensitivity: "SENSITIVITY"
+  })[value] || String(value || "").replaceAll("_", " ").toUpperCase();
+  const body = rows.map(row => {
+    const r2Label = row.r2_kind === "fitted_diagnostic" ? "fitted" : "validated";
+    const tone = row.decision === "admit_primary" ? "primary" : row.decision === "retain_bounded_local_branch" ? "local" : "secondary";
+    return `<tr>
+      <td><strong>${escapeHtml(row.model_family)}</strong><span class="decision-tag" data-tone="${escapeAttr(tone)}">${escapeHtml(decisionLabel(row.decision))}</span></td>
+      <td>${escapeHtml(row.configuration)}</td>
+      <td><strong>${escapeHtml(row.validation_regime)}</strong><span>${escapeHtml(row.comparability_note)}</span></td>
+      <td><strong>${metric(row.reported_r2)}</strong><span>${escapeHtml(r2Label)} R<sup>2</sup></span></td>
+      <td><strong>${metric(row.residual_moran_i)}</strong><span>p=${metric(row.residual_moran_p)}</span></td>
+      <td><strong>${Number(row.elapsed_sec).toFixed(1)} s</strong></td>
+      <td>${escapeHtml(row.claim_role)}</td>
+    </tr>`;
+  }).join("");
+  return `<section class="detail-section node-decision-evidence register-section model-register-section">
+    <div class="node-decision-heading">
+      <div><h3>Model-family decision register</h3></div>
+      <span class="status-pill">active analytical choice</span>
+    </div>
+    <div class="register-table-wrap">
+      <table class="evidence-register model-decision-register">
+        <thead><tr><th>Model / branch</th><th>Parameterization</th><th>Validation regime</th><th>Reported R<sup>2</sup></th><th>Residual Moran's I</th><th>Runtime</th><th>Scientific role after merge</th></tr></thead>
+        <tbody>${body}</tbody>
+      </table>
+    </div>
+    <div class="merge-rule-strip"><strong>MERGE BY SCIENTIFIC ROLE</strong><span>RF for spatial transfer</span><span>GWR for local linear diagnostics</span><span>GWRF for bounded nonlinear sensitivity</span><span>BLOCK causal and population-wide claims</span></div>
+  </section>`;
 }
 
 async function renderNodeDecisionEvidence(node) {
@@ -795,7 +961,7 @@ function terminalLines(data) {
   lines.push("────────────────────────────────────────────────");
   lines.push(`● ${task}`);
   lines.push("╭─ Hermes ──────────────────────────────────────╮");
-  lines.push(`  route state loaded: ${data.tree.nodes.length} nodes, ${(data.tree.edges || []).length} links`);
+  lines.push(`  Git tree loaded: ${data.tree.nodes.length} nodes, ${(data.tree.edges || []).length} links`);
   lines.push("╰────────────────────────────────────────────────╯");
   for (const item of displayPlannerTodo(asArray(workflow.planner_todo), data.tree)) {
     lines.push(`  ┊ todo   ${item.step_id || ""}  ${item.title || item.step || ""}  [${item.status || "pending"}]`);
@@ -822,7 +988,7 @@ function terminalLines(data) {
   if (validation.issues?.length) {
     lines.push(`  ┊ review ${validation.issues.length} validation issue(s): ${validation.issues.join("; ")}`);
   } else {
-    lines.push("  ┊ review route state validation: no recorded issues");
+    lines.push("  ┊ review Git-tree validation: no recorded issues");
   }
   return lines;
 }
@@ -843,7 +1009,7 @@ function displayPlannerTodo(todo, tree) {
       {
         ...legacy,
         step_id: "S5_route_comparison",
-        title: "Route comparison and report-option selection",
+        title: "Branch comparison, merge, and report-option selection",
         status: legacy.status || "completed"
       },
       {
@@ -891,9 +1057,9 @@ function researchThread(data) {
     },
     {
       role: "planner",
-      stage: "S1–S3 / route construction",
-      body: `I represented the study as a typed route graph with ${candidateCount} candidate nodes and ${activeCount} nodes on the selected path.`,
-      points: ["Two research objects: 500 m and 200 m grids", "Two feature packages: built form and activity opportunity", "Matched model and validation branches"]
+      stage: "S1–S3 / Git tree construction",
+      body: `I represented the study as a research Git tree with ${candidateCount} candidate nodes and ${activeCount} nodes on the selected path.`,
+      points: ["Two research objects: 500 m and 200 m grids", "Two feature packages: built form and local opportunity", "Matched model and validation branches"]
     },
     {
       role: "human",
@@ -906,8 +1072,8 @@ function researchThread(data) {
     {
       role: "worker",
       stage: "S2–S3 / execution",
-      body: "Executed 11 of 12 matched OLS, random-forest, and GWR routes. The failed 200 m GWR route remains visible; GWRF stays deferred until its own method gate is satisfied.",
-      points: ["Every output is bound to a route node", "Validation results are stored separately from training fit", shorten(s3.claim_impact || "Model-specific limitations are carried forward to claim review.", 180)]
+      body: "Executed 11 of 12 matched OLS, random-forest, and GWR branches. The failed 200 m GWR branch remains visible; GWRF stays deferred until its own method gate is satisfied.",
+      points: ["Every output is bound to a Git-tree node", "Validation results are stored separately from training fit", shorten(s3.claim_impact || "Model-specific limitations are carried forward to claim review.", 180)]
     },
     {
       role: "reviewer",
@@ -931,7 +1097,7 @@ function researchThread(data) {
       failure: "active",
       stage: "Parameter & validation checkpoint",
       body: s3.reviewer_correction || "Model and validation choices materially change the apparent strength of the result.",
-      points: [`500 m RF: train R² ${metric(f500.train_r2)} → spatial R² ${metric(f500.r2_mean)}`, `200 m RF: train R² ${metric(f200.train_r2)} → spatial R² ${metric(f200.r2_mean)}`, "Do not select a route from training fit alone"]
+      points: [`500 m RF: train R² ${metric(f500.train_r2)} → spatial R² ${metric(f500.r2_mean)}`, `200 m RF: train R² ${metric(f200.train_r2)} → spatial R² ${metric(f200.r2_mean)}`, "Do not select a branch from training fit alone"]
     },
     {
       role: "reviewer",
@@ -990,7 +1156,7 @@ function cleanTerminalText(data) {
     "URBAN-HERMES / REVIEWABLE RESEARCH RUNTIME",
     `session   ${data.tree.meta?.state_id || data.tree.meta?.session_id || "active"}`,
     `question  ${task}`,
-    `route     ${data.tree.nodes.length} nodes / ${(data.tree.edges || []).length} dependencies`,
+    `git tree  ${data.tree.nodes.length} nodes / ${(data.tree.edges || []).length} dependencies`,
     ""
   ];
   for (const item of displayPlannerTodo(asArray(workflow.planner_todo), data.tree)) {
@@ -1003,7 +1169,7 @@ function cleanTerminalText(data) {
   for (const artifact of workflowArtifacts(data).slice(0, 12)) {
     lines.push(`artifact  ${artifact.node_id || artifact.branch_id || "node"} <= ${artifact.title || fileName(artifact.path || "")}`);
   }
-  lines.push(`review    ${(data.validation?.issues || []).length ? data.validation.issues.join("; ") : "route state validation passed"}`);
+  lines.push(`review    ${(data.validation?.issues || []).length ? data.validation.issues.join("; ") : "Git-tree validation passed"}`);
   return lines.join("\n");
 }
 
@@ -1034,7 +1200,7 @@ function epistemicCards() {
       title: "Validation regime",
       source: `500 m random forest: training R² ${metric(f500.train_r2)}; spatial-block R² ${metric(f500.r2_mean)}`,
       consequence: "A train-only result overstates transfer to held-out urban zones and creates a fit-trap narrative.",
-      preventable: "Yes. Rank routes by repeated spatial validation, not training fit.",
+      preventable: "Yes. Rank branches by repeated spatial validation, not training fit.",
       action: "Block train-only superiority claims",
       button: "Block claim"
     },
@@ -1114,7 +1280,7 @@ function recordControlAction(cardId) {
     role: "human",
     stage: "Human checkpoint / local preview",
     body: `Control recorded: ${card.action}.`,
-    points: [`${card.title}: ${card.gate}`, "This preview is not written back to the runtime route state."],
+    points: [`${card.title}: ${card.gate}`, "This preview is not written back to the runtime Git tree."],
     local: true
   });
   renderEpistemicControl();
@@ -1168,7 +1334,7 @@ function visualEvidenceMarkup() {
       <div id="vizFitGap" class="viz-frame" aria-label="Training and spatial validation fit gap"></div>
     </article>
     <article class="viz-card" id="metric-population-coverage">
-      <div class="viz-card-head"><div><p class="eyebrow">compare.cohorts</p><h3>Observed activity is not population coverage</h3></div></div>
+      <div class="viz-card-head"><div><p class="eyebrow">compare.cohorts</p><h3>The device-user vitality proxy is not population coverage</h3></div></div>
       <div id="vizCohorts" class="viz-frame" aria-label="Weekend weekday activity by age cohort"></div>
     </article>
     <article class="viz-card">
@@ -1333,7 +1499,7 @@ function setupWorkspaceInteractions() {
     const input = document.getElementById("researchNote");
     const note = input.value.trim();
     if (!note) return;
-    state.localMessages.push({ role: "human", stage: "Local research note", body: note, points: ["Not written back to the runtime route state"], local: true });
+    state.localMessages.push({ role: "human", stage: "Local research note", body: note, points: ["Not written back to the runtime Git tree"], local: true });
     input.value = "";
     renderTodoAndDialogue();
   });
@@ -1489,7 +1655,7 @@ async function refresh() {
   state.findings = loaded.findings || fallbackFindings;
   state.reviews = loaded.reviews || [];
   state.manifest = loaded.manifest || null;
-  state.analytics = loaded.analytics || { modelSummary: [], temporalSummary: [], predictions: [] };
+  state.analytics = loaded.analytics || { modelSummary: [], temporalSummary: [], predictions: [], variableAudit: [], modelDecision: [] };
   if (!state.selectedNodeId || !state.data.tree.nodes.some(node => nodeId(node) === state.selectedNodeId)) {
     state.selectedNodeId = state.data.tree.active_path?.[0] || state.data.tree.branch_tree?.active?.[0] || nodeId(state.data.tree.nodes[0]);
   }
