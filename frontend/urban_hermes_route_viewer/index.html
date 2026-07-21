@@ -10,6 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Kode+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css?v=20260717e">
   <link rel="stylesheet" href="flat_workspace.css?v=20260717e">
+  <link rel="stylesheet" href="vendor/maplibre-gl-5.24.0.css">
 </head>
 <body>
   <header class="topbar">
@@ -113,7 +114,7 @@
                 <p class="eyebrow">Outcome-grounded evidence</p>
                 <h3>Map → select → compare → diagnose</h3>
               </div>
-              <span class="skill-badge">Vega-Lite linked views</span>
+              <span class="skill-badge">deck.gl spatial + Vega-Lite evidence</span>
             </div>
             <div id="selectionStatus" class="selection-status" aria-live="polite">All 500 m spatial-block predictions are visible. Drag across the map to inspect a subset.</div>
             <div id="visualEvidence" class="visual-evidence"></div>
@@ -175,7 +176,10 @@
   <script src="vendor/vega-6.2.0.min.js"></script>
   <script src="vendor/vega-lite-6.4.3.min.js"></script>
   <script src="vendor/vega-embed-7.1.0.min.js"></script>
-  <script src="visual_skills.js?v=20260717e"></script>
-  <script src="app.js?v=20260717e"></script>
+  <script src="vendor/maplibre-gl-5.24.0.js"></script>
+  <script src="vendor/deck.gl-9.3.7.min.js"></script>
+  <script src="spatial_skills.js?v=20260720a"></script>
+  <script src="visual_skills.js?v=20260720a"></script>
+  <script src="app.js?v=20260720a"></script>
 </body>
 </html>

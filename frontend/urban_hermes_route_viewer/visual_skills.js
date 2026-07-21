@@ -175,6 +175,68 @@
     });
   }
 
+  function spatialResidualDiagnostics(rows) {
+    const values = cleanRows(rows, [
+      "observed_log_stays",
+      "predicted_log_stays",
+      "residual"
+    ]);
+    const subtitle = `${values.length} spatial-block out-of-fold grid cells`;
+    const tooltip = [
+      { field: "grid_id", type: "nominal", title: "Grid" },
+      { field: "observed_log_stays", type: "quantitative", title: "Observed log stays", format: ".2f" },
+      { field: "predicted_log_stays", type: "quantitative", title: "Predicted log stays", format: ".2f" },
+      { field: "residual", type: "quantitative", title: "Residual", format: ".2f" }
+    ];
+
+    return withBase({
+      data: { values },
+      vconcat: [
+        {
+          width: 385,
+          height: 235,
+          title: { text: "Observed vs predicted", subtitle },
+          layer: [
+            {
+              mark: { type: "point", filled: true, size: 38, opacity: 0.74, color: COLORS.blue },
+              encoding: {
+                x: { field: "observed_log_stays", type: "quantitative", title: "Observed log stays", scale: { zero: false } },
+                y: { field: "predicted_log_stays", type: "quantitative", title: "Predicted log stays", scale: { zero: false } },
+                tooltip
+              }
+            },
+            {
+              data: { values: [{ x: 3, y: 3 }, { x: 13, y: 13 }] },
+              mark: { type: "line", color: COLORS.ink, strokeDash: [5, 4], opacity: 0.65 },
+              encoding: {
+                x: { field: "x", type: "quantitative" },
+                y: { field: "y", type: "quantitative" }
+              }
+            }
+          ]
+        },
+        {
+          width: 385,
+          height: 95,
+          title: { text: "Residual distribution", subtitle: "Zero-centred, narrow errors are preferable." },
+          transform: [{ bin: { maxbins: 28 }, field: "residual", as: ["bin0", "bin1"] }],
+          mark: { type: "bar", color: COLORS.ink },
+          encoding: {
+            x: { field: "bin0", bin: "binned", type: "quantitative", title: "Residual (log stays)" },
+            x2: { field: "bin1" },
+            y: { aggregate: "count", type: "quantitative", title: "Grid cells" },
+            tooltip: [
+              { field: "bin0", type: "quantitative", title: "From", format: ".2f" },
+              { field: "bin1", type: "quantitative", title: "To", format: ".2f" },
+              { aggregate: "count", type: "quantitative", title: "Grid cells" }
+            ]
+          }
+        }
+      ],
+      spacing: 22
+    });
+  }
+
   function validationComparison(rows) {
     const packageLabels = {
       built_form: "Built form",
@@ -366,6 +428,7 @@
 
   const REGISTRY = Object.freeze({
     "spatial.residual.linked": { renderer: spatialResidualLinked, dataKey: "predictions" },
+    "spatial.residual.diagnostics": { renderer: spatialResidualDiagnostics, dataKey: "predictions" },
     "validation.packages.compare": { renderer: validationComparison, dataKey: "modelSummary" },
     "validation.fit_gap": { renderer: fitGap, dataKey: "modelSummary" },
     "population.cohort_retention": { renderer: cohortRetention, dataKey: "temporalSummary" },
@@ -383,6 +446,7 @@
     registry: REGISTRY,
     render,
     spatialResidualLinked,
+    spatialResidualDiagnostics,
     validationComparison,
     fitGap,
     cohortRetention,

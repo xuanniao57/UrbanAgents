@@ -69,7 +69,17 @@ The implementation is based on what can be verified from the two cited systems r
 
 - LightVA explicitly describes Python analysis with pandas and Altair, compiled to Vega-Lite, including brushing, tooltips, legends, linked views, and coordinated layouts. Its official project page publishes the paper, appendix, demo, and slides, but no implementation repository.
 - ProactiveVA's appendix explicitly describes Tableau dashboards and the Tableau Embedding API, with UI-agent actions for reading data, selecting marks, and filtering. The public GitHub repository is the academic project-page source, not the visual-analytics system implementation.
-- Urban-Hermes therefore reproduces the public design pattern through a locally vendored Vega stack: Vega 6.2.0, Vega-Lite 6.4.3, and Vega-Embed 7.1.0. The declarative specs live in `visual_skills.js`; the LLM chooses a registered skill and parameters rather than generating ad-hoc plotting code.
+- Neither paper documents deck.gl as its map renderer. Urban-Hermes adopts deck.gl independently because GPU-backed point, grid, H3, trajectory, and GeoJSON layers fit urban spatial evidence better than forcing every map into a statistical chart grammar.
+- Urban-Hermes uses a layered stack: deck.gl 9.3.7 and MapLibre GL JS 5.24.0 for interactive spatial evidence; Vega 6.2.0, Vega-Lite 6.4.3, and Vega-Embed 7.1.0 for statistical and coordinated vector views. The declarative specs live in `spatial_skills.js` and `visual_skills.js`; the LLM chooses a registered skill and parameters rather than generating ad-hoc plotting code.
+
+## Publication-output contract
+
+The interactive workspace and manuscript figures share data and analytical semantics, but not necessarily the same renderer:
+
+- deck.gl maps are exploratory evidence surfaces. The interface offers a 3x PNG preview, a metric scale bar, a north-up 2D camera, an explicit spatial unit, and a colorblind-safe diverging residual scale.
+- Vega-Lite charts render as SVG and expose SVG/3x-PNG export actions. SVG is the preferred manuscript source for axes, legends, text, and line art.
+- Browser screenshots are not treated as final manuscript artwork. For Elsevier submission, final outputs target 90, 140, or 190 mm widths; use 300 dpi for halftones, 500 dpi for combination art, and 1000 dpi for line art, with normal lettering at 7 pt at final print size.
+- A map prepared for submission must retain its scale bar, data source, spatial unit, coordinate/reference note when applicable, legend units, and claim-relevant annotation. Decorative pitch, extrusion, and unlabelled basemaps are prohibited by the registry.
 
 This repository does not claim to copy unpublished LightVA or ProactiveVA source code. It implements a compatible, independently written visualization layer from the methods and interaction patterns disclosed in their papers.
 

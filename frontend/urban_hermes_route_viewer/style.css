@@ -868,6 +868,83 @@ a { color: var(--ink); }
 .detail-section:last-child { border-bottom: 0; }
 .three-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
+.node-decision-evidence {
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--ink);
+  background: #fff;
+}
+
+.node-decision-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.node-decision-heading h3 {
+  margin-top: 3px;
+  font-size: 17px;
+}
+
+.node-decision-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.node-decision-card {
+  display: grid;
+  align-content: start;
+  gap: 9px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--thin);
+}
+
+.node-decision-viz {
+  min-height: 300px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.node-decision-viz .vega-embed,
+.node-decision-viz svg { max-width: 100%; }
+
+.node-verdict {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 8px;
+  padding: 10px;
+  border-left: 4px solid var(--ink);
+  background: var(--soft);
+}
+
+.node-verdict span {
+  grid-row: 1 / span 2;
+  align-self: start;
+  padding: 2px 5px;
+  color: #fff;
+  background: var(--ink);
+  font: 700 10px/1.2 var(--mono);
+}
+
+.node-verdict strong { font-size: 13px; }
+.node-verdict p { grid-column: 2; color: var(--muted); font-size: 11px; }
+.node-verdict[data-tone="select"] { border-left-color: var(--green); background: #edf5ed; }
+.node-verdict[data-tone="select"] span { background: var(--green); }
+.node-verdict[data-tone="block"] { border-left-color: var(--red); background: #faece9; }
+.node-verdict[data-tone="block"] span { background: var(--red); }
+.node-verdict[data-tone="qualify"] { border-left-color: var(--amber); background: #fff5df; }
+.node-verdict[data-tone="qualify"] span { background: #b87900; }
+
+.node-diagnostic-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(260px, .55fr);
+  gap: 12px;
+  align-items: center;
+}
+
 .meaning-card {
   min-height: 94px;
   padding: 8px;
@@ -888,6 +965,11 @@ a { color: var(--ink); }
 .edge-operation-list,
 .artifact-stack,
 .artifact-group { display: grid; gap: 8px; }
+
+@media (max-width: 1250px) {
+  .node-decision-grid,
+  .node-diagnostic-layout { grid-template-columns: 1fr; }
+}
 
 .edge-operation-card {
   display: grid;

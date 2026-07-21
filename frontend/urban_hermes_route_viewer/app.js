@@ -346,7 +346,9 @@ function buildLayout(tree) {
   );
   const width = Math.max(1180, Math.round(stageWidth / Math.max(state.treeZoom, 0.78)), ROUTE_STAGES.length * 196);
   const height = Math.max(430, 150 + maxColumnSize * 100);
-  const margin = { left: 64, right: 220, top: 72, bottom: 44 };
+  // Reserve enough space for the first stage label and node captions. The
+  // previous 64 px margin clipped "Step 1" in screenshots and narrow views.
+  const margin = { left: 128, right: 220, top: 72, bottom: 44 };
   const stepX = step => margin.left + (step - 1) * ((width - margin.left - margin.right) / (ROUTE_STAGES.length - 1));
   const columns = new Map();
   tree.nodes.forEach(node => {
@@ -531,6 +533,7 @@ function renderNodeDetail() {
       <p>${escapeHtml(nodeQuestion(node))}</p>
       <p><strong>Claim boundary:</strong> ${escapeHtml(node.claim_boundary || "not recorded")}</p>
     </section>
+    ${nodeDecisionEvidenceMarkup(node)}
     <section class="detail-section artifact-section">
       <h3>Node artifacts</h3>
       ${artifactGallery(artifacts)}
@@ -556,6 +559,76 @@ function renderNodeDetail() {
       ${edgeOperationList(edges, nodeId(node))}
     </section>
   `;
+  renderNodeDecisionEvidence(node).catch(error => console.error("Node decision evidence failed", error));
+}
+
+function nodeDecisionEvidenceMarkup(node) {
+  const id = nodeId(node);
+  const f500 = scaleFinding("500m");
+  const f200 = scaleFinding("200m");
+  if (id === "RC_16route_comparison") {
+    return `<section class="detail-section node-decision-evidence">
+      <div class="node-decision-heading">
+        <div><p class="eyebrow">Decision evidence / expanded</p><h3>Compare candidate results before selecting the reporting route</h3></div>
+        <span class="status-pill">human checkpoint</span>
+      </div>
+      <div class="node-decision-grid">
+        <article class="node-decision-card">
+          <div id="nodeDecisionPackages" class="node-decision-viz" aria-label="Evidence package comparison"></div>
+          <div class="node-verdict" data-tone="select">
+            <span>SELECT</span><strong>Combined evidence package</strong>
+            <p>Highest repeated spatial-block transfer at both scales: R<sup>2</sup> ${metric(f500.r2_mean)} at 500 m and ${metric(f200.r2_mean)} at 200 m.</p>
+          </div>
+        </article>
+        <article class="node-decision-card">
+          <div id="nodeDecisionFitGap" class="node-decision-viz" aria-label="Training and spatial validation comparison"></div>
+          <div class="node-verdict" data-tone="block">
+            <span>BLOCK</span><strong>Training-fit-only claim</strong>
+            <p>Keep 500 m as the main reporting route and 200 m as scale sensitivity; do not treat training fit as transfer evidence.</p>
+          </div>
+        </article>
+      </div>
+    </section>`;
+  }
+  if (id === "DIAG_moran_all_OLS") {
+    const moran500 = state.findings?.spatial_oof_residual_moran?.["500m"] || {};
+    const moran200 = state.findings?.spatial_oof_residual_moran?.["200m"] || {};
+    return `<section class="detail-section node-decision-evidence">
+      <div class="node-decision-heading">
+        <div><p class="eyebrow">Diagnostic gate / expanded</p><h3>Does residual geography permit a local-mechanism claim?</h3></div>
+        <span class="status-pill">reviewer gate</span>
+      </div>
+      <div class="node-diagnostic-layout">
+        <div id="nodeDecisionDiagnostics" class="node-decision-viz" aria-label="Residual spatial diagnostic"></div>
+        <div class="node-verdict" data-tone="qualify">
+          <span>QUALIFY</span><strong>Structured residual error remains</strong>
+          <p>Moran's I is ${metric(moran500.moran_i)} at 500 m and ${metric(moran200.moran_i)} at 200 m (permutation p = ${metric(moran500.permutation_p)}). Downgrade local and causal interpretation; retain spatial re-specification as a robustness branch.</p>
+        </div>
+      </div>
+    </section>`;
+  }
+  return "";
+}
+
+async function renderNodeDecisionEvidence(node) {
+  if (!window.vegaEmbed || !window.URBAN_VIS_SKILLS) return;
+  const id = nodeId(node);
+  const skills = window.URBAN_VIS_SKILLS;
+  const largeSpec = (skillId, data, width = 430, height = 230) => {
+    const spec = skills.render(skillId, data);
+    spec.width = width;
+    spec.height = height;
+    return spec;
+  };
+  if (id === "RC_16route_comparison") {
+    await Promise.all([
+      embedVisualSkill("#nodeDecisionPackages", largeSpec("validation.packages.compare", state.analytics.modelSummary)),
+      embedVisualSkill("#nodeDecisionFitGap", largeSpec("validation.fit_gap", state.analytics.modelSummary))
+    ]);
+  }
+  if (id === "DIAG_moran_all_OLS") {
+    await embedVisualSkill("#nodeDecisionDiagnostics", largeSpec("diagnostic.epistemic_summary", state.findings, 520, 250));
+  }
 }
 
 function meaningCard(title, text) {
@@ -1059,10 +1132,31 @@ function renderCheckpointQueue(cards = epistemicCards()) {
 function visualEvidenceMarkup() {
   return `<article class="viz-hero" id="metric-residual-geography">
     <div class="viz-hero-head">
-      <div><p class="eyebrow">spatial.residual.linked</p><h3>Where the model misses—and whether the miss is systematic</h3></div>
-      <p>500 m / random forest / spatial-block OOF</p>
+      <div><p class="eyebrow">spatial.residual.deck + spatial.residual.diagnostics</p><h3>Where the model misses—and whether the miss is systematic</h3></div>
+      <div class="figure-grade"><strong>Publication contract</strong><span>2D map · SVG charts · 3× PNG</span></div>
     </div>
-    <div id="vizSpatialLinked" class="viz-frame" aria-label="Linked residual map, prediction plot, and residual histogram"></div>
+    <div class="spatial-evidence-layout">
+      <section class="deck-map-panel" aria-label="Interactive deck.gl residual map">
+        <div class="map-toolbar">
+          <div class="segmented-control" role="group" aria-label="Spatial layer">
+            <button id="deckModePoints" type="button" class="is-active">Grid cells</button>
+            <button id="deckModeHexagons" type="button">Hex bins</button>
+          </div>
+          <div class="map-actions">
+            <button id="deckReset" type="button">Reset</button>
+            <button id="deckExport" type="button">PNG preview</button>
+          </div>
+        </div>
+        <div id="deckResidualMap" class="deck-residual-map"></div>
+        <div class="map-legend" aria-label="Residual legend">
+          <span>under-prediction</span><i class="residual-ramp"></i><span>over-prediction</span>
+        </div>
+        <p class="map-source">500 m · random forest · spatial-block OOF · click a cell for a 2 km diagnostic neighbourhood</p>
+      </section>
+      <section class="spatial-diagnostic-panel">
+        <div id="vizSpatialDiagnostics" class="viz-frame" aria-label="Observed-predicted comparison and residual histogram"></div>
+      </section>
+    </div>
   </article>
   <div class="viz-grid">
     <article class="viz-card" id="metric-scale-choice">
@@ -1093,6 +1187,7 @@ async function embedVisualSkill(target, spec) {
   return window.vegaEmbed(target, spec, {
     renderer: "svg",
     actions: { export: true, source: false, compiled: false, editor: false },
+    scaleFactor: { svg: 1, png: 3 },
     tooltip: true
   });
 }
@@ -1100,7 +1195,9 @@ async function embedVisualSkill(target, spec) {
 async function renderVisualEvidence() {
   const host = document.getElementById("visualEvidence");
   const skills = window.URBAN_VIS_SKILLS;
+  const spatialSkills = window.URBAN_SPATIAL_SKILLS;
   const analytics = state.analytics || {};
+  window.URBAN_SPATIAL_RUNTIME?.finalize?.();
   host.innerHTML = visualEvidenceMarkup();
 
   if (!window.vegaEmbed || !skills || !analytics.predictions?.length) {
@@ -1109,27 +1206,68 @@ async function renderVisualEvidence() {
   }
 
   try {
+    const spatialRows = analytics.predictions.filter(row => row.scale === "500m" && row.scheme === "spatial_block");
+    const runtime = { viewPromises: [], views: [], renderedAt: new Date().toISOString(), spatial: null };
+    window.URBAN_VIS_RUNTIME = runtime;
+
+    const renderDiagnostics = selectedRows => {
+      const target = document.getElementById("vizSpatialDiagnostics");
+      target.innerHTML = "";
+      return embedVisualSkill(target, skills.render("spatial.residual.diagnostics", selectedRows)).then(result => {
+        runtime.views[0]?.finalize?.();
+        runtime.views[0] = result.view;
+        return result;
+      });
+    };
+
+    if (spatialSkills?.renderResidualMap && window.deck?.DeckGL) {
+      runtime.spatial = spatialSkills.renderResidualMap("#deckResidualMap", spatialRows, {
+        onSelectionChange: (selectedRows, detail) => {
+          renderDiagnostics(selectedRows).catch(error => console.error("Spatial diagnostic update failed", error));
+          const selected = detail?.selected || selectedRows.length;
+          const source = detail?.source || "map";
+          document.getElementById("selectionStatus").textContent = selected < spatialRows.length
+            ? `${selected} of ${spatialRows.length} grid cells selected from the ${source}; the diagnostics now show only this spatial subset.`
+            : `All ${spatialRows.length} spatial-block predictions are visible. Click a cell or hexagon to inspect a local subset.`;
+        }
+      });
+      window.URBAN_SPATIAL_RUNTIME = runtime.spatial;
+
+      const pointButton = document.getElementById("deckModePoints");
+      const hexButton = document.getElementById("deckModeHexagons");
+      const setMode = mode => {
+        runtime.spatial.setMode(mode);
+        pointButton.classList.toggle("is-active", mode === "points");
+        hexButton.classList.toggle("is-active", mode === "hexagons");
+      };
+      pointButton.addEventListener("click", () => setMode("points"));
+      hexButton.addEventListener("click", () => setMode("hexagons"));
+      document.getElementById("deckReset").addEventListener("click", () => runtime.spatial.reset());
+      document.getElementById("deckExport").addEventListener("click", () => {
+        try {
+          runtime.spatial.exportPng();
+        } catch (error) {
+          document.getElementById("selectionStatus").textContent = `Map preview export failed: ${error.message || String(error)}`;
+        }
+      });
+    } else {
+      document.getElementById("deckResidualMap").innerHTML = `<div class="visual-fallback"><h3>WebGL map unavailable</h3><p>The vector diagnostics remain available; reload in a WebGL-capable browser to use the spatial layer.</p></div>`;
+    }
+
     const viewPromises = [
-      embedVisualSkill("#vizSpatialLinked", skills.render("spatial.residual.linked", analytics.predictions)),
+      renderDiagnostics(spatialRows),
       embedVisualSkill("#vizValidation", skills.render("validation.packages.compare", analytics.modelSummary)),
       embedVisualSkill("#vizFitGap", skills.render("validation.fit_gap", analytics.modelSummary)),
       embedVisualSkill("#vizCohorts", skills.render("population.cohort_retention", analytics.temporalSummary)),
       embedVisualSkill("#vizDiagnostics", skills.render("diagnostic.epistemic_summary", state.findings))
     ];
-    const runtime = { viewPromises, views: [], renderedAt: new Date().toISOString() };
-    window.URBAN_VIS_RUNTIME = runtime;
+    runtime.viewPromises = viewPromises;
     viewPromises.forEach((promise, index) => {
       promise.then(result => {
-        runtime.views[index] = result.view;
-        if (index !== 0) return;
-        result.view?.addSignalListener("spatialBrush", (_name, value) => {
-          const active = value && Object.keys(value).length > 0;
-          document.getElementById("selectionStatus").textContent = active
-            ? "Spatial filter active. The observed–predicted plot and residual distribution now show only the selected geography; double-click the map to reset."
-            : "All 500 m spatial-block predictions are visible. Drag across the map to inspect a subset.";
-        });
+        if (index > 0) runtime.views[index] = result.view;
       }).catch(error => console.error(`Visual skill ${index} failed`, error));
     });
+    document.getElementById("selectionStatus").textContent = `All ${spatialRows.length} spatial-block predictions are visible. Click a cell or hexagon to inspect a local subset.`;
   } catch (error) {
     console.error("Visual skill rendering failed", error);
     host.innerHTML = `<div class="visual-fallback"><h3>Interactive evidence could not be rendered</h3><p>${escapeHtml(error.message || String(error))}</p><p><a href="${escapeAttr(CASE_ARTIFACTS.results)}" target="_blank" rel="noreferrer">Open the static case figure</a></p></div>`;
