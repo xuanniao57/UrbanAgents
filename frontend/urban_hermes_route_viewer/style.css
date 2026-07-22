@@ -826,7 +826,7 @@ a { color: var(--ink); }
 }
 
 .step-guide { stroke: #d5d1c6; stroke-width: 1; stroke-dasharray: 4 5; }
-.step-label { fill: var(--ink); font: 12px var(--mono); }
+.step-label { fill: var(--ink); font: 700 18px var(--sans); letter-spacing: .01em; }
 .edge { fill: none; stroke: var(--line); stroke-width: 2; }
 .edge.main_path { stroke-width: 3.4; }
 .edge.merge_input { stroke-width: 1.8; }
@@ -848,8 +848,8 @@ a { color: var(--ink); }
 .route-node line { stroke: var(--red); stroke-width: 2; }
 .route-node.is-focused circle,
 .route-node:focus-visible circle { stroke-width: 4; }
-.node-label { fill: var(--ink); font: 800 12px var(--mono); }
-.node-caption { fill: var(--muted); font: 11px var(--sans); }
+.node-label { fill: var(--ink); font: 700 18px var(--sans); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; }
+.node-caption { fill: var(--muted); font: 12.5px var(--sans); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; }
 
 .detail-body {
   display: flex;

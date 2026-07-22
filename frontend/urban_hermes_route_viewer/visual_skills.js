@@ -25,36 +25,43 @@
       gridOpacity: 0.7,
       labelColor: COLORS.ink,
       labelFont: "Arial",
-      labelFontSize: 11,
+      labelFontSize: 14,
       tickColor: COLORS.ink,
       titleColor: COLORS.ink,
       titleFont: "Arial",
-      titleFontSize: 11,
+      titleFontSize: 14,
       titleFontWeight: 600,
       titlePadding: 8
     },
     legend: {
       labelColor: COLORS.ink,
       labelFont: "Arial",
-      labelFontSize: 11,
+      labelFontSize: 14,
       symbolStrokeColor: COLORS.ink,
       titleColor: COLORS.ink,
       titleFont: "Arial",
-      titleFontSize: 11,
+      titleFontSize: 14,
       titleFontWeight: 600
     },
     title: {
       anchor: "start",
       color: COLORS.ink,
       font: "Arial",
-      fontSize: 13,
+      fontSize: 17,
       fontWeight: 600,
-      subtitleColor: COLORS.muted,
-      subtitleFont: "Arial",
-      subtitleFontSize: 11,
       offset: 10
     }
   };
+
+  function withoutMicrocopy(value) {
+    if (Array.isArray(value)) return value.map(withoutMicrocopy);
+    if (!value || typeof value !== "object") return value;
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([key]) => key !== "subtitle")
+        .map(([key, item]) => [key, withoutMicrocopy(item)])
+    );
+  }
 
   function number(value) {
     const parsed = Number(value);
@@ -73,7 +80,7 @@
     return {
       $schema: "https://vega.github.io/schema/vega-lite/v6.json",
       config: BASE_CONFIG,
-      ...spec
+      ...withoutMicrocopy(spec)
     };
   }
 
@@ -240,7 +247,7 @@
   function validationComparison(rows) {
     const packageLabels = {
       built_form: "Built form",
-      activity_opportunity: "Activity opportunity",
+      activity_opportunity: "Local opportunity",
       combined: "Combined"
     };
     const values = cleanRows(
@@ -264,7 +271,7 @@
         {
           mark: { type: "bar", cornerRadiusEnd: 0 },
           encoding: {
-            x: { field: "package_label", type: "nominal", title: null, sort: ["Built form", "Activity opportunity", "Combined"], axis: { labelAngle: 0, labelLimit: 95 } },
+            x: { field: "package_label", type: "nominal", title: null, sort: ["Built form", "Local opportunity", "Combined"], axis: { labelAngle: 0, labelLimit: 95 } },
             xOffset: { field: "scale_label", sort: ["200 m", "500 m"] },
             y: { field: "r2_mean", type: "quantitative", title: "Spatial-block R²", scale: { domain: [0, 0.42] } },
             color: {
@@ -284,7 +291,7 @@
         {
           mark: { type: "errorbar", ticks: true, color: COLORS.ink },
           encoding: {
-            x: { field: "package_label", type: "nominal", sort: ["Built form", "Activity opportunity", "Combined"] },
+            x: { field: "package_label", type: "nominal", sort: ["Built form", "Local opportunity", "Combined"] },
             xOffset: { field: "scale_label", sort: ["200 m", "500 m"] },
             y: { field: "r2_mean", type: "quantitative" },
             yError: { field: "r2_sd" }
@@ -426,13 +433,189 @@
     });
   }
 
+  function evidenceCoverage(rows) {
+    const order = [
+      "Building density",
+      "Building coverage",
+      "Mean height",
+      "Volume proxy",
+      "Function entropy",
+      "POI density",
+      "POI-type entropy",
+      "Road density"
+    ];
+    const values = cleanRows(rows, ["coverage_pct"]).map(row => ({
+      ...row,
+      scale_label: row.scale === "500m" ? "500 m" : "200 m"
+    }));
+
+    return withBase({
+      data: { values },
+      width: 315,
+      height: 270,
+      title: { text: "Non-zero source support by analysis scale" },
+      mark: { type: "point", filled: true, size: 92, stroke: COLORS.ink, strokeWidth: 0.45 },
+      encoding: {
+        x: {
+          field: "coverage_pct",
+          type: "quantitative",
+          title: "Model-ready grids with non-zero support (%)",
+          scale: { domain: [45, 100] }
+        },
+        y: {
+          field: "variable_label",
+          type: "nominal",
+          title: null,
+          sort: order,
+          axis: { labelLimit: 145 }
+        },
+        color: {
+          field: "scale_label",
+          type: "nominal",
+          title: "Grid",
+          scale: { domain: ["500 m", "200 m"], range: [COLORS.blue, COLORS.orange] }
+        },
+        shape: { field: "scale_label", type: "nominal", legend: null },
+        tooltip: [
+          { field: "variable_label", type: "nominal", title: "Variable" },
+          { field: "scale_label", type: "nominal", title: "Grid" },
+          { field: "coverage_pct", type: "quantitative", title: "Non-zero support", format: ".1f" },
+          { field: "n_model_ready", type: "quantitative", title: "Model-ready grids" }
+        ]
+      }
+    });
+  }
+
+  function evidenceSpatialPair(rows) {
+    const values = cleanRows(rows, [
+      "lon",
+      "lat",
+      "cmab_building_coverage_ratio",
+      "osm_poi_density_per_ha"
+    ]);
+    const map = (field, title, scheme) => ({
+      width: 245,
+      height: 270,
+      title: { text: title },
+      mark: { type: "square", size: 47, stroke: "#ffffff", strokeWidth: 0.2 },
+      encoding: {
+        x: { field: "lon", type: "quantitative", axis: null, scale: { zero: false, nice: false } },
+        y: { field: "lat", type: "quantitative", axis: null, scale: { zero: false, nice: false } },
+        color: {
+          field,
+          type: "quantitative",
+          title,
+          scale: { scheme, zero: true }
+        },
+        tooltip: [
+          { field: "grid_id", type: "nominal", title: "Grid" },
+          { field, type: "quantitative", title, format: ".3f" }
+        ]
+      }
+    });
+    return withBase({
+      data: { values },
+      hconcat: [
+        map("cmab_building_coverage_ratio", "Building coverage", "blues"),
+        map("osm_poi_density_per_ha", "Mapped POI density", "oranges")
+      ],
+      spacing: 24,
+      resolve: { scale: { color: "independent" } }
+    });
+  }
+
+  function modelDecisionDashboard(payload) {
+    const decisionRows = payload?.decisions || [];
+    const predictionRows = cleanRows(
+      (payload?.predictions || []).filter(row => row.scale === "500m" && row.scheme === "spatial_block"),
+      ["lon", "lat", "residual"]
+    );
+    const gwrRows = cleanRows(payload?.gwrDiagnostics || [], [
+      "lon",
+      "lat",
+      "coef__osm_poi_type_entropy"
+    ]);
+    const sensitivity = cleanRows(
+      decisionRows.filter(row => row.model_family === "GWRF"),
+      ["reported_r2", "elapsed_sec"]
+    ).map(row => ({
+      ...row,
+      k_neighbors: Number((String(row.configuration).match(/k=(\d+)/) || [])[1]),
+      runtime_label: `${Number(row.elapsed_sec).toFixed(1)} s`
+    })).filter(row => Number.isFinite(row.k_neighbors));
+
+    const map = (values, field, title, scheme, domainMid) => ({
+      data: { values },
+      width: 245,
+      height: 245,
+      title: { text: title },
+      mark: { type: "square", size: 47, stroke: "#ffffff", strokeWidth: 0.2 },
+      encoding: {
+        x: { field: "lon", type: "quantitative", axis: null, scale: { zero: false, nice: false } },
+        y: { field: "lat", type: "quantitative", axis: null, scale: { zero: false, nice: false } },
+        color: {
+          field,
+          type: "quantitative",
+          title,
+          scale: domainMid === undefined ? { scheme } : { scheme, domainMid }
+        },
+        tooltip: [
+          { field: "grid_id", type: "nominal", title: "Grid" },
+          { field, type: "quantitative", title, format: ".3f" }
+        ]
+      }
+    });
+
+    const sensitivityChart = {
+      data: { values: sensitivity },
+      width: 275,
+      height: 245,
+      title: { text: "GWRF neighbourhood sensitivity" },
+      layer: [
+        {
+          mark: { type: "line", point: { filled: true, size: 90 }, color: COLORS.green, strokeWidth: 2.5 },
+          encoding: {
+            x: { field: "k_neighbors", type: "quantitative", title: "Adaptive neighbours (k)", scale: { domain: [40, 128] } },
+            y: { field: "reported_r2", type: "quantitative", title: "Leave-focal R²", scale: { domain: [0.44, 0.49] } },
+            tooltip: [
+              { field: "k_neighbors", type: "quantitative", title: "Neighbours" },
+              { field: "reported_r2", type: "quantitative", title: "Leave-focal R²", format: ".3f" },
+              { field: "elapsed_sec", type: "quantitative", title: "Runtime (s)", format: ".1f" }
+            ]
+          }
+        },
+        {
+          mark: { type: "text", dy: -14, fontSize: 13, color: COLORS.ink },
+          encoding: {
+            x: { field: "k_neighbors", type: "quantitative" },
+            y: { field: "reported_r2", type: "quantitative" },
+            text: { field: "runtime_label", type: "nominal" }
+          }
+        }
+      ]
+    };
+
+    return withBase({
+      hconcat: [
+        map(predictionRows, "residual", "RF held-out residuals", "redblue", 0),
+        map(gwrRows, "coef__osm_poi_type_entropy", "GWR: POI-diversity coefficient", "redblue", 0),
+        sensitivityChart
+      ],
+      spacing: 24,
+      resolve: { scale: { color: "independent" } }
+    });
+  }
+
   const REGISTRY = Object.freeze({
     "spatial.residual.linked": { renderer: spatialResidualLinked, dataKey: "predictions" },
     "spatial.residual.diagnostics": { renderer: spatialResidualDiagnostics, dataKey: "predictions" },
     "validation.packages.compare": { renderer: validationComparison, dataKey: "modelSummary" },
     "validation.fit_gap": { renderer: fitGap, dataKey: "modelSummary" },
     "population.cohort_retention": { renderer: cohortRetention, dataKey: "temporalSummary" },
-    "diagnostic.epistemic_summary": { renderer: epistemicDiagnostics, dataKey: "findings" }
+    "diagnostic.epistemic_summary": { renderer: epistemicDiagnostics, dataKey: "findings" },
+    "evidence.coverage.compare": { renderer: evidenceCoverage, dataKey: "variableCoverage" },
+    "evidence.spatial.pair": { renderer: evidenceSpatialPair, dataKey: "variableSpatial" },
+    "model.decision.dashboard": { renderer: modelDecisionDashboard, dataKey: "modelDecisionPayload" }
   });
 
   function render(skillId, payload) {
@@ -450,6 +633,9 @@
     validationComparison,
     fitGap,
     cohortRetention,
-    epistemicDiagnostics
+    epistemicDiagnostics,
+    evidenceCoverage,
+    evidenceSpatialPair,
+    modelDecisionDashboard
   });
 })(window);

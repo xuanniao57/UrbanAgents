@@ -6,7 +6,10 @@ const DEFAULT_PATHS = {
   manifest: "../../submissions/urban_cup_2026/reproducibility_manifest.json",
   modelSummary: "../../submissions/urban_cup_2026/outputs/model_validation_summary.csv",
   variableAudit: "../../submissions/urban_cup_2026/outputs/variable_evidence_register.csv",
+  variableCoverage: "../../submissions/urban_cup_2026/outputs/variable_coverage_by_scale.csv",
+  variableSpatial: "../../submissions/urban_cup_2026/outputs/variable_spatial_500m.csv",
   modelDecision: "../../submissions/urban_cup_2026/outputs/model_decision_table.csv",
+  gwrDiagnostics: "../../submissions/urban_cup_2026/outputs/gwr_local_diagnostics.csv",
   temporalSummary: "../../submissions/urban_cup_2026/outputs/temporal_cohort_summary.csv",
   predictions: "../../submissions/urban_cup_2026/outputs/combined_rf_oof_predictions.csv",
   reviews: [
@@ -88,7 +91,7 @@ const state = {
   selectedNodeId: null,
   tasks: [],
   findings: fallbackFindings,
-  analytics: { modelSummary: [], temporalSummary: [], predictions: [], variableAudit: [], modelDecision: [] },
+  analytics: { modelSummary: [], temporalSummary: [], predictions: [], variableAudit: [], variableCoverage: [], variableSpatial: [], modelDecision: [], gwrDiagnostics: [] },
   reviews: [],
   manifest: null,
   localMessages: [],
@@ -101,12 +104,12 @@ const state = {
 };
 
 const ROUTE_STAGES = [
-  { step: 1, label: "research object" },
-  { step: 2, label: "variable package" },
-  { step: 3, label: "model branch" },
-  { step: 4, label: "explanation review" },
-  { step: 5, label: "compare + merge" },
-  { step: 6, label: "claim synthesis" }
+  { step: 1, label: "Research object" },
+  { step: 2, label: "Variable evidence" },
+  { step: 3, label: "Model family" },
+  { step: 4, label: "Diagnostic review" },
+  { step: 5, label: "Compare and merge" },
+  { step: 6, label: "Claim synthesis" }
 ];
 
 const MIN_TREE_ZOOM = 0.42;
@@ -152,7 +155,7 @@ async function loadData() {
   const stateParam = params.get("state");
   const statePath = resolveStatePath(stateParam || DEFAULT_PATHS.state);
   try {
-    const [routeState, summary, decisionsText, findings, manifest, reviews, modelSummaryText, temporalSummaryText, predictionsText, variableAuditText, modelDecisionText] = await Promise.all([
+    const [routeState, summary, decisionsText, findings, manifest, reviews, modelSummaryText, temporalSummaryText, predictionsText, variableAuditText, variableCoverageText, variableSpatialText, modelDecisionText, gwrDiagnosticsText] = await Promise.all([
       loadJson(statePath),
       loadJson(DEFAULT_PATHS.summary).catch(() => null),
       loadText(DEFAULT_PATHS.decisions).catch(() => ""),
@@ -163,7 +166,10 @@ async function loadData() {
       loadText(DEFAULT_PATHS.temporalSummary).catch(() => ""),
       loadText(DEFAULT_PATHS.predictions).catch(() => ""),
       loadText(DEFAULT_PATHS.variableAudit).catch(() => ""),
-      loadText(DEFAULT_PATHS.modelDecision).catch(() => "")
+      loadText(DEFAULT_PATHS.variableCoverage).catch(() => ""),
+      loadText(DEFAULT_PATHS.variableSpatial).catch(() => ""),
+      loadText(DEFAULT_PATHS.modelDecision).catch(() => ""),
+      loadText(DEFAULT_PATHS.gwrDiagnostics).catch(() => "")
     ]);
     return {
       routeState,
@@ -177,7 +183,10 @@ async function loadData() {
         temporalSummary: temporalSummaryText ? parseCsv(temporalSummaryText) : [],
         predictions: predictionsText ? parseCsv(predictionsText) : [],
         variableAudit: variableAuditText ? parseCsv(variableAuditText) : [],
-        modelDecision: modelDecisionText ? parseCsv(modelDecisionText) : []
+        variableCoverage: variableCoverageText ? parseCsv(variableCoverageText) : [],
+        variableSpatial: variableSpatialText ? parseCsv(variableSpatialText) : [],
+        modelDecision: modelDecisionText ? parseCsv(modelDecisionText) : [],
+        gwrDiagnostics: gwrDiagnosticsText ? parseCsv(gwrDiagnosticsText) : []
       },
       mode: stateParam ? `live Git-tree state: ${stateParam}` : "default Git-tree state"
     };
@@ -189,7 +198,7 @@ async function loadData() {
       findings: fallbackFindings,
       manifest: null,
       reviews: [],
-      analytics: { modelSummary: [], temporalSummary: [], predictions: [], variableAudit: [], modelDecision: [] },
+      analytics: { modelSummary: [], temporalSummary: [], predictions: [], variableAudit: [], variableCoverage: [], variableSpatial: [], modelDecision: [], gwrDiagnostics: [] },
       mode: `embedded fallback: ${error.message}`
     };
   }
@@ -416,7 +425,12 @@ function buildLayout(tree) {
     ...ROUTE_STAGES.map(stageItem => tree.nodes.filter(node => (visualSteps.get(nodeId(node)) || stepOf(node)) === stageItem.step).length)
   );
   const width = Math.max(1320, Math.round(stageWidth / Math.max(state.treeZoom, 0.78)), ROUTE_STAGES.length * 228);
-  const height = Math.max(460, 160 + maxColumnSize * 112);
+  // Focused paper/inspection states use a tighter vertical rhythm so all
+  // alternatives and the merge remain legible in one landscape panel.
+  const compactFocus = ["variables", "models"].includes(state.treeFocusMode);
+  const height = compactFocus
+    ? Math.max(500, 112 + maxColumnSize * 82)
+    : Math.max(460, 160 + maxColumnSize * 112);
   // Reserve enough space for the first stage label and node captions. The
   // previous 64 px margin clipped "Step 1" in screenshots and narrow views.
   const margin = { left: 128, right: 220, top: 72, bottom: 44 };
@@ -522,19 +536,19 @@ function renderTree() {
     g.addEventListener("keydown", event => {
       if (event.key === "Enter" || event.key === " ") selectNode(id);
     });
-    const circle = el("circle", { cx: x, cy: y, r: 16 });
-    const textX = x + 26;
+    const circle = el("circle", { cx: x, cy: y, r: 20 });
+    const textX = x + 32;
     const textAnchor = "start";
     const displayLabel = nodeDisplayLabel(node);
     const labelBg = el("rect", {
       x: textX - 5,
-      y: y - 14,
-      width: Math.min(230, Math.max(54, displayLabel.length * 8.4 + 10)),
-      height: 25,
+      y: y - 20,
+      width: Math.min(285, Math.max(68, displayLabel.length * 10.4 + 14)),
+      height: 35,
       rx: 2,
       class: "node-label-bg"
     });
-    const label = el("text", { x: textX, y: y + 5, class: "node-label", "text-anchor": textAnchor });
+    const label = el("text", { x: textX, y: y + 6, class: "node-label", "text-anchor": textAnchor });
     label.textContent = displayLabel;
     const tooltip = el("title");
     tooltip.textContent = `${id} — ${nodeQuestion(node)}`;
@@ -545,7 +559,7 @@ function renderTree() {
       g.appendChild(el("line", { x1: x + 7, y1: y - 7, x2: x - 7, y2: y + 7 }));
     }
     if (branchState(node, tree) === "merge") {
-      g.appendChild(el("circle", { cx: x, cy: y, r: 20, class: "outer-ring" }));
+      g.appendChild(el("circle", { cx: x, cy: y, r: 22, class: "outer-ring" }));
     }
     g.appendChild(label);
     g.appendChild(tooltip);
@@ -717,62 +731,32 @@ function nodeDecisionEvidenceMarkup(node) {
 
 function variableEvidenceRegisterMarkup(rows) {
   if (!rows.length) return "";
-  const body = rows.map(row => `<tr>
-    <td><strong>${escapeHtml(row.package)}</strong><span>${escapeHtml(row.data_source)}</span></td>
-    <td><code>${escapeHtml(row.variable)}</code></td>
-    <td>${escapeHtml(row.operational_meaning)}</td>
-    <td>${escapeHtml(row.spatial_support)}</td>
-    <td>${escapeHtml(row.time_support)}</td>
-    <td>${escapeHtml(row.people_support)}</td>
-    <td>${escapeHtml(row.claim_boundary)}</td>
-  </tr>`).join("");
-  return `<section class="detail-section node-decision-evidence register-section variable-register-section">
+  return `<section class="detail-section node-decision-evidence register-section variable-register-section visual-register-section">
     <div class="node-decision-heading">
-      <div><h3>Variable evidence register</h3></div>
+      <div><h3>Variable evidence: coverage and spatial support</h3></div>
       <span class="status-pill">passive evidence boundary</span>
     </div>
-    <div class="register-table-wrap">
-      <table class="evidence-register variable-evidence-register">
-        <thead><tr><th>Evidence package / source</th><th>Variable</th><th>Operational meaning</th><th>Spatial support</th><th>Temporal support</th><th>People represented</th><th>Admitted use</th></tr></thead>
-        <tbody>${body}</tbody>
-      </table>
+    <div class="decision-viz-grid evidence-viz-grid">
+      <div id="nodeVariableCoverage" class="node-decision-viz" aria-label="Variable coverage by grid scale"></div>
+      <div id="nodeVariableMaps" class="node-decision-viz" aria-label="Mapped built-form and local-opportunity evidence"></div>
     </div>
+    <div class="evidence-boundary-strip"><strong>OBSERVED</strong><span>place morphology, mapped destinations, and roads</span><strong>NOT OBSERVED</strong><span>resident population or complete street vitality</span></div>
+    <a class="data-download-link" href="${escapeAttr(DEFAULT_PATHS.variableAudit)}" target="_blank" rel="noreferrer">Download the full evidence register (CSV)</a>
   </section>`;
 }
 
 function modelDecisionRegisterMarkup(rows) {
   if (!rows.length) return "";
-  const decisionLabel = value => ({
-    admit_primary: "PRIMARY",
-    admit_diagnostic: "DIAGNOSTIC",
-    retain_bounded_local_branch: "RETAIN LOCAL",
-    retain_parameter_sensitivity: "SENSITIVITY"
-  })[value] || String(value || "").replaceAll("_", " ").toUpperCase();
-  const body = rows.map(row => {
-    const r2Label = row.r2_kind === "fitted_diagnostic" ? "fitted" : "validated";
-    const tone = row.decision === "admit_primary" ? "primary" : row.decision === "retain_bounded_local_branch" ? "local" : "secondary";
-    return `<tr>
-      <td><strong>${escapeHtml(row.model_family)}</strong><span class="decision-tag" data-tone="${escapeAttr(tone)}">${escapeHtml(decisionLabel(row.decision))}</span></td>
-      <td>${escapeHtml(row.configuration)}</td>
-      <td><strong>${escapeHtml(row.validation_regime)}</strong><span>${escapeHtml(row.comparability_note)}</span></td>
-      <td><strong>${metric(row.reported_r2)}</strong><span>${escapeHtml(r2Label)} R<sup>2</sup></span></td>
-      <td><strong>${metric(row.residual_moran_i)}</strong><span>p=${metric(row.residual_moran_p)}</span></td>
-      <td><strong>${Number(row.elapsed_sec).toFixed(1)} s</strong></td>
-      <td>${escapeHtml(row.claim_role)}</td>
-    </tr>`;
-  }).join("");
-  return `<section class="detail-section node-decision-evidence register-section model-register-section">
+  return `<section class="detail-section node-decision-evidence register-section model-register-section visual-register-section">
     <div class="node-decision-heading">
-      <div><h3>Model-family decision register</h3></div>
+      <div><h3>Model evidence: spatial diagnostics and parameter sensitivity</h3></div>
       <span class="status-pill">active analytical choice</span>
     </div>
-    <div class="register-table-wrap">
-      <table class="evidence-register model-decision-register">
-        <thead><tr><th>Model / branch</th><th>Parameterization</th><th>Validation regime</th><th>Reported R<sup>2</sup></th><th>Residual Moran's I</th><th>Runtime</th><th>Scientific role after merge</th></tr></thead>
-        <tbody>${body}</tbody>
-      </table>
+    <div class="decision-viz-grid model-viz-grid">
+      <div id="nodeModelDecisionDashboard" class="node-decision-viz" aria-label="RF, GWR, and GWRF decision evidence"></div>
     </div>
-    <div class="merge-rule-strip"><strong>MERGE BY SCIENTIFIC ROLE</strong><span>RF for spatial transfer</span><span>GWR for local linear diagnostics</span><span>GWRF for bounded nonlinear sensitivity</span><span>BLOCK causal and population-wide claims</span></div>
+    <div class="merge-rule-strip role-strip"><strong>MERGE BY SCIENTIFIC ROLE</strong><span>RF: held-out transfer</span><span>GWR: local linear geography</span><span>GWRF: bounded nonlinear sensitivity</span><span>BLOCK: causal and population-wide claims</span></div>
+    <a class="data-download-link" href="${escapeAttr(DEFAULT_PATHS.modelDecision)}" target="_blank" rel="noreferrer">Download the full decision register (CSV)</a>
   </section>`;
 }
 
@@ -786,6 +770,19 @@ async function renderNodeDecisionEvidence(node) {
     spec.height = height;
     return spec;
   };
+  if (["FP1_built_form", "FP2_activity_opportunity"].includes(id)) {
+    await Promise.all([
+      embedVisualSkill("#nodeVariableCoverage", skills.render("evidence.coverage.compare", state.analytics.variableCoverage || [])),
+      embedVisualSkill("#nodeVariableMaps", skills.render("evidence.spatial.pair", state.analytics.variableSpatial || []))
+    ]);
+  }
+  if (id === "RC_model_family_merge") {
+    await embedVisualSkill("#nodeModelDecisionDashboard", skills.render("model.decision.dashboard", {
+      decisions: state.analytics.modelDecision || [],
+      predictions: state.analytics.predictions || [],
+      gwrDiagnostics: state.analytics.gwrDiagnostics || []
+    }));
+  }
   if (id === "RC_16route_comparison") {
     await Promise.all([
       embedVisualSkill("#nodeDecisionPackages", largeSpec("validation.packages.compare", state.analytics.modelSummary)),

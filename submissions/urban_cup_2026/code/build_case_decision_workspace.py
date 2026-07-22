@@ -33,6 +33,65 @@ VARIABLES = [
     ("Local opportunity", "OpenStreetMap roads", "osm_road_density_m_per_ha", "Mapped road length per hectare", "Network supply; not experienced access"),
 ]
 
+VARIABLE_LABELS = {
+    "cmab_building_density_per_ha": "Building density",
+    "cmab_building_coverage_ratio": "Building coverage",
+    "cmab_mean_height_m": "Mean height",
+    "cmab_volume_proxy_per_ha": "Volume proxy",
+    "cmab_function_entropy": "Function entropy",
+    "osm_poi_density_per_ha": "POI density",
+    "osm_poi_type_entropy": "POI-type entropy",
+    "osm_road_density_m_per_ha": "Road density",
+}
+
+
+def load_scale_frame(scale: str) -> pd.DataFrame:
+    suffix = "500m" if scale == "500m" else "200m"
+    research_object = "RO1_outcome_table.csv" if scale == "500m" else "RO2_outcome_table.csv"
+    valid = set(pd.read_csv(RUN / research_object)["grid_id"].astype(str))
+    fp1 = pd.read_csv(RUN / f"FP1_{suffix}.csv")
+    fp2 = pd.read_csv(RUN / f"FP2_{suffix}.csv")
+    centroids = pd.read_csv(RUN / f"grid_centroids_{suffix}.csv")
+    frame = fp1.merge(fp2, on="grid_id", how="outer").merge(centroids, on="grid_id", how="left")
+    frame["grid_id"] = frame["grid_id"].astype(str)
+    return frame[frame["grid_id"].isin(valid)].copy()
+
+
+def build_variable_coverage() -> pd.DataFrame:
+    rows: list[dict[str, object]] = []
+    for scale in ("500m", "200m"):
+        frame = load_scale_frame(scale)
+        for package, _, variable, _, _ in VARIABLES:
+            values = pd.to_numeric(frame[variable], errors="coerce").fillna(0)
+            rows.append(
+                {
+                    "scale": scale,
+                    "package": package,
+                    "variable": variable,
+                    "variable_label": VARIABLE_LABELS[variable],
+                    "coverage_pct": 100 * float(np.mean(values != 0)),
+                    "n_model_ready": len(frame),
+                }
+            )
+    coverage = pd.DataFrame(rows)
+    coverage.to_csv(OUTPUT / "variable_coverage_by_scale.csv", index=False)
+    return coverage
+
+
+def build_variable_spatial_frame() -> pd.DataFrame:
+    frame = load_scale_frame("500m")
+    selected = frame[
+        [
+            "grid_id",
+            "lon",
+            "lat",
+            "cmab_building_coverage_ratio",
+            "osm_poi_density_per_ha",
+        ]
+    ].copy()
+    selected.to_csv(OUTPUT / "variable_spatial_500m.csv", index=False)
+    return selected
+
 
 def build_variable_audit() -> pd.DataFrame:
     outcome = pd.read_csv(RUN / "RO1_outcome_table.csv")
@@ -174,6 +233,8 @@ def main() -> None:
     OUTPUT.mkdir(parents=True, exist_ok=True)
     PROCESS.mkdir(parents=True, exist_ok=True)
     variable_audit = build_variable_audit()
+    variable_coverage = build_variable_coverage()
+    variable_spatial = build_variable_spatial_frame()
     decision = json.loads((AUDIT / "model_decision_audit.json").read_text(encoding="utf-8"))
     for filename in [
         "model_decision_table.csv",
@@ -187,7 +248,10 @@ def main() -> None:
             shutil.copy2(source, OUTPUT / filename)
     state = build_state(variable_audit, decision)
     (PROCESS / "case_decision_git_tree_20260722.json").write_text(json.dumps(state, indent=2), encoding="utf-8")
-    print(f"Wrote {len(variable_audit)} variable rows and {len(state['nodes'])} Git-tree nodes")
+    print(
+        f"Wrote {len(variable_audit)} variable rows, {len(variable_coverage)} coverage rows, "
+        f"{len(variable_spatial)} mapped grids, and {len(state['nodes'])} Git-tree nodes"
+    )
 
 
 if __name__ == "__main__":
