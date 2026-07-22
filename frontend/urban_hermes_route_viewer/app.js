@@ -502,7 +502,9 @@ function renderTree() {
     const focusClass = treeFocusStep(step) ? "tree-highlighted" : "tree-dimmed";
     const line = el("line", { x1: x, x2: x, y1: 38, y2: layout.height - 28, class: `step-guide ${focusClass}` });
     const text = el("text", { x, y: 28, class: `step-label ${focusClass}`, "text-anchor": "middle" });
-    text.textContent = `Step ${step}: ${label}`;
+    // Paper-focused views need stage markers, not a second row of competing
+    // explanations.  The full workspace keeps the descriptive labels.
+    text.textContent = state.treeFocusMode === "all" ? `Step ${step}: ${label}` : `Step ${step}`;
     svg.appendChild(line);
     svg.appendChild(text);
   });
