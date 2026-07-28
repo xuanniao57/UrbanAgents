@@ -1,15 +1,15 @@
 # Urban-Hermes Route Workspace
 
-Static runtime viewer for Urban-Hermes route-tree state.
-It is designed as the browser-side companion to the CLI: the CLI continues the dialogue and writes state files, while this page renders a readable workspace for review.
+Static research workspace for Urban-Hermes route-tree state.
+It is the browser-side companion to the CLI: the CLI executes the runtime and writes state files, while this page turns the same state into a human-reviewable research record.
 
-The release layout is intentionally sparse for paper screenshots and live review:
+The July 2026 visual-analytics layout uses three synchronized columns:
 
-- left: selected node, required inputs, artifacts, time-space-people meaning, and claim boundary;
-- upper right: typed planner route tree with selected, candidate, deferred, blocked, and merge states;
-- lower right: a CLI-like mirror of the same route state, todo items, human choices, patch events, and artifacts.
+- left: research stages, branch coverage, and unresolved human checkpoints;
+- centre: an outcome-first evidence workbench with linked spatial and statistical views, the typed route graph, and node-level artifacts;
+- right: a full-height Human--Planner--Worker--Reviewer dialogue, with a raw TUI view available as a secondary mode.
 
-Benchmark tables and long workflow rails are kept in the code path but hidden from the default workspace so the core review interface remains readable.
+The default Shanghai case distinguishes passive, regime-embedded failures (for example, who is missing from an LBS sample) from active, choice-contingent failures (for example, grid scale or validation design). Each control card records the source, observable consequence, preventability, claim gate, and required human action. This makes caution operational: a reviewer is credited only when a diagnostic changes a route, artifact, or admissible claim.
 
 ## Open with live experiment data
 
@@ -44,23 +44,48 @@ Use the Refresh button to reload the latest route state, or enable Auto refresh 
 
 This mode reads:
 
-- `experiments/case2_typed_route_tree_rerun_20260524/typed_route_tree.json`
-- `experiments/case2_typed_route_tree_rerun_20260524/route_tree_frontend_state.json` when `?state=...` is supplied
-- `experiments/case2_typed_route_tree_rerun_20260524/workflow_trace.json`
-- `experiments/case2_typed_route_tree_rerun_20260524/branch_comparison.json`
+- `submissions/urban_cup_2026/process_evidence/route_tree_state.json` by default;
+- `submissions/urban_cup_2026/process_evidence/step_reviews/*.json`;
+- `submissions/urban_cup_2026/outputs/case_findings.json`;
+- `submissions/urban_cup_2026/outputs/model_validation_summary.csv`;
+- `submissions/urban_cup_2026/outputs/combined_rf_oof_predictions.csv`;
+- `submissions/urban_cup_2026/outputs/temporal_cohort_summary.csv`;
+- `submissions/urban_cup_2026/reproducibility_manifest.json`;
+- a route state supplied through `?state=...` for other live cases;
 - `experiments/urbanworkflowbench_60tasks_20260524/condition_traces/all60_design_gate_20260524/condition_trace_score_summary.json`
 - `experiments/urbanworkflowbench_60tasks_20260524/condition_traces/all60_design_gate_20260524/full/all60_design_gate_decisions.csv`
 
 ## What the workspace shows
 
-- A curved, node-link route tree with selected, candidate, deferred, blocked, and merge states.
-- Clickable nodes. The detail panel shows required inputs, method parameters, expected outputs, attached artifacts, time/space/people assumptions, and claim boundaries.
-- A CLI-synchronized terminal mirror for planner todo, route choice requests, patch events, and recorded human choices.
-- A selected-node artifact panel for maps, plots, tables, manifests, review records, and claim boundaries.
-- Hidden support panels for selected-route rails and benchmark tables when a debugging view is needed.
+- A continuous human--AI research thread; raw terminal text is a toggle rather than the primary workspace.
+- Stage and checkpoint navigation with selected, candidate, deferred, blocked, and merge states.
+- Passive and active epistemic-control cards with explicit human actions.
+- A reusable declarative visualization-skill registry for linked residual geography, observed--predicted comparison, residual distributions, validation-regime gaps, feature-package comparisons, cohort activity, and spatial diagnostics.
+- A clickable route graph and selected-node evidence panel with inputs, method parameters, artifacts, time/space/people assumptions, and claim boundaries.
+
+## Verified visual-analytics stack
+
+The implementation is based on what can be verified from the two cited systems rather than on inferred libraries:
+
+- LightVA explicitly describes Python analysis with pandas and Altair, compiled to Vega-Lite, including brushing, tooltips, legends, linked views, and coordinated layouts. Its official project page publishes the paper, appendix, demo, and slides, but no implementation repository.
+- ProactiveVA's appendix explicitly describes Tableau dashboards and the Tableau Embedding API, with UI-agent actions for reading data, selecting marks, and filtering. The public GitHub repository is the academic project-page source, not the visual-analytics system implementation.
+- Neither paper documents deck.gl as its map renderer. Urban-Hermes adopts deck.gl independently because GPU-backed point, grid, H3, trajectory, and GeoJSON layers fit urban spatial evidence better than forcing every map into a statistical chart grammar.
+- Urban-Hermes uses a layered stack: deck.gl 9.3.7 and MapLibre GL JS 5.24.0 for interactive spatial evidence; Vega 6.2.0, Vega-Lite 6.4.3, and Vega-Embed 7.1.0 for statistical and coordinated vector views. The declarative specs live in `spatial_skills.js` and `visual_skills.js`; the LLM chooses a registered skill and parameters rather than generating ad-hoc plotting code.
+
+## Publication-output contract
+
+The interactive workspace and manuscript figures share data and analytical semantics, but not necessarily the same renderer:
+
+- deck.gl maps are exploratory evidence surfaces. The interface offers a 3x PNG preview, a metric scale bar, a north-up 2D camera, an explicit spatial unit, and a colorblind-safe diverging residual scale.
+- Vega-Lite charts render as SVG and expose SVG/3x-PNG export actions. SVG is the preferred manuscript source for axes, legends, text, and line art.
+- Browser screenshots are not treated as final manuscript artwork. For Elsevier submission, final outputs target 90, 140, or 190 mm widths; use 300 dpi for halftones, 500 dpi for combination art, and 1000 dpi for line art, with normal lettering at 7 pt at final print size.
+- A map prepared for submission must retain its scale bar, data source, spatial unit, coordinate/reference note when applicable, legend units, and claim-relevant annotation. Decorative pitch, extrusion, and unlabelled basemaps are prohibited by the registry.
+
+This repository does not claim to copy unpublished LightVA or ProactiveVA source code. It implements a compatible, independently written visualization layer from the methods and interaction patterns disclosed in their papers.
 
 ## Notes
 
-The viewer is intentionally plain black-and-white for paper screenshots.
+The viewer uses a flat black-and-white technical style inspired by City Syntax: white space, thin rules, a monospaced interface layer, sans-serif research content, and restrained colorblind-safe accents for passive, active, blocked, and accepted states. It intentionally avoids 3D effects, gradients, decorative shadows, and game-like pixel panels.
 It has no package install step and does not rerun Urban-Hermes.
 It only reads state and artifact files written by the runtime.
+Human controls and notes in the static viewer are explicitly labelled as local previews; they are not silently written back to runtime state.

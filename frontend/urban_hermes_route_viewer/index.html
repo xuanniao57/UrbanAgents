@@ -3,110 +3,183 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Urban agent</title>
-  <link rel="stylesheet" href="style.css?v=20260530a">
+  <meta name="color-scheme" content="light">
+  <title>Urban-Hermes / research workspace</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Kode+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=20260717e">
+  <link rel="stylesheet" href="flat_workspace.css?v=20260717e">
+  <link rel="stylesheet" href="vendor/maplibre-gl-5.24.0.css">
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">
-      <p class="eyebrow">Route workspace</p>
-      <h1>Urban agent</h1>
+    <div class="brand-lockup">
+      <a class="brand-wordmark" href="#" aria-label="Urban-Hermes home">&lt;UH:\RESEARCH&gt;</a>
+      <div class="brand">
+        <p class="eyebrow">Human–AI urban science workspace</p>
+        <h1>Beyond the Fit Trap</h1>
+      </div>
+    </div>
+    <div class="run-summary" aria-label="Current research run">
+      <span class="run-chip"><i></i> Shanghai inner ring</span>
+      <span class="run-chip">7-day snapshot</span>
+      <span class="run-chip">10% UUID sample</span>
     </div>
     <div class="run-controls">
       <button id="refreshButton" type="button" title="Reload route state">Refresh</button>
-      <label class="toggle"><input id="autoRefresh" type="checkbox"> Auto refresh</label>
-      <span id="dataMode">Loading state...</span>
+      <label class="toggle"><input id="autoRefresh" type="checkbox"> live</label>
+      <span id="dataMode">Loading state…</span>
     </div>
   </header>
 
   <main class="workspace">
-    <aside class="detail-panel">
-      <div class="panel-head">
+    <aside class="route-panel panel-shell">
+      <div class="panel-head compact-head">
         <div>
-          <p class="eyebrow">Selected node</p>
-          <h2 id="nodeTitle">No node selected</h2>
+          <p class="eyebrow">01 / research route</p>
+          <h2>Stages &amp; checkpoints</h2>
         </div>
-        <span id="nodeStatus" class="status-pill">pending</span>
+        <span id="routeProgress" class="status-pill">0 / 6</span>
       </div>
-      <div id="nodeDetail" class="detail-body"></div>
+      <div class="route-scroll">
+        <nav id="stageRail" class="stage-rail" aria-label="Research workflow stages"></nav>
+        <section class="checkpoint-section">
+          <div class="section-title-row">
+            <p class="eyebrow">Human checkpoints</p>
+            <span id="checkpointCount" class="mono-count">0</span>
+          </div>
+          <div id="checkpointQueue" class="checkpoint-queue"></div>
+        </section>
+        <section class="route-key">
+          <p class="eyebrow">Route state</p>
+          <div class="legend vertical-legend">
+            <span><i class="dot selected"></i>selected</span>
+            <span><i class="dot suggested"></i>candidate</span>
+            <span><i class="dot deferred"></i>deferred</span>
+            <span><i class="dot blocked"></i>blocked</span>
+          </div>
+        </section>
+      </div>
     </aside>
 
-    <section class="tree-panel">
-      <div class="panel-head">
+    <section class="conversation-panel panel-shell">
+      <div class="panel-head conversation-head">
         <div>
-          <p class="eyebrow">Planner route tree</p>
-          <h2>choices, route state, and merge gates</h2>
+          <p class="eyebrow">03 / human–AI research thread</p>
+          <h2>Dialogue remains a complete research record</h2>
         </div>
-        <div class="tree-tools" aria-label="Route tree zoom controls">
-          <button id="zoomOut" type="button" title="Zoom out">-</button>
-          <button id="zoomFit" type="button" title="Fit tree">Fit</button>
-          <button id="zoomIn" type="button" title="Zoom in">+</button>
-          <span id="zoomValue">100%</span>
-        </div>
-        <div class="legend">
-          <span><i class="dot selected"></i>selected</span>
-          <span><i class="dot suggested"></i>candidate</span>
-          <span><i class="dot deferred"></i>deferred</span>
-          <span><i class="dot blocked"></i>blocked</span>
-          <span><i class="dot merge"></i>merge</span>
+        <div class="view-switch" aria-label="Conversation view">
+          <button type="button" class="is-active" data-thread-view="structured">Thread</button>
+          <button type="button" data-thread-view="raw">TUI</button>
         </div>
       </div>
-      <div class="tree-stage">
-        <svg id="routeSvg" role="img" aria-label="Urban-Hermes route tree"></svg>
-      </div>
+      <div id="dialogueTimeline" class="dialogue-timeline" role="log" aria-label="Human and agent research dialogue"></div>
+      <div id="cliTerminal" class="cli-terminal" role="log" aria-label="CLI synchronized terminal trace" hidden></div>
+      <form id="researchNoteForm" class="research-composer">
+        <label for="researchNote" class="sr-only">Add a human research note</label>
+        <textarea id="researchNote" rows="2" placeholder="Record a decision, question, or claim boundary…"></textarea>
+        <div class="composer-footer">
+          <span>Local note / does not execute the runtime</span>
+          <button type="submit">Add note →</button>
+        </div>
+      </form>
     </section>
 
-    <section class="timeline-panel">
-      <div class="panel-head">
+    <section class="evidence-panel panel-shell">
+      <div class="panel-head evidence-head">
         <div>
-          <p class="eyebrow">Urban-Hermes CLI mirror</p>
-          <h2>dialogue, todo, worker-review events</h2>
+          <p class="eyebrow">02 / visual evidence workbench</p>
+          <h2>See the finding before reading the agent</h2>
         </div>
         <span id="artifactCount" class="status-pill">0 artifacts</span>
       </div>
-      <div id="cliTerminal" class="cli-terminal" role="log" aria-label="CLI synchronized terminal trace"></div>
-    </section>
+      <div class="workbench-tabs" role="tablist" aria-label="Evidence workbench views">
+        <button type="button" role="tab" aria-selected="true" class="is-active" data-workbench-tab="control">Evidence</button>
+        <button type="button" role="tab" aria-selected="false" data-workbench-tab="route">Route graph</button>
+        <button type="button" role="tab" aria-selected="false" data-workbench-tab="artifacts">Node evidence</button>
+      </div>
 
-    <section class="workflow-panel support-panel" hidden>
-      <div class="panel-head">
-        <div>
-          <p class="eyebrow">Executed route</p>
-          <h2>inputs, outputs, and reviewer questions</h2>
+      <div class="workbench-scroll">
+        <div class="workbench-view" data-workbench-view="control">
+          <section class="research-question-band">
+            <p class="eyebrow">Research question</p>
+            <h3>Do built form and activity opportunities predict street vitality beyond spatial leakage—and for whom does the observed pattern hold?</h3>
+            <p>The map and linked views expose where the model fails; the ledger below records which failures demand a human decision.</p>
+          </section>
+
+          <section class="visual-evidence-section">
+            <div class="section-title-row visual-title-row">
+              <div>
+                <p class="eyebrow">Outcome-grounded evidence</p>
+                <h3>Map → select → compare → diagnose</h3>
+              </div>
+              <span class="skill-badge">deck.gl spatial + Vega-Lite evidence</span>
+            </div>
+            <div id="selectionStatus" class="selection-status" aria-live="polite">All 500 m spatial-block predictions are visible. Drag across the map to inspect a subset.</div>
+            <div id="visualEvidence" class="visual-evidence"></div>
+          </section>
+
+          <section class="epistemic-control-section">
+            <div class="epistemic-intro">
+              <div>
+                <p class="eyebrow">Epistemic control ledger</p>
+                <h3>Passive data failure or active analytical choice?</h3>
+              </div>
+              <div id="gateSummary" class="gate-summary"></div>
+            </div>
+            <div id="epistemicLedger" class="epistemic-ledger"></div>
+          </section>
+        </div>
+
+        <div class="workbench-view route-graph-view" data-workbench-view="route" hidden>
+          <div class="tree-toolbar">
+            <div>
+              <p class="eyebrow">Planner route graph</p>
+              <h3>Choices, dependencies, and merge gates</h3>
+            </div>
+            <div class="tree-tools" aria-label="Route tree zoom controls">
+              <button id="zoomOut" type="button" title="Zoom out">−</button>
+              <button id="zoomFit" type="button" title="Fit tree">Fit</button>
+              <button id="zoomIn" type="button" title="Zoom in">+</button>
+              <span id="zoomValue">100%</span>
+            </div>
+          </div>
+          <div class="tree-stage">
+            <svg id="routeSvg" role="img" aria-label="Urban-Hermes route tree"></svg>
+          </div>
+        </div>
+
+        <div class="workbench-view node-evidence-view" data-workbench-view="artifacts" hidden>
+          <div class="selected-node-head">
+            <div>
+              <p class="eyebrow">Selected route node</p>
+              <h3 id="nodeTitle">No node selected</h3>
+            </div>
+            <span id="nodeStatus" class="status-pill">pending</span>
+          </div>
+          <div id="nodeDetail" class="detail-body"></div>
         </div>
       </div>
-      <div id="workflowRail" class="workflow-rail"></div>
     </section>
 
+    <section class="workflow-panel support-panel" hidden><div id="workflowRail"></div></section>
     <section class="benchmark-panel support-panel" hidden>
-      <div class="panel-head">
-        <div>
-          <p class="eyebrow">Ablation overview</p>
-          <h2>UrbanWorkflowBench-60</h2>
-        </div>
-        <div class="filters">
-          <label>Domain <select id="domainFilter"></select></label>
-          <label>Decision <select id="decisionFilter"></select></label>
-        </div>
-      </div>
-      <div id="conditions" class="conditions"></div>
-      <div id="taskStats" class="task-stats"></div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Task</th>
-              <th>Domain</th>
-              <th>Decision</th>
-              <th>Missing data</th>
-              <th>Claim boundary</th>
-            </tr>
-          </thead>
-          <tbody id="taskRows"></tbody>
-        </table>
-      </div>
+      <div id="conditions"></div>
+      <div id="taskStats"></div>
+      <select id="domainFilter"></select>
+      <select id="decisionFilter"></select>
+      <table><tbody id="taskRows"></tbody></table>
     </section>
   </main>
 
-  <script src="app.js?v=20260530a"></script>
+  <script src="vendor/vega-6.2.0.min.js"></script>
+  <script src="vendor/vega-lite-6.4.3.min.js"></script>
+  <script src="vendor/vega-embed-7.1.0.min.js"></script>
+  <script src="vendor/maplibre-gl-5.24.0.js"></script>
+  <script src="vendor/deck.gl-9.3.7.min.js"></script>
+  <script src="spatial_skills.js?v=20260720a"></script>
+  <script src="visual_skills.js?v=20260720a"></script>
+  <script src="app.js?v=20260720a"></script>
 </body>
 </html>

@@ -1,0 +1,718 @@
+{
+  "schema_version": "urban_case_decision_git_tree_v2",
+  "meta": {
+    "state_id": "street_vitality_model_decision_20260722",
+    "task": "Audit evidence and model-family decisions for Shanghai street vitality",
+    "updated_at": "2026-07-22T18:00:00+08:00"
+  },
+  "planner_todo": [
+    {
+      "step_id": "S1",
+      "title": "Research object",
+      "status": "completed"
+    },
+    {
+      "step_id": "S2",
+      "title": "Variable evidence",
+      "status": "completed"
+    },
+    {
+      "step_id": "S3",
+      "title": "Model branch",
+      "status": "completed"
+    },
+    {
+      "step_id": "S4",
+      "title": "Diagnostics",
+      "status": "completed"
+    },
+    {
+      "step_id": "S5",
+      "title": "Compare and merge",
+      "status": "completed"
+    },
+    {
+      "step_id": "S6",
+      "title": "Claim synthesis",
+      "status": "completed"
+    }
+  ],
+  "nodes": [
+    {
+      "node_id": "RO_500m_main",
+      "node_type": "research_object",
+      "display_label": "500 m main object",
+      "step_id": "S1",
+      "depends_on": [],
+      "status": "selected",
+      "question": "Define street vitality as aggregate observed device stays on 500 m grids.",
+      "claim_boundary": "Street-vitality proxy for observed device activity; not resident vitality.",
+      "required_parameters": {
+        "grid": "500 m",
+        "n": 509,
+        "outcome": "log1p aggregate stays"
+      },
+      "expected_outputs": [],
+      "time_space_people": {
+        "time": "Seven-day activity outcome (19--25 September 2024); static explanatory context.",
+        "space": "Shanghai inner-ring analysis on a 500 m main grid; 200 m retained as resolution sensitivity.",
+        "people": "Observed device-user activity, not the resident population or individual behaviour."
+      }
+    },
+    {
+      "node_id": "RO_200m_sensitivity",
+      "node_type": "research_object",
+      "display_label": "200 m sensitivity",
+      "step_id": "S1",
+      "depends_on": [],
+      "status": "suggested",
+      "question": "Retain a finer grid to test resolution dependence without conflating it with model parameters.",
+      "claim_boundary": "Scale sensitivity only; privacy-eligible coverage differs.",
+      "required_parameters": {
+        "grid": "200 m",
+        "n": 2542
+      },
+      "expected_outputs": [],
+      "time_space_people": {
+        "time": "Seven-day activity outcome (19--25 September 2024); static explanatory context.",
+        "space": "Shanghai inner-ring analysis on a 500 m main grid; 200 m retained as resolution sensitivity.",
+        "people": "Observed device-user activity, not the resident population or individual behaviour."
+      }
+    },
+    {
+      "node_id": "FP1_built_form",
+      "node_type": "feature_package",
+      "display_label": "Built-form evidence",
+      "step_id": "S2",
+      "depends_on": [
+        "RO_500m_main"
+      ],
+      "status": "selected",
+      "question": "Which physical-form variables have defensible spatial and semantic support?",
+      "claim_boundary": "Area morphology proxies only; no people directly observed.",
+      "required_parameters": {
+        "variables": 5,
+        "source": "CMAB"
+      },
+      "expected_outputs": [
+        "variable_evidence_register.csv"
+      ],
+      "time_space_people": {
+        "time": "Seven-day activity outcome (19--25 September 2024); static explanatory context.",
+        "space": "Shanghai inner-ring analysis on a 500 m main grid; 200 m retained as resolution sensitivity.",
+        "people": "Observed device-user activity, not the resident population or individual behaviour."
+      }
+    },
+    {
+      "node_id": "FP2_activity_opportunity",
+      "node_type": "feature_package",
+      "display_label": "Local-opportunity evidence",
+      "step_id": "S2",
+      "depends_on": [
+        "RO_500m_main"
+      ],
+      "status": "selected",
+      "question": "Which mapped destinations and roads can represent local opportunity?",
+      "claim_boundary": "Mapped opportunity context, not visits, preferences, or network accessibility.",
+      "required_parameters": {
+        "variables": 3,
+        "source": "OpenStreetMap"
+      },
+      "expected_outputs": [
+        "variable_evidence_register.csv"
+      ],
+      "time_space_people": {
+        "time": "Seven-day activity outcome (19--25 September 2024); static explanatory context.",
+        "space": "Shanghai inner-ring analysis on a 500 m main grid; 200 m retained as resolution sensitivity.",
+        "people": "Observed device-user activity, not the resident population or individual behaviour."
+      }
+    },
+    {
+      "node_id": "ME_RF_spatial_block",
+      "node_type": "model_execution",
+      "display_label": "RF / global transfer",
+      "step_id": "S3",
+      "depends_on": [
+        "FP1_built_form",
+        "FP2_activity_opportunity"
+      ],
+      "status": "selected",
+      "question": "Can the combined evidence predict held-out contiguous zones?",
+      "claim_boundary": "Within-city predictive association only.",
+      "required_parameters": {
+        "configuration": "200 trees; depth 10; min leaf 5; max features 0.8",
+        "validation": "five repeated 5-fold contiguous spatial-block holdout",
+        "runtime_sec": 1.2
+      },
+      "expected_outputs": [
+        "rf_spatial_block_predictions.csv"
+      ],
+      "time_space_people": {
+        "time": "Seven-day activity outcome (19--25 September 2024); static explanatory context.",
+        "space": "Shanghai inner-ring analysis on a 500 m main grid; 200 m retained as resolution sensitivity.",
+        "people": "Observed device-user activity, not the resident population or individual behaviour."
+      }
+    },
+    {
+      "node_id": "ME_GWR_local_linear",
+      "node_type": "model_execution",
+      "display_label": "GWR / local linear",
+      "step_id": "S3",
+      "depends_on": [
+        "FP1_built_form",
+        "FP2_activity_opportunity"
+      ],
+      "status": "selected",
+      "question": "Where do fitted local linear coefficients vary under an AICc-selected bandwidth?",
+      "claim_boundary": "Local coefficient geography is diagnostic, not held-out predictive superiority.",
+      "required_parameters": {
+        "configuration": "adaptive bi-square bandwidth 244; AICc-selected; standardized X/Y",
+        "validation": "fitted local-association diagnostic (not spatial holdout)",
+        "runtime_sec": 11.3
+      },
+      "expected_outputs": [
+        "gwr_local_diagnostics.csv"
+      ],
+      "time_space_people": {
+        "time": "Seven-day activity outcome (19--25 September 2024); static explanatory context.",
+        "space": "Shanghai inner-ring analysis on a 500 m main grid; 200 m retained as resolution sensitivity.",
+        "people": "Observed device-user activity, not the resident population or individual behaviour."
+      }
+    },
+    {
+      "node_id": "ME_GWRF_k48",
+      "node_type": "model_execution",
+      "display_label": "GWRF / k=48",
+      "step_id": "S3",
+      "depends_on": [
+        "FP1_built_form",
+        "FP2_activity_opportunity"
+      ],
+      "status": "suggested",
+      "question": "How sensitive is local non-linear prediction to the spatial-neighbourhood parameter?",
+      "claim_boundary": "Exploratory local predictive heterogeneity; less stringent than spatial-block transfer.",
+      "required_parameters": {
+        "configuration": "adaptive Gaussian k=48; 60 trees/location; depth 8; min leaf 3",
+        "validation": "leave-focal-location-out local prediction",
+        "runtime_sec": 25.0
+      },
+      "expected_outputs": [
+        "gwrf_k48_predictions.csv",
+        "gwrf_k48_local_importance.csv"
+      ],
+      "time_space_people": {
+        "time": "Seven-day activity outcome (19--25 September 2024); static explanatory context.",
+        "space": "Shanghai inner-ring analysis on a 500 m main grid; 200 m retained as resolution sensitivity.",
+        "people": "Observed device-user activity, not the resident population or individual behaviour."
+      }
+    },
+    {
+      "node_id": "ME_GWRF_k80",
+      "node_type": "model_execution",
+      "display_label": "GWRF / k=80",
+      "step_id": "S3",
+      "depends_on": [
+        "FP1_built_form",
+        "FP2_activity_opportunity"
+      ],
+      "status": "suggested",
+      "question": "How sensitive is local non-linear prediction to the spatial-neighbourhood parameter?",
+      "claim_boundary": "Exploratory local predictive heterogeneity; less stringent than spatial-block transfer.",
+      "required_parameters": {
+        "configuration": "adaptive Gaussian k=80; 60 trees/location; depth 8; min leaf 3",
+        "validation": "leave-focal-location-out local prediction",
+        "runtime_sec": 26.7
+      },
+      "expected_outputs": [
+        "gwrf_k80_predictions.csv",
+        "gwrf_k80_local_importance.csv"
+      ],
+      "time_space_people": {
+        "time": "Seven-day activity outcome (19--25 September 2024); static explanatory context.",
+        "space": "Shanghai inner-ring analysis on a 500 m main grid; 200 m retained as resolution sensitivity.",
+        "people": "Observed device-user activity, not the resident population or individual behaviour."
+      }
+    },
+    {
+      "node_id": "ME_GWRF_k120",
+      "node_type": "model_execution",
+      "display_label": "GWRF / k=120",
+      "step_id": "S3",
+      "depends_on": [
+        "FP1_built_form",
+        "FP2_activity_opportunity"
+      ],
+      "status": "selected",
+      "question": "How sensitive is local non-linear prediction to the spatial-neighbourhood parameter?",
+      "claim_boundary": "Exploratory local predictive heterogeneity; less stringent than spatial-block transfer.",
+      "required_parameters": {
+        "configuration": "adaptive Gaussian k=120; 60 trees/location; depth 8; min leaf 3",
+        "validation": "leave-focal-location-out local prediction",
+        "runtime_sec": 30.2
+      },
+      "expected_outputs": [
+        "gwrf_k120_predictions.csv",
+        "gwrf_k120_local_importance.csv"
+      ],
+      "time_space_people": {
+        "time": "Seven-day activity outcome (19--25 September 2024); static explanatory context.",
+        "space": "Shanghai inner-ring analysis on a 500 m main grid; 200 m retained as resolution sensitivity.",
+        "people": "Observed device-user activity, not the resident population or individual behaviour."
+      }
+    },
+    {
+      "node_id": "DIAG_RF_residual",
+      "node_type": "diagnostic",
+      "display_label": "Residual geography",
+      "step_id": "S4",
+      "depends_on": [
+        "ME_RF_spatial_block"
+      ],
+      "status": "selected",
+      "question": "Do held-out RF errors remain spatially clustered?",
+      "claim_boundary": "Significant residual structure blocks a complete-mechanism claim.",
+      "required_parameters": {
+        "moran_i": 0.27,
+        "p": 0.001
+      },
+      "expected_outputs": [],
+      "time_space_people": {
+        "time": "Seven-day activity outcome (19--25 September 2024); static explanatory context.",
+        "space": "Shanghai inner-ring analysis on a 500 m main grid; 200 m retained as resolution sensitivity.",
+        "people": "Observed device-user activity, not the resident population or individual behaviour."
+      }
+    },
+    {
+      "node_id": "DIAG_GWR_interpretation",
+      "node_type": "diagnostic",
+      "display_label": "Coefficient stability",
+      "step_id": "S4",
+      "depends_on": [
+        "ME_GWR_local_linear"
+      ],
+      "status": "selected",
+      "question": "Are local coefficient signs stable enough for descriptive mapping?",
+      "claim_boundary": "Maps describe fitted conditional variation; they do not identify effects.",
+      "required_parameters": {},
+      "expected_outputs": [],
+      "time_space_people": {
+        "time": "Seven-day activity outcome (19--25 September 2024); static explanatory context.",
+        "space": "Shanghai inner-ring analysis on a 500 m main grid; 200 m retained as resolution sensitivity.",
+        "people": "Observed device-user activity, not the resident population or individual behaviour."
+      }
+    },
+    {
+      "node_id": "DIAG_GWRF_budget",
+      "node_type": "diagnostic",
+      "display_label": "Parameter + runtime",
+      "step_id": "S4",
+      "depends_on": [
+        "ME_GWRF_k48",
+        "ME_GWRF_k80",
+        "ME_GWRF_k120"
+      ],
+      "status": "selected",
+      "question": "Which GWRF neighbourhood remains informative within the measured compute budget?",
+      "claim_boundary": "Retain one bounded branch and disclose all tested configurations.",
+      "required_parameters": {},
+      "expected_outputs": [],
+      "time_space_people": {
+        "time": "Seven-day activity outcome (19--25 September 2024); static explanatory context.",
+        "space": "Shanghai inner-ring analysis on a 500 m main grid; 200 m retained as resolution sensitivity.",
+        "people": "Observed device-user activity, not the resident population or individual behaviour."
+      }
+    },
+    {
+      "node_id": "RC_model_family_merge",
+      "node_type": "route_comparison",
+      "display_label": "Model-role merge",
+      "step_id": "S5",
+      "depends_on": [
+        "DIAG_RF_residual",
+        "DIAG_GWR_interpretation",
+        "DIAG_GWRF_budget"
+      ],
+      "status": "merged",
+      "question": "Which model evidence is admitted for which scientific role?",
+      "claim_boundary": "Merge evidence by claim role, not by selecting the largest unlike R-squared.",
+      "required_parameters": {
+        "primary": "RF spatial transfer",
+        "local_linear": "GWR diagnostic",
+        "local_nonlinear": "GWRF k=120 sensitivity"
+      },
+      "expected_outputs": [
+        "model_decision_table.csv",
+        "model_decision_audit.json"
+      ],
+      "time_space_people": {
+        "time": "Seven-day activity outcome (19--25 September 2024); static explanatory context.",
+        "space": "Shanghai inner-ring analysis on a 500 m main grid; 200 m retained as resolution sensitivity.",
+        "people": "Observed device-user activity, not the resident population or individual behaviour."
+      }
+    },
+    {
+      "node_id": "CS_bounded_street_vitality",
+      "node_type": "claim_synthesis",
+      "display_label": "Bounded street-vitality claims",
+      "step_id": "S6",
+      "depends_on": [
+        "RC_model_family_merge",
+        "RO_200m_sensitivity"
+      ],
+      "status": "merged",
+      "question": "What can the case responsibly say about street vitality?",
+      "claim_boundary": "Permit aggregate associations and parameter-sensitive local patterns; block causal, individual, and resident-population claims.",
+      "required_parameters": {},
+      "expected_outputs": [],
+      "time_space_people": {
+        "time": "Seven-day activity outcome (19--25 September 2024); static explanatory context.",
+        "space": "Shanghai inner-ring analysis on a 500 m main grid; 200 m retained as resolution sensitivity.",
+        "people": "Observed device-user activity, not the resident population or individual behaviour."
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "RO_500m_main",
+      "target": "FP1_built_form",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "RO_500m_main",
+      "target": "FP2_activity_opportunity",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "FP1_built_form",
+      "target": "ME_RF_spatial_block",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "FP2_activity_opportunity",
+      "target": "ME_RF_spatial_block",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "FP1_built_form",
+      "target": "ME_GWR_local_linear",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "FP2_activity_opportunity",
+      "target": "ME_GWR_local_linear",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "FP1_built_form",
+      "target": "ME_GWRF_k48",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "FP2_activity_opportunity",
+      "target": "ME_GWRF_k48",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "FP1_built_form",
+      "target": "ME_GWRF_k80",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "FP2_activity_opportunity",
+      "target": "ME_GWRF_k80",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "FP1_built_form",
+      "target": "ME_GWRF_k120",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "FP2_activity_opportunity",
+      "target": "ME_GWRF_k120",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "ME_RF_spatial_block",
+      "target": "DIAG_RF_residual",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "ME_GWR_local_linear",
+      "target": "DIAG_GWR_interpretation",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "ME_GWRF_k48",
+      "target": "DIAG_GWRF_budget",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "ME_GWRF_k80",
+      "target": "DIAG_GWRF_budget",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "ME_GWRF_k120",
+      "target": "DIAG_GWRF_budget",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "DIAG_RF_residual",
+      "target": "RC_model_family_merge",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "DIAG_GWR_interpretation",
+      "target": "RC_model_family_merge",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "DIAG_GWRF_budget",
+      "target": "RC_model_family_merge",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "RC_model_family_merge",
+      "target": "CS_bounded_street_vitality",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "RO_200m_sensitivity",
+      "target": "CS_bounded_street_vitality",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    }
+  ],
+  "visual_edges": [
+    {
+      "source": "RO_500m_main",
+      "target": "FP1_built_form",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "RO_500m_main",
+      "target": "FP2_activity_opportunity",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "FP1_built_form",
+      "target": "ME_RF_spatial_block",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "FP2_activity_opportunity",
+      "target": "ME_RF_spatial_block",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "FP1_built_form",
+      "target": "ME_GWR_local_linear",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "FP2_activity_opportunity",
+      "target": "ME_GWR_local_linear",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "FP1_built_form",
+      "target": "ME_GWRF_k48",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "FP2_activity_opportunity",
+      "target": "ME_GWRF_k48",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "FP1_built_form",
+      "target": "ME_GWRF_k80",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "FP2_activity_opportunity",
+      "target": "ME_GWRF_k80",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "FP1_built_form",
+      "target": "ME_GWRF_k120",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "FP2_activity_opportunity",
+      "target": "ME_GWRF_k120",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "ME_RF_spatial_block",
+      "target": "DIAG_RF_residual",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "ME_GWR_local_linear",
+      "target": "DIAG_GWR_interpretation",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "ME_GWRF_k48",
+      "target": "DIAG_GWRF_budget",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "ME_GWRF_k80",
+      "target": "DIAG_GWRF_budget",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "ME_GWRF_k120",
+      "target": "DIAG_GWRF_budget",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "DIAG_RF_residual",
+      "target": "RC_model_family_merge",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "DIAG_GWR_interpretation",
+      "target": "RC_model_family_merge",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "DIAG_GWRF_budget",
+      "target": "RC_model_family_merge",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "RC_model_family_merge",
+      "target": "CS_bounded_street_vitality",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    },
+    {
+      "source": "RO_200m_sensitivity",
+      "target": "CS_bounded_street_vitality",
+      "relation": "depends_on",
+      "operation": "reviewed transition"
+    }
+  ],
+  "active_path": [
+    "RO_500m_main",
+    "FP1_built_form",
+    "FP2_activity_opportunity",
+    "ME_RF_spatial_block",
+    "ME_GWR_local_linear",
+    "ME_GWRF_k120",
+    "DIAG_RF_residual",
+    "DIAG_GWR_interpretation",
+    "DIAG_GWRF_budget",
+    "RC_model_family_merge",
+    "CS_bounded_street_vitality"
+  ],
+  "main_path": [
+    "RO_500m_main",
+    "FP1_built_form",
+    "ME_RF_spatial_block",
+    "DIAG_RF_residual",
+    "RC_model_family_merge",
+    "CS_bounded_street_vitality"
+  ],
+  "branch_tree": {
+    "active": [
+      "RO_500m_main",
+      "FP1_built_form",
+      "FP2_activity_opportunity",
+      "ME_RF_spatial_block",
+      "ME_GWR_local_linear",
+      "ME_GWRF_k120",
+      "DIAG_RF_residual",
+      "DIAG_GWR_interpretation",
+      "DIAG_GWRF_budget",
+      "RC_model_family_merge",
+      "CS_bounded_street_vitality"
+    ],
+    "suggested": [
+      "RO_200m_sensitivity",
+      "ME_GWRF_k48",
+      "ME_GWRF_k80"
+    ],
+    "deferred": [],
+    "blocked": [],
+    "merged": [
+      "RC_model_family_merge",
+      "CS_bounded_street_vitality"
+    ]
+  },
+  "dialogue": [
+    {
+      "role": "user",
+      "title": "Research framing",
+      "body": "Explain the spatial pattern of Shanghai street vitality without hiding consequential data or model choices."
+    },
+    {
+      "role": "agent",
+      "title": "Evidence branch",
+      "body": "I separated built-form evidence from local-opportunity evidence and audited what each variable measures across space, time, and people."
+    },
+    {
+      "role": "agent",
+      "title": "Model branch",
+      "body": "Residual geography triggered GWR and GWRF branches. Their fitted or local validation scores are not treated as interchangeable with contiguous spatial-block transfer."
+    },
+    {
+      "role": "human",
+      "title": "Authorization",
+      "body": "Use RF for the primary association; retain GWR and the selected GWRF setting as bounded local diagnostics; block causal and population-wide claims."
+    }
+  ],
+  "artifact_index": [],
+  "claim_options": {
+    "primary": "RF supplies the spatial-holdout-backed within-city association claim.",
+    "local_linear": "GWR supplies coefficient geography only; its fitted R2 is not used to select the primary model.",
+    "local_nonlinear": "GWRF k=120 is retained as a bounded local sensitivity branch under the measured runtime budget.",
+    "blocked": "No branch supports causal effects, resident-population inference, or a universal local mechanism."
+  }
+}
