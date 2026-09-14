@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <title>Urban-Hermes / research workspace</title>
+  <title>Urban Agent / reviewable scale-sensitive analysis</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Kode+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -15,19 +15,17 @@
 <body>
   <header class="topbar">
     <div class="brand-lockup">
-      <a class="brand-wordmark" href="#" aria-label="Urban-Hermes home">&lt;UH:\RESEARCH&gt;</a>
+      <a class="brand-wordmark" href="#" aria-label="Urban Agent home">&lt;URBAN:AGENT&gt;</a>
       <div class="brand">
         <p class="eyebrow">Human–AI urban science workspace</p>
-        <h1>Beyond the Fit Trap</h1>
+        <h1>Reviewable Scale-Sensitive Analysis</h1>
       </div>
     </div>
     <div class="run-summary" aria-label="Current research run">
-      <span class="run-chip"><i></i> Shanghai inner ring</span>
-      <span class="run-chip">7-day snapshot</span>
-      <span class="run-chip">10% UUID sample</span>
+      <span class="run-chip"><i></i> Shanghai street-vitality study</span>
     </div>
     <div class="run-controls">
-      <button id="refreshButton" type="button" title="Reload route state">Refresh</button>
+      <button id="refreshButton" type="button" title="Reload Git-tree state">Refresh</button>
       <label class="toggle"><input id="autoRefresh" type="checkbox"> live</label>
       <span id="dataMode">Loading state…</span>
     </div>
@@ -37,8 +35,8 @@
     <aside class="route-panel panel-shell">
       <div class="panel-head compact-head">
         <div>
-          <p class="eyebrow">01 / research route</p>
-          <h2>Stages &amp; checkpoints</h2>
+          <p class="eyebrow">01 / research Git tree</p>
+          <h2>Steps &amp; checkpoints</h2>
         </div>
         <span id="routeProgress" class="status-pill">0 / 6</span>
       </div>
@@ -52,7 +50,7 @@
           <div id="checkpointQueue" class="checkpoint-queue"></div>
         </section>
         <section class="route-key">
-          <p class="eyebrow">Route state</p>
+          <p class="eyebrow">Git-tree state</p>
           <div class="legend vertical-legend">
             <span><i class="dot selected"></i>selected</span>
             <span><i class="dot suggested"></i>candidate</span>
@@ -67,7 +65,7 @@
       <div class="panel-head conversation-head">
         <div>
           <p class="eyebrow">03 / human–AI research thread</p>
-          <h2>Dialogue remains a complete research record</h2>
+          <h2>Research dialogue</h2>
         </div>
         <div class="view-switch" aria-label="Conversation view">
           <button type="button" class="is-active" data-thread-view="structured">Thread</button>
@@ -90,13 +88,13 @@
       <div class="panel-head evidence-head">
         <div>
           <p class="eyebrow">02 / visual evidence workbench</p>
-          <h2>See the finding before reading the agent</h2>
+          <h2>Evidence workspace</h2>
         </div>
         <span id="artifactCount" class="status-pill">0 artifacts</span>
       </div>
       <div class="workbench-tabs" role="tablist" aria-label="Evidence workbench views">
         <button type="button" role="tab" aria-selected="true" class="is-active" data-workbench-tab="control">Evidence</button>
-        <button type="button" role="tab" aria-selected="false" data-workbench-tab="route">Route graph</button>
+        <button type="button" role="tab" aria-selected="false" data-workbench-tab="route">Git tree</button>
         <button type="button" role="tab" aria-selected="false" data-workbench-tab="artifacts">Node evidence</button>
       </div>
 
@@ -104,7 +102,7 @@
         <div class="workbench-view" data-workbench-view="control">
           <section class="research-question-band">
             <p class="eyebrow">Research question</p>
-            <h3>Do built form and activity opportunities predict street vitality beyond spatial leakage—and for whom does the observed pattern hold?</h3>
+          <h3>How do spatial support and local-model bandwidth change the evidence for Shanghai street vitality?</h3>
             <p>The map and linked views expose where the model fails; the ledger below records which failures demand a human decision.</p>
           </section>
 
@@ -114,7 +112,7 @@
                 <p class="eyebrow">Outcome-grounded evidence</p>
                 <h3>Map → select → compare → diagnose</h3>
               </div>
-              <span class="skill-badge">deck.gl spatial + Vega-Lite evidence</span>
+              <span class="skill-badge">linked evidence</span>
             </div>
             <div id="selectionStatus" class="selection-status" aria-live="polite">All 500 m spatial-block predictions are visible. Drag across the map to inspect a subset.</div>
             <div id="visualEvidence" class="visual-evidence"></div>
@@ -135,10 +133,10 @@
         <div class="workbench-view route-graph-view" data-workbench-view="route" hidden>
           <div class="tree-toolbar">
             <div>
-              <p class="eyebrow">Planner route graph</p>
-              <h3>Choices, dependencies, and merge gates</h3>
+              <p class="eyebrow">Planner Git tree</p>
+              <h3>Branches, human checkpoints, and merges</h3>
             </div>
-            <div class="tree-tools" aria-label="Route tree zoom controls">
+            <div class="tree-tools" aria-label="Git tree zoom controls">
               <button id="zoomOut" type="button" title="Zoom out">−</button>
               <button id="zoomFit" type="button" title="Fit tree">Fit</button>
               <button id="zoomIn" type="button" title="Zoom in">+</button>
@@ -146,14 +144,14 @@
             </div>
           </div>
           <div class="tree-stage">
-            <svg id="routeSvg" role="img" aria-label="Urban-Hermes route tree"></svg>
+            <svg id="routeSvg" role="img" aria-label="Urban Agent research Git tree"></svg>
           </div>
         </div>
 
         <div class="workbench-view node-evidence-view" data-workbench-view="artifacts" hidden>
           <div class="selected-node-head">
             <div>
-              <p class="eyebrow">Selected route node</p>
+              <p class="eyebrow">Selected Git-tree node</p>
               <h3 id="nodeTitle">No node selected</h3>
             </div>
             <span id="nodeStatus" class="status-pill">pending</span>

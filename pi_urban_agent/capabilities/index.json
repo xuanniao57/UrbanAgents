@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "path_base": "paper4_urban_svgagent",
+  "recipes": [{
+    "id": "shanghai_section41_saved_evidence",
+    "path": "pi_urban_agent/capabilities/shanghai_scale_figures.json",
+    "purpose": "Render aligned-support maps, separate OLS/GWR comparisons, full eight-variable coefficient maps, and an OLS-only table from saved case results.",
+    "scope": "Case-configured recipe; other datasets require their own declared paths and plotting contract."
+  }]
+}

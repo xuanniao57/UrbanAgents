@@ -3,9 +3,10 @@
   "registry_name": "Urban-Hermes declarative visual analytics",
   "renderer": {
     "frontend_module": "frontend/urban_hermes_route_viewer/visual_skills.js",
-    "grammar": "Vega-Lite 6.4.3",
-    "runtime": "Vega 6.2.0",
-    "embed": "Vega-Embed 7.1.0"
+    "statistical_grammar": "Vega-Lite 6.4.3",
+    "statistical_runtime": "Vega 6.2.0 + Vega-Embed 7.1.0",
+    "spatial_module": "frontend/urban_hermes_route_viewer/spatial_skills.js",
+    "spatial_runtime": "deck.gl 9.3.7 + MapLibre GL JS 5.24.0"
   },
   "design_contract": {
     "primary_evidence": "Visual encodings must expose an analytical result or diagnostic, not decorate agent prose.",
@@ -20,9 +21,27 @@
       "rainbow palettes for ordered data",
       "unlabelled axes",
       "free-form plotting code when a registered skill fits"
-    ]
+    ],
+    "publication_output": {
+      "interactive_role": "deck.gl and MapLibre support exploration, spatial picking, and scalable rendering; a browser screenshot is not the canonical manuscript figure.",
+      "vector_default": "Vega statistical views export as SVG for manuscript composition.",
+      "raster_default": "PNG previews export at 3x browser scale; final Elsevier artwork should use 300 dpi for halftones, 500 dpi for combination art, or 1000 dpi for line art at final print size.",
+      "target_widths_mm": [90, 140, 190],
+      "minimum_text_pt_at_final_size": 7,
+      "map_requirements": ["metric scale bar", "data source", "spatial unit", "coordinate/reference note when applicable", "colorbar with units", "north-up 2D default"]
+    }
   },
   "skills": [
+    {
+      "skill_id": "spatial.residual.deck",
+      "renderer": "deck.gl",
+      "use_when": "Large or interactive point/grid residual data require geographic context and rapid spatial selection.",
+      "required_fields": ["grid_id", "lon", "lat", "residual"],
+      "views": ["residual point layer", "flat residual hexagon aggregation"],
+      "interaction": "A cell click selects a 2 km neighbourhood; a hexagon click selects its member cells and updates the vector diagnostics.",
+      "epistemic_control": "Makes geographically concentrated under- and over-prediction visible without implying a three-dimensional quantity.",
+      "publication_role": "Interactive evidence and high-resolution preview only; pair with vector statistical diagnostics and a publication renderer for the submitted figure."
+    },
     {
       "skill_id": "spatial.residual.linked",
       "use_when": "A spatial prediction has observed values, out-of-fold predictions, coordinates, and residuals.",
@@ -30,6 +49,16 @@
       "views": ["residual grid map", "observed-versus-predicted scatter", "residual histogram"],
       "interaction": "An interval selection on the map filters the scatter and histogram.",
       "epistemic_control": "Reveals whether aggregate accuracy hides geographically concentrated failure."
+    },
+    {
+      "skill_id": "spatial.residual.diagnostics",
+      "renderer": "Vega-Lite",
+      "use_when": "A deck.gl spatial selection must update publication-ready observed-predicted and residual-distribution views.",
+      "required_fields": ["grid_id", "observed_log_stays", "predicted_log_stays", "residual"],
+      "views": ["observed-versus-predicted scatter", "residual histogram"],
+      "interaction": "Receives the currently selected spatial subset from the map runtime.",
+      "epistemic_control": "Tests whether a visually localised error also changes calibration or the residual distribution.",
+      "publication_role": "Canonical vector output via SVG."
     },
     {
       "skill_id": "validation.packages.compare",

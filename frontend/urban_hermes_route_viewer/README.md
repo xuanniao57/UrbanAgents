@@ -6,7 +6,7 @@ It is the browser-side companion to the CLI: the CLI executes the runtime and wr
 The July 2026 visual-analytics layout uses three synchronized columns:
 
 - left: research stages, branch coverage, and unresolved human checkpoints;
-- centre: an outcome-first evidence workbench with linked spatial and statistical views, the typed route graph, and node-level artifacts;
+- centre: an outcome-first evidence workbench with linked spatial and statistical views, the research Git tree, and node-level artifacts;
 - right: a full-height Human--Planner--Worker--Reviewer dialogue, with a raw TUI view available as a secondary mode.
 
 The default Shanghai case distinguishes passive, regime-embedded failures (for example, who is missing from an LBS sample) from active, choice-contingent failures (for example, grid scale or validation design). Each control card records the source, observable consequence, preventability, claim gate, and required human action. This makes caution operational: a reviewer is credited only when a diagnostic changes a route, artifact, or admissible claim.
@@ -40,20 +40,20 @@ http://localhost:8017/frontend/urban_hermes_route_viewer/index.html?state=experi
 ```
 
 The CLI-side route-tree tool writes this URL in its return payload as `frontend_url`.
-Use the Refresh button to reload the latest route state, or enable Auto refresh during an Urban-Hermes run.
+Use the Refresh button to reload the latest Git-tree state, or enable Auto refresh during an Urban-Hermes run.
 
 This mode reads:
 
 - `submissions/urban_cup_2026/process_evidence/route_tree_state.json` by default;
 - `submissions/urban_cup_2026/process_evidence/step_reviews/*.json`;
-- `submissions/urban_cup_2026/outputs/case_findings.json`;
-- `submissions/urban_cup_2026/outputs/model_validation_summary.csv`;
-- `submissions/urban_cup_2026/outputs/combined_rf_oof_predictions.csv`;
-- `submissions/urban_cup_2026/outputs/temporal_cohort_summary.csv`;
+- `experiments/case2_scale_harmonized_20260810/case_findings.json`;
+- `experiments/case2_scale_harmonized_20260810/model_validation_summary.csv`;
+- `experiments/case2_scale_harmonized_20260810/combined_rf_oof_predictions.csv`;
+- `experiments/case2_scale_harmonized_20260810/scale_comparability_audit.json`;
 - `submissions/urban_cup_2026/reproducibility_manifest.json`;
 - a route state supplied through `?state=...` for other live cases;
-- `experiments/urbanworkflowbench_60tasks_20260524/condition_traces/all60_design_gate_20260524/condition_trace_score_summary.json`
-- `experiments/urbanworkflowbench_60tasks_20260524/condition_traces/all60_design_gate_20260524/full/all60_design_gate_decisions.csv`
+- `experiments/urbanresearch_lit50_v1_20260810/results/frontend_summary.json`
+- `experiments/urbanresearch_lit50_v1_20260810/results/reviewer_decisions.csv`
 
 ## What the workspace shows
 
@@ -61,7 +61,7 @@ This mode reads:
 - Stage and checkpoint navigation with selected, candidate, deferred, blocked, and merge states.
 - Passive and active epistemic-control cards with explicit human actions.
 - A reusable declarative visualization-skill registry for linked residual geography, observed--predicted comparison, residual distributions, validation-regime gaps, feature-package comparisons, cohort activity, and spatial diagnostics.
-- A clickable route graph and selected-node evidence panel with inputs, method parameters, artifacts, time/space/people assumptions, and claim boundaries.
+- A clickable research Git tree and selected-node evidence panel with inputs, method parameters, artifacts, time/space/people assumptions, and claim boundaries.
 
 ## Verified visual-analytics stack
 

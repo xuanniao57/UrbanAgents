@@ -1,0 +1,14 @@
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
+process.chdir(root);
+if(!process.env.URBAN_PI_PYTHON) throw Error('Set URBAN_PI_PYTHON to the absolute Python executable path.');
+process.env.URBAN_TOKENIZER_DIR=resolve('cache/qwen35-tokenizer');
+process.env.HTTP_PROXY=''; process.env.HTTPS_PROXY=''; process.env.ALL_PROXY=''; process.env.NO_PROXY='*';
+const model=process.env.URBAN_LAB_MODEL || 'Qwen3.5-27B';
+const endpoint=process.env.URBAN_LAB_BASE_URL || 'http://127.0.0.1:8000/v1';
+const output=process.env.URBAN_LAB_OUTPUT || 'evaluation/lab27b_full';
+const args=['--import','tsx','scripts/run-framework-ablation.ts','--model',model,'--provider','local-vllm','--base-url',endpoint,'--data-root','long_case/data','--output-root',output,'--context-window','8192','--max-output-tokens','2048','--deadline','600','--repeats','3','--seed','42'];
+const result=spawnSync(process.execPath,args,{stdio:'inherit',env:process.env,windowsHide:true});
+process.exit(result.status ?? 1);

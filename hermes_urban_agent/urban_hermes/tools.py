@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import math
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -17,6 +19,7 @@ from typing import Any, Iterable
 
 from .paths import ensure_paths
 from .route_tree_state import run_action as run_route_tree_action
+from .scale_governance import audit_scale_branches, build_scale_evidence_cards
 
 
 TOOLSET = "urban"
@@ -34,10 +37,13 @@ def register_all_urban_tools() -> list[str]:
         ("urban_measure_accessibility", ACCESSIBILITY_SCHEMA, _handle_accessibility),
         ("urban_calculate_density", DENSITY_SCHEMA, _handle_density),
         ("urban_generate_svg_overlay", SVG_SCHEMA, _handle_svg),
+        ("urban_generate_3d_design", DESIGN_3D_SCHEMA, _handle_3d_design),
+        ("urban_probe_simulation_backends", SIMULATION_BACKENDS_SCHEMA, _handle_simulation_backends),
         ("urban_export_geojson", GEOJSON_SCHEMA, _handle_geojson),
         ("urban_build_topology", TOPOLOGY_SCHEMA, _handle_topology),
         ("urban_ground_task", GROUND_TASK_SCHEMA, _handle_ground_task),
         ("urban_route_tree", ROUTE_TREE_SCHEMA, _handle_route_tree),
+        ("urban_scale_audit", SCALE_AUDIT_SCHEMA, _handle_scale_audit),
         ("urban_review", REVIEW_SCHEMA, _handle_review),
         ("urban_quality_control", QUALITY_SCHEMA, _handle_quality),
         ("urban_record_feedback", RECORD_FEEDBACK_SCHEMA, _handle_record_feedback),
@@ -499,9 +505,423 @@ def _handle_route_tree(args: dict[str, Any], **_: Any) -> str:
     """Maintain a generic planner route tree and export it for CLI/frontend review."""
     try:
         result = run_route_tree_action(args)
-        return _ok(result, action=args.get("action") or "export", host=os.name)
+        if args.get("return_full_state"):
+            payload = result
+        else:
+            # The complete state is already persisted to the returned files.
+            # Returning it on every patch can add tens of thousands of tokens
+            # to an agent session and makes local-model comparisons depend on
+            # context-window size.  Keep the default tool result compact while
+            # preserving an explicit escape hatch for debugging/export.
+            state = result.get("state") if isinstance(result, dict) else {}
+            state = state if isinstance(state, dict) else {}
+            nodes = [node for node in state.get("nodes", []) if isinstance(node, dict)]
+            status_counts = Counter(str(node.get("status") or "unspecified") for node in nodes)
+            payload = {
+                "state_summary": {
+                    "schema_version": state.get("schema_version"),
+                    "node_count": len(nodes),
+                    "status_counts": dict(sorted(status_counts.items())),
+                    "active_path": state.get("active_path", []),
+                    "main_path": state.get("main_path", []),
+                    "human_choice_count": len(state.get("human_choices", []) or []),
+                    "current_choice_request": state.get("current_choice_request"),
+                },
+                "files": result.get("files", {}) if isinstance(result, dict) else {},
+                "validation_issues": result.get("validation_issues", []) if isinstance(result, dict) else [],
+            }
+            for key in ("applied_events", "human_choices"):
+                if isinstance(result, dict) and key in result:
+                    payload[key] = result[key]
+        return _ok(payload, action=args.get("action") or "export", host=os.name)
     except Exception as exc:
         return _fail(str(exc), action=args.get("action") or "export", host=os.name)
+
+
+def _handle_scale_audit(args: dict[str, Any], **_: Any) -> str:
+    """Audit analysis-scale branches before they enter claim synthesis."""
+    branches = args.get("branches") or []
+    diagnostics = args.get("diagnostics") or []
+    metrics = args.get("metrics") or []
+    audit = audit_scale_branches(branches, diagnostics)
+    cards = build_scale_evidence_cards(branches, metrics, diagnostics)
+    result: dict[str, Any] = {"audit": audit, "evidence_cards": cards}
+
+    output_dir = args.get("output_dir")
+    if output_dir:
+        target = _host_path(output_dir)
+        target.mkdir(parents=True, exist_ok=True)
+        audit_path = target / "scale_comparability_audit.json"
+        cards_path = target / "scale_evidence_cards.json"
+        audit_path.write_text(json.dumps(audit, ensure_ascii=False, indent=2), encoding="utf-8")
+        cards_path.write_text(json.dumps(cards, ensure_ascii=False, indent=2), encoding="utf-8")
+        result["artifacts"] = [str(audit_path), str(cards_path)]
+    return _ok(result)
+
+
+def _handle_3d_design(args: dict[str, Any], **_: Any) -> str:
+    """Generate a staged LOD1/LOD2/LOD3 urban massing proposal from local GeoJSON layers."""
+    try:
+        from .design_3d import generate_urban_design_3d
+
+        result = generate_urban_design_3d(
+            parcels_geojson_path=args.get("parcels_geojson_path") or args.get("parcels") or args.get("spatial_units_geojson_path"),
+            buildings_geojson_path=args.get("buildings_geojson_path") or args.get("buildings"),
+            metrics_geojson_path=args.get("metrics_geojson_path") or args.get("metrics"),
+            output_dir=args.get("output_dir") or "outputs/urban_3d_design",
+            lod_level=str(args.get("lod_level") or "LOD2"),
+            parcel_id=args.get("parcel_id"),
+            parcel_id_field=str(args.get("parcel_id_field") or "grid_id"),
+            blender_executable=args.get("blender_executable"),
+            context_buffer_m=float(args.get("context_buffer_m") or 180.0),
+            max_context_buildings=int(args.get("max_context_buildings") or 220),
+            run_blender=bool(args.get("run_blender", True)),
+        )
+        return _ok(result, action="urban_generate_3d_design", host=os.name)
+    except Exception as exc:
+        return _fail(str(exc), action="urban_generate_3d_design", host=os.name)
+
+
+SIMULATION_BACKEND_GROUPS: dict[str, dict[str, Any]] = {
+    "solar_daylight": {
+        "label": "Solar access, shadow, daylight",
+        "cli": ["oconv", "rtrace", "rpict", "gendaylit", "honeybee-radiance", "lbt-recipes"],
+        "python": ["ladybug", "ladybug_geometry", "honeybee", "honeybee_radiance", "lbt_recipes"],
+        "engines": ["Radiance", "Ladybug Tools", "Honeybee Radiance"],
+        "fallback": "Blender/Python ray-cast shadow and sky-view proxy on the LOD massing.",
+    },
+    "wind": {
+        "label": "Pedestrian wind and ventilation",
+        "cli": ["foamExec", "simpleFoam", "blockMesh", "snappyHexMesh"],
+        "wsl_cli": ["simpleFoam", "blockMesh", "snappyHexMesh"],
+        "python": ["butterfly"],
+        "support_python": ["pyvista", "vtk"],
+        "engines": ["OpenFOAM", "Butterfly legacy wrapper"],
+        "fallback": "Urban morphology proxy: frontal area density, height variance, corridor porosity, and wind exposure index.",
+    },
+    "temperature_microclimate": {
+        "label": "Air temperature, UHI, outdoor comfort",
+        "cli": ["energyplus", "openstudio", "palmrun"],
+        "python": ["ladybug", "dragonfly", "dragonfly_uwg", "uwg", "umep", "pythermalcomfort"],
+        "engines": ["Dragonfly/UWG", "UMEP/SOLWEIG", "PALM", "EnergyPlus weather workflows"],
+        "fallback": "Canopy-temperature proxy from shade, green ratio, impervious ratio, building density, and weather inputs.",
+    },
+    "carbon_energy": {
+        "label": "Operational carbon, energy, district systems",
+        "cli": ["energyplus", "openstudio", "cea"],
+        "python": ["honeybee_energy", "openstudio", "cea"],
+        "support_python": ["ladybug"],
+        "engines": ["EnergyPlus", "OpenStudio", "Honeybee Energy", "City Energy Analyst"],
+        "fallback": "Use intensity-based carbon proxy from program, floor area, height, envelope ratio, and local emission factors.",
+    },
+    "air_pollution": {
+        "label": "Air pollution and pollutant dispersion",
+        "cli": ["foamExec", "simpleFoam", "palmrun", "CCTM"],
+        "wsl_cli": ["simpleFoam"],
+        "python": [],
+        "support_python": ["pyvista", "vtk", "shapely", "geopandas"],
+        "engines": ["OpenFOAM scalar transport", "PALM chemistry", "CMAQ regional air quality"],
+        "fallback": "Street-canyon exposure proxy from road emissions, enclosure ratio, wind exposure, and receptor distance.",
+    },
+    "rainfall_stormwater": {
+        "label": "Rainfall, runoff, drainage, stormwater",
+        "cli": ["swmm5", "runswmm"],
+        "python": ["pyswmm", "swmm_api"],
+        "support_python": ["geopandas", "shapely", "meteostat", "openmeteo_requests"],
+        "engines": ["EPA SWMM", "PySWMM", "swmm-api"],
+        "fallback": "Runoff proxy from catchment area, imperviousness, green/roof area, slope, and design storm depth.",
+    },
+}
+
+URBAN_SIM_PYTHON_PACKAGES = [
+    "ladybug-core",
+    "ladybug-geometry",
+    "honeybee-core",
+    "honeybee-radiance",
+    "honeybee-energy",
+    "dragonfly-core",
+    "dragonfly-energy",
+    "dragonfly-radiance",
+    "dragonfly-uwg",
+    "lbt-recipes",
+    "pythermalcomfort",
+    "pyswmm",
+    "swmm-toolkit",
+    "swmm-api",
+    "pyvista",
+    "vtk",
+    "meteostat",
+    "openmeteo-requests",
+    "requests-cache",
+    "retry-requests",
+]
+
+SIMULATION_BACKEND_INSTALL_RECIPES: dict[str, dict[str, Any]] = {
+    "urban_sim_python_env": {
+        "title": "Create the lightweight urban-sim Python environment",
+        "when": "Use when Ladybug/Honeybee/Dragonfly/UWG/SWMM Python modules are missing.",
+        "requires": ["conda"],
+        "commands": [
+            "conda create -n urban-sim python=3.11 pip -y",
+            "conda run -n urban-sim python -m pip install --upgrade pip",
+            "conda run -n urban-sim python -m pip install " + " ".join(URBAN_SIM_PYTHON_PACKAGES),
+        ],
+        "verify_commands": [
+            "conda run -n urban-sim python -c \"import ladybug, honeybee, honeybee_radiance, honeybee_energy, dragonfly, dragonfly_uwg, openstudio, pyswmm, swmm_api, pythermalcomfort; print('urban-sim ok')\"",
+        ],
+        "notes": ["Keep this environment isolated from the main Urban Agent runtime; tools can call it by path or via URBAN_SIM_PYTHON."],
+    },
+    "radiance_windows_zip": {
+        "title": "Install Radiance from the official Windows zip",
+        "when": "Use when oconv/rtrace/rpict/gendaylit are missing.",
+        "requires": ["PowerShell", "network"],
+        "commands": [
+            "$toolRoot = Join-Path $env:LOCALAPPDATA 'UrbanSimTools'",
+            "$radRoot = Join-Path $toolRoot 'Radiance-6.0.2'",
+            "$zip = Join-Path $env:TEMP 'Radiance_c1700d56_Windows.zip'",
+            "New-Item -ItemType Directory -Force -Path $toolRoot | Out-Null",
+            "Invoke-WebRequest -Uri 'https://github.com/LBNL-ETA/Radiance/releases/download/rad6R0P2/Radiance_c1700d56_Windows.zip' -OutFile $zip",
+            "if (Test-Path $radRoot) { Remove-Item -LiteralPath $radRoot -Recurse -Force }",
+            "Expand-Archive -Path $zip -DestinationPath $radRoot -Force",
+            "[Environment]::SetEnvironmentVariable('RAYPATH', '.;' + (Join-Path $radRoot 'lib'), 'User')",
+            "[Environment]::SetEnvironmentVariable('Path', ([Environment]::GetEnvironmentVariable('Path','User') + ';' + (Join-Path $radRoot 'bin')), 'User')",
+            "conda run -n urban-sim honeybee-radiance set-config radiance-path $radRoot",
+        ],
+        "verify_commands": [
+            "$env:RAYPATH = '.;' + (Join-Path $env:LOCALAPPDATA 'UrbanSimTools\\Radiance-6.0.2\\lib')",
+            "& (Join-Path $env:LOCALAPPDATA 'UrbanSimTools\\Radiance-6.0.2\\bin\\rtrace.exe') -defaults",
+            "conda run -n urban-sim honeybee-radiance config",
+        ],
+        "notes": ["Use the zip path for a user-local install; no system installer is required."],
+    },
+    "energyplus_windows_zip": {
+        "title": "Install EnergyPlus from the official Windows zip",
+        "when": "Use when energyplus.exe is missing.",
+        "requires": ["PowerShell", "network"],
+        "commands": [
+            "$toolRoot = Join-Path $env:LOCALAPPDATA 'UrbanSimTools'",
+            "$eplusOuter = Join-Path $toolRoot 'EnergyPlus-26.1.0'",
+            "$eplusRoot = Join-Path $eplusOuter 'EnergyPlus-26.1.0-6f2e40d102-Windows-x86_64'",
+            "$zip = Join-Path $env:TEMP 'EnergyPlus-26.1.0-Windows-x86_64.zip'",
+            "New-Item -ItemType Directory -Force -Path $toolRoot | Out-Null",
+            "curl.exe -L 'https://github.com/NatLabRockies/EnergyPlus/releases/download/v26.1.0/EnergyPlus-26.1.0-6f2e40d102-Windows-x86_64.zip' -o $zip",
+            "if (Test-Path $eplusOuter) { Remove-Item -LiteralPath $eplusOuter -Recurse -Force }",
+            "New-Item -ItemType Directory -Force -Path $eplusOuter | Out-Null",
+            "tar -xf $zip -C $eplusOuter",
+            "[Environment]::SetEnvironmentVariable('Path', ([Environment]::GetEnvironmentVariable('Path','User') + ';' + $eplusRoot), 'User')",
+            "conda run -n urban-sim honeybee-energy set-config energyplus-path $eplusRoot",
+        ],
+        "verify_commands": [
+            "& (Join-Path $env:LOCALAPPDATA 'UrbanSimTools\\EnergyPlus-26.1.0\\EnergyPlus-26.1.0-6f2e40d102-Windows-x86_64\\energyplus.exe') --version",
+            "conda run -n urban-sim honeybee-energy config",
+        ],
+        "notes": ["EnergyPlus is larger than Radiance but still works as a zip-based user install."],
+    },
+    "openfoam_wsl_apt": {
+        "title": "Install OpenFOAM in WSL Ubuntu",
+        "when": "Use when simpleFoam/blockMesh/snappyHexMesh are missing.",
+        "requires": ["WSL Ubuntu", "root or sudo in WSL"],
+        "commands": [
+            "wsl --install -d Ubuntu",
+            "wsl -u root -- apt-get update",
+            "wsl -u root -- apt-get install -y openfoam",
+        ],
+        "verify_commands": [
+            "wsl -- bash -lc \"source /usr/share/openfoam/etc/bashrc >/dev/null 2>&1 && simpleFoam -help | head -5\"",
+            "wsl -- bash -lc \"source /usr/share/openfoam/etc/bashrc >/dev/null 2>&1 && blockMesh -help | head -5\"",
+        ],
+        "notes": ["Ubuntu's package is lightweight enough for quick deployment but may lag the latest OpenFOAM Foundation release."],
+    },
+}
+
+SIMULATION_FIELD_RECIPE_KEYS: dict[str, list[str]] = {
+    "solar_daylight": ["urban_sim_python_env", "radiance_windows_zip"],
+    "wind": ["openfoam_wsl_apt", "urban_sim_python_env"],
+    "temperature_microclimate": ["urban_sim_python_env", "energyplus_windows_zip"],
+    "carbon_energy": ["urban_sim_python_env", "energyplus_windows_zip"],
+    "air_pollution": ["openfoam_wsl_apt", "urban_sim_python_env"],
+    "rainfall_stormwater": ["urban_sim_python_env"],
+}
+
+
+def _probe_commands(names: list[str]) -> list[dict[str, Any]]:
+    results = []
+    for name in names:
+        path = shutil.which(name)
+        results.append({"name": name, "available": bool(path), "path": path})
+    return results
+
+
+def _python_probe_candidates() -> list[Path]:
+    candidates: list[Path] = []
+    explicit = os.environ.get("URBAN_SIM_PYTHON")
+    if explicit:
+        candidates.append(Path(explicit))
+    candidates.append(Path.home() / ".conda" / "envs" / "urban-sim" / "python.exe")
+    return [path for path in candidates if path.exists()]
+
+
+def _probe_python_modules(names: list[str]) -> list[dict[str, Any]]:
+    results = []
+    for name in names:
+        current_available = importlib.util.find_spec(name) is not None
+        results.append({"name": name, "available": current_available, "source": "current_python" if current_available else None})
+    missing = [item["name"] for item in results if not item["available"]]
+    if not missing:
+        return results
+
+    for python_path in _python_probe_candidates():
+        code = (
+            "import importlib.util,json;"
+            f"names={json.dumps(missing)};"
+            "print(json.dumps({name: importlib.util.find_spec(name) is not None for name in names}))"
+        )
+        try:
+            completed = subprocess.run(
+                [str(python_path), "-c", code],
+                check=False,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="ignore",
+                timeout=20,
+            )
+            external = json.loads(completed.stdout.strip() or "{}") if completed.returncode == 0 else {}
+        except Exception:
+            external = {}
+        for item in results:
+            if item["available"]:
+                continue
+            if external.get(item["name"]):
+                item["available"] = True
+                item["source"] = str(python_path)
+        missing = [item["name"] for item in results if not item["available"]]
+        if not missing:
+            break
+    return results
+
+
+def _probe_wsl_commands(names: list[str]) -> list[dict[str, Any]]:
+    if not shutil.which("wsl.exe") and not shutil.which("wsl"):
+        return [{"name": name, "available": False, "path": None, "source": "wsl"} for name in names]
+    results = []
+    for name in names:
+        try:
+            completed = subprocess.run(
+                ["wsl.exe", "--", "bash", "-lc", f"source /usr/share/openfoam/etc/bashrc >/dev/null 2>&1; command -v {name}"],
+                check=False,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="ignore",
+                timeout=20,
+            )
+            path = completed.stdout.strip().splitlines()[0] if completed.returncode == 0 and completed.stdout.strip() else None
+        except Exception:
+            path = None
+        results.append({"name": name, "available": bool(path), "path": path, "source": "wsl_openfoam"})
+    return results
+
+
+def _probe_simulation_prerequisites() -> dict[str, Any]:
+    checks = []
+    for name in ["conda", "git", "curl.exe", "wsl.exe"]:
+        path = shutil.which(name)
+        checks.append({"name": name, "available": bool(path), "path": path})
+    urban_sim_python = _python_probe_candidates()
+    checks.append({"name": "urban-sim python", "available": bool(urban_sim_python), "path": str(urban_sim_python[0]) if urban_sim_python else None})
+    return {
+        "checks": checks,
+        "missing": [item["name"] for item in checks if not item["available"]],
+        "policy": "probe_first_then_guide_installation; do not run heavyweight installers automatically unless the user explicitly asks for installation.",
+    }
+
+
+def _readiness_state(cli: list[dict[str, Any]], wsl_cli: list[dict[str, Any]], python_modules: list[dict[str, Any]]) -> str:
+    direct = cli + wsl_cli + python_modules
+    if not direct:
+        return "missing"
+    available = sum(1 for item in direct if item.get("available"))
+    if available == len(direct):
+        return "ready"
+    if available:
+        return "partial"
+    return "missing"
+
+
+def _install_guidance_for_field(field: str, state: str, *, direct_available: bool, include_install_guide: bool) -> dict[str, Any]:
+    recipe_keys = SIMULATION_FIELD_RECIPE_KEYS.get(field, [])
+    if state == "ready":
+        action = "verify_and_use_backend"
+    elif direct_available:
+        action = "use_available_backend; install_or_configure_optional_missing_backends_when_needed"
+    else:
+        action = "install_or_configure_missing_backends"
+    guidance: dict[str, Any] = {
+        "recipe_keys": recipe_keys,
+        "action": action,
+    }
+    if include_install_guide:
+        guidance["recipes"] = {key: SIMULATION_BACKEND_INSTALL_RECIPES[key] for key in recipe_keys if key in SIMULATION_BACKEND_INSTALL_RECIPES}
+    return guidance
+
+
+def _handle_simulation_backends(args: dict[str, Any], **_: Any) -> str:
+    """Probe local CLI and Python simulation backends for urban physics workflows."""
+    include_install_guide = bool(args.get("include_install_guide", True))
+    requested = args.get("fields")
+    if isinstance(requested, str):
+        requested_fields = [requested]
+    elif isinstance(requested, list):
+        requested_fields = [str(item) for item in requested]
+    else:
+        requested_fields = list(SIMULATION_BACKEND_GROUPS)
+    requested_fields = [item for item in requested_fields if item in SIMULATION_BACKEND_GROUPS]
+    if not requested_fields:
+        requested_fields = list(SIMULATION_BACKEND_GROUPS)
+
+    groups: dict[str, Any] = {}
+    for field in requested_fields:
+        spec = SIMULATION_BACKEND_GROUPS[field]
+        cli = _probe_commands(list(spec["cli"]))
+        wsl_cli = _probe_wsl_commands(list(spec.get("wsl_cli", [])))
+        python_modules = _probe_python_modules(list(spec["python"]))
+        support_python_modules = _probe_python_modules(list(spec.get("support_python", [])))
+        direct_available = any(item["available"] for item in cli + wsl_cli + python_modules)
+        readiness = _readiness_state(cli, wsl_cli, python_modules)
+        groups[field] = {
+            "label": spec["label"],
+            "readiness": readiness,
+            "direct_backend_available": direct_available,
+            "engines": spec["engines"],
+            "cli": cli,
+            "wsl_cli": wsl_cli,
+            "python": python_modules,
+            "support_python": support_python_modules,
+            "recommended_agent_route": "direct_cli_or_python_backend" if direct_available else "proxy_model_then_install_or_configure_backend",
+            "fallback": spec["fallback"],
+            "installation": _install_guidance_for_field(field, readiness, direct_available=direct_available, include_install_guide=include_install_guide),
+        }
+
+    return _ok(
+        {
+            "host": os.name,
+            "deployment": {
+                "mode": "qgis_like_probe_then_guide",
+                "prerequisites": _probe_simulation_prerequisites(),
+                "recommended_profile": "windows_lightweight_python_cli_plus_wsl_openfoam",
+                "portable_defaults": {
+                    "python_env": "urban-sim",
+                    "tool_root": "%LOCALAPPDATA%\\UrbanSimTools",
+                    "urban_sim_python_env_var": "URBAN_SIM_PYTHON",
+                },
+            },
+            "fields": groups,
+            "mcp_cli_position": "Prefer Python/CLI wrappers as deterministic backends. MCP should expose probe/run/status/artifact tools above those wrappers; Rhino/Grasshopper can remain an optional compatibility layer when its GUI/runtime is healthy.",
+        },
+        action="urban_probe_simulation_backends",
+        host=os.name,
+    )
 
 
 def _flatten_review_terms(value: Any, *, prefix: str = "") -> list[str]:
@@ -1745,6 +2165,8 @@ def _fallback_capabilities(task: str, *, limit: int) -> dict[str, Any]:
         _capability("accessibility", "Accessibility measurement", "optional_analysis", "Measure origin-to-target access distances only when accessibility is an approved branch", ["origins", "targets"], ["coverage", "distance_metrics"], ["walkability"]),
         _capability("density", "Urban density", "optional_analysis", "Compute grid density and uniformity only when not already supplied by the data canvas", ["features"], ["density_grid"], ["morphology"]),
         _capability("svg_overlay", "SVG overlay", "optional_cartography", "Generate reviewable map artifacts after the map branch is approved", ["features", "bbox"], ["svg"], ["cartography", "artifact"]),
+        _capability("staged_3d_design", "Staged LOD1/LOD2/LOD3 urban design", "design_generation", "Select a local parcel/grid, clear existing buildings, then generate staged 3D artifacts: LOD1 coarse massing, LOD2 roof/public-realm form, or optional LOD3 facade/detail enrichment", ["parcel_geojson", "building_geojson", "optional_metrics_geojson", "lod_level"], ["blend", "glb", "obj", "preview_png", "design_buildings_geojson", "cleared_buildings_geojson"], ["3d", "blender", "lod1", "lod2", "lod3", "digital-twin", "massing", "urban-design"]),
+        _capability("simulation_backend_probe", "Urban physics backend probe", "simulation_readiness", "Detect local Python/CLI engines for solar, wind, microclimate, carbon, pollution, and stormwater before choosing proxy or high-fidelity simulation routes", ["optional_field_list"], ["backend_availability", "fallback_routes"], ["simulation", "physics", "solar", "wind", "temperature", "carbon", "pollution", "stormwater", "cli"]),
     ]
     terms = set(_tokens(task))
     ranked = sorted(catalog, key=lambda item: (-len(terms & set(item["tags"] + [item["name"]])), catalog.index(item)))[:limit]
@@ -2316,6 +2738,47 @@ CONNECTIVITY_SCHEMA = {"name": "urban_analyze_connectivity", "description": "Ana
 ACCESSIBILITY_SCHEMA = {"name": "urban_measure_accessibility", "description": "Measure accessibility from building origins to target points.", "parameters": {"type": "object", "properties": {"buildings": {"type": "array"}, "target_points": {"type": "array"}, "max_distance": {"type": "number", "default": 500}}, "required": ["buildings", "target_points"]}}
 DENSITY_SCHEMA = {"name": "urban_calculate_density", "description": "Calculate simple grid density from urban features.", "parameters": {"type": "object", "properties": {"buildings": {"type": "array"}, "features": {"type": "array"}, "grid_size": {"type": "number", "default": 100}}, "required": []}}
 SVG_SCHEMA = {"name": "urban_generate_svg_overlay", "description": "Generate a reviewable SVG overlay from features and interventions.", "parameters": {"type": "object", "properties": {"base_features": {"type": "object"}, "interventions": {"type": "array"}, "bbox": {"type": "array"}, "width": {"type": "integer", "default": 800}, "height": {"type": "integer"}}, "required": ["base_features"]}}
+DESIGN_3D_SCHEMA = {
+    "name": "urban_generate_3d_design",
+    "description": "Generate a staged LOD1/LOD2/LOD3 city digital-twin design proposal from local GeoJSON. Use LOD1 for coarse massing, LOD2 for roof/public-realm form, and LOD3 only when facade/detail enrichment is explicitly needed.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "parcels_geojson_path": {"type": "string", "description": "Parcel, plot, or design-unit GeoJSON path. A 500m grid layer can be used as the design parcel layer."},
+            "spatial_units_geojson_path": {"type": "string", "description": "Alias for parcels_geojson_path."},
+            "buildings_geojson_path": {"type": "string", "description": "Existing building-footprint GeoJSON path. Buildings intersecting the selected parcel are cleared from the design scene."},
+            "metrics_geojson_path": {"type": "string", "description": "Optional grid/parcel metrics GeoJSON used for automatic parcel selection."},
+            "lod_level": {"type": "string", "enum": ["LOD1", "LOD2", "LOD3"], "default": "LOD2", "description": "LOD1 coarse volumes; LOD2 adds roof forms/public realm; LOD3 adds facade openings, entrances, balconies, and roof equipment."},
+            "parcel_id": {"type": "string", "description": "Optional parcel id. If omitted, the tool selects a dense parcel from metrics."},
+            "parcel_id_field": {"type": "string", "default": "grid_id"},
+            "output_dir": {"type": "string", "description": "Directory receiving GeoJSON, Blender payload, .blend, .glb, .obj, preview PNG, and manifest."},
+            "blender_executable": {"type": "string", "description": "Optional Blender executable path. If omitted, common Windows install paths and PATH are checked."},
+            "context_buffer_m": {"type": "number", "default": 180},
+            "max_context_buildings": {"type": "integer", "default": 220},
+            "run_blender": {"type": "boolean", "default": True},
+        },
+        "required": ["parcels_geojson_path", "buildings_geojson_path", "output_dir"],
+    },
+}
+SIMULATION_BACKENDS_SCHEMA = {
+    "name": "urban_probe_simulation_backends",
+    "description": "Probe local CLI and Python backends for urban physics workflows before selecting proxy or high-fidelity simulation routes.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "fields": {
+                "type": "array",
+                "items": {
+                    "type": "string",
+                    "enum": ["solar_daylight", "wind", "temperature_microclimate", "carbon_energy", "air_pollution", "rainfall_stormwater"],
+                },
+                "description": "Optional subset of simulation fields to probe. If omitted, all fields are checked.",
+            },
+            "include_install_guide": {"type": "boolean", "default": True, "description": "When true, include QGIS-like install recipes for missing or partial backends. Set false for compact readiness checks."},
+        },
+        "required": [],
+    },
+}
 GEOJSON_SCHEMA = {"name": "urban_export_geojson", "description": "Export features as GeoJSON FeatureCollection.", "parameters": {"type": "object", "properties": {"features": {"type": "array"}, "crs": {"type": "string", "default": "EPSG:4326"}}, "required": ["features"]}}
 TOPOLOGY_SCHEMA = {"name": "urban_build_topology", "description": "Build a lightweight topology graph from urban features.", "parameters": {"type": "object", "properties": {"features": {"type": "array"}, "relation_threshold": {"type": "number", "default": 100}}, "required": ["features"]}}
 GROUND_TASK_SCHEMA = {"name": "urban_ground_task", "description": "Ground an urban question in capabilities, dataset cards, research-design memory, evidence manifest, and explicit gaps.", "parameters": {"type": "object", "properties": {"task": {"type": "string"}, "location": {"type": "string"}, "bbox": {"type": "array"}, "task_data": {"type": "object"}, "capability_limit": {"type": "integer", "default": 6}, "research_memory_limit": {"type": "integer", "default": 4}}, "required": ["task"]}}
@@ -2349,8 +2812,29 @@ ROUTE_TREE_SCHEMA = {
             "trace_path": {"type": "string", "description": "Workflow trace JSON path for action=sync_trace."},
             "workflow_trace": {"type": "object", "description": "Workflow trace object for action=sync_trace. Synchronizes human decisions, worker records, reviewer records, claim gates, selected route, and artifact manifest back into route_tree_state.json."},
             "trace": {"type": "object", "description": "Alias for workflow_trace."},
+            "return_full_state": {"type": "boolean", "default": False, "description": "Return the complete state inline. Leave false for ordinary agent runs; the full state is persisted to route_tree_state.json."},
         },
         "required": ["run_dir"],
+    },
+}
+SCALE_AUDIT_SCHEMA = {
+    "name": "urban_scale_audit",
+    "description": (
+        "Audit multi-scale urban-analysis branches before comparison or claim synthesis. "
+        "Checks research-object support, outcome and privacy contracts, common predictors, "
+        "shared validation geography, model protocol, empty-grid handling, and the role of "
+        "residual Moran diagnostics. Returns scale evidence cards and a human claim gate; "
+        "it never selects a scale from R2 or Moran's I alone."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "branches": {"type": "array", "items": {"type": "object"}, "minItems": 2},
+            "metrics": {"type": "array", "items": {"type": "object"}},
+            "diagnostics": {"type": "array", "items": {"type": "object"}},
+            "output_dir": {"type": "string"},
+        },
+        "required": ["branches"],
     },
 }
 REVIEW_SCHEMA = {"name": "urban_review", "description": "Pause after a major urban-analysis step and review two coupled layers: semantic implications of time, space, people, and governance assumptions, plus artifact readiness for downstream tables, maps, model outputs, GIS layers, manifests, and reports. Use it after intermediate steps and before final claims. When reviewing a workflow trace, also check trace completeness: main plan, visible human plan decision or approval, worker records, parent verification, per-step reviewer pauses, claim gates, artifact manifest, layered reflections, and memory carryover.", "parameters": {"type": "object", "properties": {"analysis": {"type": "object"}, "results": {"type": "object"}, "evidence_manifest": {"type": "object"}, "step_id": {"type": "string"}, "stage": {"type": "string"}, "threshold": {"type": "number", "default": 0.7}}, "required": []}}

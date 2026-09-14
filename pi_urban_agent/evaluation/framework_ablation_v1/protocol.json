@@ -1,0 +1,36 @@
+{
+  "protocol": "framework-ablation-v1",
+  "conditions": [
+    "pi_plain",
+    "urban_no_planner",
+    "urban_no_reviewer",
+    "urban_no_context",
+    "urban_full"
+  ],
+  "turns": [
+    {
+      "id": "T1_ground_and_plan",
+      "message": "I want to study how spatial scale changes the relationship between the built environment and sampled device activity inside the Shanghai inner ring. The isolated workspace contains data_contract.json, DATA_INVENTORY.md, and model-ready tables for 200--800 m in 100 m increments. First inspect only the contract, inventory, and necessary headers. Propose a compact, comparable route family that includes OLS and GWR with defensible adaptive and fixed neighbourhood alternatives. Do not execute a model yet. State what must remain fixed across routes and what evidence a human should later inspect."
+    },
+    {
+      "id": "T2_execute_ols",
+      "message": "Human decision: keep the common boundary, observation window, outcome, eight-covariate contract, and all seven grid supports. Execute the OLS comparison first. Write reusable code under work/, save a non-empty coefficient table under outputs/, and record exactly what was executed. Do not execute GWR in this turn."
+    },
+    {
+      "id": "T3_review_ols",
+      "message": "Review the OLS artifact before opening local-model work. Check that the seven supports used the same eight predictors and outcome definition. Identify which coefficient patterns persist or change with support. If the artifact or contract is incomplete, repair or request a repair; otherwise state the admissible role of this evidence and prepare the next comparison."
+    },
+    {
+      "id": "T4_human_gwr_patch",
+      "message": "Human decision: retain OLS as the global relationship comparison. Open GWR as local relationship exploration. Compare adaptive neighbourhood shares of 10, 15, 20, 25, and 30 percent with fixed radii of 7, 8, 9, 10, and 12 km; do not treat adaptive bandwidth as the only admissible specification and do not choose a planning scale from R-squared alone. Execute a feasible first set and persist the decision and resulting artifacts."
+    },
+    {
+      "id": "T5_review_local_evidence",
+      "message": "Inspect the produced GWR evidence and its local sample support. Produce or update a compact evidence table for all eight covariates and, where feasible, maps at one common physical bandwidth across the seven observation supports. Keep observation-unit scale and model-process bandwidth as coordinated but distinct decisions. Record any unresolved route or comparison rather than silently dropping it."
+    },
+    {
+      "id": "T6_recover_and_synthesise",
+      "message": "Provide the final stage summary. If the conversation has been compacted, first recover the exact active research state rather than relying on memory. Distinguish executed from deferred routes, identify the latest valid human decision and review status, list the registered or saved artifacts, state the next unresolved scientific choice, and give a bounded conclusion about scale-sensitive built-environment relationships without claiming an optimal scale."
+    }
+  ]
+}

@@ -544,19 +544,32 @@
       runtime_label: `${Number(row.elapsed_sec).toFixed(1)} s`
     })).filter(row => Number.isFinite(row.k_neighbors));
 
-    const map = (values, field, title, scheme, domainMid) => ({
+    // RF and GWR must be compared on the same undistorted geographic frame.
+    // Vega-Lite otherwise stretches each quantitative x/y scale to a square.
+    const mapRows = [...predictionRows, ...gwrRows];
+    const lonValues = mapRows.map(row => Number(row.lon)).filter(Number.isFinite);
+    const latValues = mapRows.map(row => Number(row.lat)).filter(Number.isFinite);
+    const lonDomain = [Math.min(...lonValues), Math.max(...lonValues)];
+    const latDomain = [Math.min(...latValues), Math.max(...latValues)];
+    const midLat = (latDomain[0] + latDomain[1]) / 2;
+    const physicalAspect = ((lonDomain[1] - lonDomain[0]) * Math.cos(midLat * Math.PI / 180)) /
+      Math.max(1e-9, latDomain[1] - latDomain[0]);
+    const mapHeight = 245;
+    const mapWidth = Math.round(mapHeight * physicalAspect);
+
+    const map = (values, field, title, scheme, domainMid, legendTitle) => ({
       data: { values },
-      width: 245,
-      height: 245,
+      width: mapWidth,
+      height: mapHeight,
       title: { text: title },
       mark: { type: "square", size: 47, stroke: "#ffffff", strokeWidth: 0.2 },
       encoding: {
-        x: { field: "lon", type: "quantitative", axis: null, scale: { zero: false, nice: false } },
-        y: { field: "lat", type: "quantitative", axis: null, scale: { zero: false, nice: false } },
+        x: { field: "lon", type: "quantitative", axis: null, scale: { zero: false, nice: false, domain: lonDomain } },
+        y: { field: "lat", type: "quantitative", axis: null, scale: { zero: false, nice: false, domain: latDomain } },
         color: {
           field,
           type: "quantitative",
-          title,
+          title: legendTitle || title,
           scale: domainMid === undefined ? { scheme } : { scheme, domainMid }
         },
         tooltip: [
@@ -597,8 +610,8 @@
 
     return withBase({
       hconcat: [
-        map(predictionRows, "residual", "RF held-out residuals", "redblue", 0),
-        map(gwrRows, "coef__osm_poi_type_entropy", "GWR: POI-diversity coefficient", "redblue", 0),
+        map(predictionRows, "residual", "RF held-out residuals", "redblue", 0, "RF residual"),
+        map(gwrRows, "coef__osm_poi_type_entropy", "GWR: POI-diversity coefficient", "redblue", 0, "GWR coefficient"),
         sensitivityChart
       ],
       spacing: 24,

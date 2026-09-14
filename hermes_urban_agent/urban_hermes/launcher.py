@@ -156,10 +156,13 @@ def _install_runtime_prompt(args: argparse.Namespace) -> None:
     if "urban" not in toolsets:
         return
     parts: list[str] = []
+    core_parts: list[str] = []
     skill_prompt = os.path.join(os.path.dirname(__file__), "urban_skill_prompt.md")
     try:
         with open(skill_prompt, "r", encoding="utf-8") as handle:
-            parts.append(handle.read().strip())
+            core_prompt = handle.read().strip()
+            parts.append(core_prompt)
+            core_parts.append(core_prompt)
     except OSError:
         pass
     try:
@@ -174,6 +177,18 @@ def _install_runtime_prompt(args: argparse.Namespace) -> None:
         combined = "\n\n".join(
             part for part in (existing, runtime_prompt) if part
         ).strip()
+        # Windows limits a single environment variable to 32,767 characters.
+        # The optional memory cards can push the Urban workflow contract past
+        # that limit and prevent the CLI from starting at all.  Preserve the
+        # complete core skill contract on Windows and let memory remain
+        # available through its normal tool/provider interface.
+        if os.name == "nt" and len(combined) > 30_000:
+            combined = "\n\n".join(
+                part for part in (existing, *core_parts) if part
+            ).strip()
+            if len(combined) > 30_000:
+                combined = combined[:30_000]
+            os.environ["URBAN_HERMES_RUNTIME_PROMPT_COMPACTED"] = "windows_env_limit"
         os.environ["URBAN_HERMES_SYSTEM_PROMPT"] = combined
 
         # Also feed the contract through Hermes' native ephemeral prompt path.

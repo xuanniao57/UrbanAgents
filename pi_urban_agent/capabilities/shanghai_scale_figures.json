@@ -1,0 +1,22 @@
+{
+  "id": "shanghai_section41_saved_evidence",
+  "path_base": "paper4_urban_svgagent",
+  "script": "experiments/case2_multiscale_aoi_corrected_20260830/render_section41_artifacts.py",
+  "tool": "urban_python",
+  "method": "run_script",
+  "arguments": {"args": ["--output-dir", "<new run directory>/rendered"], "timeout_seconds": 900},
+  "required_environment": ["geopandas", "matplotlib", "pandas", "numpy", "scikit-learn", "threadpoolctl"],
+  "analysis_contract": {
+    "grid_scales_m": [200, 300, 400, 500, 600, 700, 800],
+    "full_model_covariates": ["cmab_building_density_per_ha", "cmab_building_coverage_ratio", "cmab_mean_height_m", "cmab_volume_proxy_per_ha", "cmab_function_entropy", "osm_poi_density_per_ha", "osm_poi_type_entropy", "osm_road_density_m_per_ha"],
+    "local_coefficient_bandwidth_m": 7000,
+    "coefficient_fit_scope": "full_sample_descriptive",
+    "predictive_score_scope": "pooled_geographically_out_of_fold",
+    "models_are_not_refitted": true,
+    "source_results_are_not_modified": true
+  },
+  "expected_artifacts": ["figure_artifact_manifest.json", "figures/*.svg", "figures/*.pdf", "figures/*.png", "tables_and_gis/table2_ols_all7.csv", "tables_and_gis/gwr_coefficient_maps_*m.geojson"],
+  "worker_steps": ["Inspect the current branch and data contract", "Read this recipe using urban_python inspect_json", "Run the declared script into a new run directory", "Check exit_code and inspect the returned manifest", "Attach the manifest, comparison table and figure exports using urban_attach_evidence", "Prepare review with units, colour ranges, variable set, map fit scope and scientific interpretation questions"],
+  "review_questions": ["Do all eight coefficients come from the full eight-predictor model at all seven supports?", "Are physical bandwidth, coefficient units and colour ranges constant across comparable maps?", "Is Table 2 OLS-only, with adaptive and fixed GWR comparisons kept separate?", "Does the plot distinguish descriptive coefficients from held-out predictive scores?", "Which spatial patterns require substantive human interpretation or further analysis?"],
+  "human_authorization": "No route selection or claim approval is implied by successful rendering."
+}

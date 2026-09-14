@@ -1,17 +1,17 @@
 const DEFAULT_PATHS = {
   state: "../../submissions/urban_cup_2026/process_evidence/case_decision_git_tree_20260722.json",
-  summary: "../../experiments/urbanworkflowbench_60tasks_20260524/condition_traces/all60_design_gate_20260524/condition_trace_score_summary.json",
-  decisions: "../../experiments/urbanworkflowbench_60tasks_20260524/condition_traces/all60_design_gate_20260524/full/all60_design_gate_decisions.csv",
-  findings: "../../submissions/urban_cup_2026/outputs/case_findings.json",
+  summary: "../../experiments/urbanresearch_lit50_v1_20260810/results/frontend_summary.json",
+  decisions: "../../experiments/urbanresearch_lit50_v1_20260810/results/reviewer_decisions.csv",
+  findings: "../../experiments/case2_scale_harmonized_20260810/case_findings.json",
   manifest: "../../submissions/urban_cup_2026/reproducibility_manifest.json",
-  modelSummary: "../../submissions/urban_cup_2026/outputs/model_validation_summary.csv",
+  modelSummary: "../../experiments/case2_scale_harmonized_20260810/model_validation_summary.csv",
   variableAudit: "../../submissions/urban_cup_2026/outputs/variable_evidence_register.csv",
   variableCoverage: "../../submissions/urban_cup_2026/outputs/variable_coverage_by_scale.csv",
   variableSpatial: "../../submissions/urban_cup_2026/outputs/variable_spatial_500m.csv",
   modelDecision: "../../submissions/urban_cup_2026/outputs/model_decision_table.csv",
   gwrDiagnostics: "../../submissions/urban_cup_2026/outputs/gwr_local_diagnostics.csv",
-  temporalSummary: "../../submissions/urban_cup_2026/outputs/temporal_cohort_summary.csv",
-  predictions: "../../submissions/urban_cup_2026/outputs/combined_rf_oof_predictions.csv",
+  temporalSummary: "../../experiments/case2_scale_harmonized_20260810/temporal_cohort_summary.csv",
+  predictions: "../../experiments/case2_scale_harmonized_20260810/combined_rf_oof_predictions.csv",
   reviews: [
     "../../submissions/urban_cup_2026/process_evidence/step_reviews/S1_review.json",
     "../../submissions/urban_cup_2026/process_evidence/step_reviews/S2_review.json",
@@ -28,24 +28,25 @@ const CASE_ARTIFACTS = {
 };
 
 const fallbackFindings = {
-  analysis_status: "exploratory; sample-conditional; outcome-grounded",
+  analysis_status: "qualified resolution sensitivity; sample-conditional; outcome-grounded",
   best_spatial_model_by_scale: [
-    { scale: "200m", train_r2: 0.609, r2_mean: 0.282 },
-    { scale: "500m", train_r2: 0.731, r2_mean: 0.360 }
+    { scale: "200m", train_r2: 0.602, r2_mean: 0.282 },
+    { scale: "500m", train_r2: 0.731, r2_mean: 0.344 }
   ],
   weekday_weekend: {
     "500m": { weekday_weekend_spatial_spearman_rho: 0.950 },
     "200m": { weekday_weekend_spatial_spearman_rho: 0.894 }
   },
   spatial_oof_residual_moran: {
-    "500m": { moran_i: 0.270, permutation_p: 0.001, k: 8 },
-    "200m": { moran_i: 0.182, permutation_p: 0.001, k: 8 }
+    "500m": { moran_i: 0.265, permutation_p: 0.001, k: 8 },
+    "200m": { moran_i: 0.180, permutation_p: 0.001, k: 8 }
   },
   claim_boundaries: [
     "The LBS sample represents observed device users, not the resident population.",
     "Predictive associations are not causal effects.",
     "The observation window is seven days, so long-term stability is untested.",
-    "Spatial-block validation estimates within-city transfer, not cross-city generalization."
+    "Spatial-block validation estimates within-city transfer, not cross-city generalization.",
+    "The two scales use a common eight-variable package and shared macro holdouts, but different released cohort schemes still qualify the comparison."
   ]
 };
 
@@ -504,7 +505,8 @@ function renderTree() {
     const text = el("text", { x, y: 28, class: `step-label ${focusClass}`, "text-anchor": "middle" });
     // Paper-focused views need stage markers, not a second row of competing
     // explanations.  The full workspace keeps the descriptive labels.
-    text.textContent = state.treeFocusMode === "all" ? `Step ${step}: ${label}` : `Step ${step}`;
+    const replayUsesCompactLabels = String(tree.meta?.record_type || "").startsWith("read-only competition replay");
+    text.textContent = state.treeFocusMode === "all" && !replayUsesCompactLabels ? `Step ${step}: ${label}` : `Step ${step}`;
     svg.appendChild(line);
     svg.appendChild(text);
   });
@@ -723,7 +725,7 @@ function nodeDecisionEvidenceMarkup(node) {
         <div id="nodeDecisionDiagnostics" class="node-decision-viz" aria-label="Residual spatial diagnostic"></div>
         <div class="node-verdict" data-tone="qualify">
           <span>QUALIFY</span><strong>Structured residual error remains</strong>
-          <p>Moran's I is ${metric(moran500.moran_i)} at 500 m and ${metric(moran200.moran_i)} at 200 m (permutation p = ${metric(moran500.permutation_p)}). Downgrade local and causal interpretation; retain spatial re-specification as a robustness branch.</p>
+          <p>Both scales retain geographically structured out-of-fold error under the declared weights (permutation p = ${metric(moran500.permutation_p)}). The magnitudes are not ranked across resolutions. Qualify spatial-transfer and exhausted-mechanism claims; the causal boundary follows from the observational design, not from Moran's I.</p>
         </div>
       </div>
     </section>`;
@@ -1047,7 +1049,7 @@ function researchThread(data) {
   const activeCount = (data.tree.active_path || data.tree.branch_tree?.active || []).length;
   const candidateCount = data.tree.nodes.length;
 
-  return [
+  const generated = [
     {
       role: "human",
       stage: "Research brief",
@@ -1085,7 +1087,7 @@ function researchThread(data) {
       role: "worker",
       stage: "Outcome-grounded validation",
       body: `The strongest spatial-block result is R² ${metric(f500.r2_mean)} at 500 m versus ${metric(f200.r2_mean)} at 200 m. Training fit alone would report ${metric(f500.train_r2)} at 500 m.`,
-      points: ["Five repeated five-fold validation", "Contiguous spatial-block holdouts", "Scale-specific results retained"],
+      points: ["Five repeated five-fold validation", "Shared macro-region spatial holdouts", "Common eight-variable evidence package"],
       attachments: [
         { title: "Outcome-grounded results", type: "figure", href: CASE_ARTIFACTS.results },
         { title: "Human–AI process", type: "process trace", href: CASE_ARTIFACTS.process }
@@ -1112,6 +1114,20 @@ function researchThread(data) {
       points: ["Allow: descriptive, sample-conditional association", "Qualify: predictive transfer and local interpretation", "Block: causal, census-representative, and cross-city claims"]
     }
   ];
+
+  // A competition replay is a read-only presentation of an already recorded
+  // run.  Keep the normal evidence-grounded summary above, then expose the
+  // recorded human/agent handoff instead of inventing hidden chain-of-thought.
+  if (String(data.tree.meta?.record_type || "").startsWith("read-only competition replay")) {
+    const recorded = asArray(workflow.dialogue).map(item => ({
+      role: item.role === "agent" ? "planner" : (item.role || "planner"),
+      stage: item.title || "Recorded research event",
+      body: item.body || "",
+      points: asArray(item.points)
+    }));
+    return recorded;
+  }
+  return generated;
 }
 
 function renderThreadMessage(message, index) {
@@ -1222,9 +1238,9 @@ function epistemicCards() {
       gate: "DOWNGRADE",
       title: "Residual geography",
       source: `Moran's I ${metric(moran500.moran_i)} at 500 m and ${metric(moran200.moran_i)} at 200 m; p = ${metric(moran500.permutation_p)}`,
-      consequence: "Prediction error remains spatially clustered, so local mechanisms and independent-error inference remain unsupported.",
+      consequence: "Prediction error remains spatially clustered under the declared diagnostic weights, so claims that the covariates exhaust spatial variation remain unsupported.",
       preventable: "Partly. Re-specify spatial structure and rerun diagnostics; otherwise weaken the claim.",
-      action: "Downgrade local and causal inference",
+      action: "Qualify transfer and mechanism claims",
       button: "Downgrade claim"
     }
   ];
@@ -1342,8 +1358,8 @@ function visualEvidenceMarkup() {
     </article>
   </div>
   <div class="viz-caption">
-    <span><strong>Visible evidence:</strong> repeated 5×5 spatial-block validation, out-of-fold grid predictions, residual Moran tests, and cohort-level weekday/weekend counts.</span>
-    <span><strong>Claim boundary:</strong> device-user activity over seven days; predictive association, not resident-population prevalence or causal effect.</span>
+    <span><strong>Visible evidence:</strong> common eight-variable branches, shared macro-region holdouts, repeated out-of-fold predictions, attrition ledgers, and residual Moran diagnostics.</span>
+    <span><strong>Claim boundary:</strong> a qualified 200–500 m resolution-sensitivity comparison under partially different privacy-release regimes; predictive association, not a pure MAUP effect, optimal scale, or causal effect.</span>
     <span><a href="${escapeAttr(CASE_ARTIFACTS.results)}" target="_blank" rel="noreferrer">case figure</a> · <a href="${escapeAttr(CASE_ARTIFACTS.process)}" target="_blank" rel="noreferrer">research trace</a></span>
   </div>`;
 }
@@ -1485,6 +1501,10 @@ function setupWorkspaceInteractions() {
   document.querySelectorAll("[data-workbench-tab]").forEach(button => {
     button.addEventListener("click", () => activateWorkbenchTab(button.dataset.workbenchTab));
   });
+  const requestedTab = new URLSearchParams(window.location.search).get("tab");
+  if (["control", "route", "artifacts"].includes(requestedTab)) {
+    activateWorkbenchTab(requestedTab);
+  }
   document.querySelectorAll("[data-thread-view]").forEach(button => {
     button.addEventListener("click", () => {
       const raw = button.dataset.threadView === "raw";
