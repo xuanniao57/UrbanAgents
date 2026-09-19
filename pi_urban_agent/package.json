@@ -1,0 +1,39 @@
+{
+  "name": "urban-agent-pi",
+  "private": true,
+  "version": "2.2.0",
+  "description": "Pi-native, reviewable runtime for scale-sensitive urban research.",
+  "type": "module",
+  "scripts": {
+    "web": "tsx scripts/workspace-web.ts",
+    "postinstall": "tsx scripts/apply-pi-budget-compat-patch.ts",
+    "pi": "pi",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/**/*.test.ts",
+    "smoke": "tsx scripts/smoke.ts",
+    "migrate:shanghai": "tsx scripts/migrate-shanghai-case.ts",
+    "context:report": "tsx scripts/context-report.ts",
+    "context:stress": "tsx scripts/context-stress.ts",
+    "context:local-eval": "tsx scripts/run-context-recovery-eval.ts",
+    "eval:module-ablation": "tsx scripts/run-module-ablation.ts",
+    "eval:framework-ablation": "tsx scripts/run-framework-ablation.ts",
+    "eval:score-ablation": "tsx scripts/score-module-ablation.ts",
+    "eval:build-isolated-judge": "tsx scripts/build-isolated-judge-bundles.ts",
+    "eval:validate-isolated-judge": "tsx scripts/validate-isolated-judge-outputs.ts",
+    "eval:summarize-context": "tsx scripts/summarize-context-eval.ts",
+    "model:config": "tsx scripts/materialize-model-config.ts",
+    "eval:init": "tsx scripts/initialize-eval-run.ts",
+    "role": "tsx scripts/run-pi-role.ts",
+    "validate": "npm run typecheck && npm test && npm run smoke"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "0.84.2",
+    "@huggingface/tokenizers": "0.1.3",
+    "typebox": "^1.1.24"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.2"
+  }
+}

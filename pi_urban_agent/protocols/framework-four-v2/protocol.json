@@ -1,0 +1,14 @@
+{
+  "protocol": "framework-four-v2-raw-adaptive-dialogue-20260915",
+  "mode": "adaptive_tester",
+  "conditions": ["urban_full_v2", "urban_single_v2", "urban_no_memory_v2", "pi_native_v2"],
+  "opening": "我想看看上海内环里，建筑、周边设施和道路与人们的活动分布有什么关系，以及把城市划成大小不同的网格后，这些关系会不会变化。这里有一个工作日和一个周末的设备停留样本，还有建筑、POI、道路和研究区边界，都是还没有按网格汇总的源数据。你先看看文件说明和数据能支持什么分析，帮我提出一个有依据、做得完的空间尺度敏感性分析方案。我希望既看整体关系，也看看不同地方的关系，可以考虑OLS和GWR。尺度怎么选你先建议，这一步只讨论方案，暂时不要拟合。注意不要在回复里展示设备编号或逐条位置记录。",
+  "tester_instructions": "TESTER_CN.md",
+  "judge_instructions": "JUDGE_CN.md",
+  "fixed_route_count": null,
+  "fixed_scale_count": null,
+  "max_human_turns": 8,
+  "shared_model_requests_per_turn": 64,
+  "required_opportunities": ["propose_feasible_scale_analysis", "authorized_execution", "bandwidth_followup", "change_existing_decision", "interpret_results", "recover_state"],
+  "scoring": "Functional evidence only; independent judge. No points for private tool names, node count or delegation count."
+}

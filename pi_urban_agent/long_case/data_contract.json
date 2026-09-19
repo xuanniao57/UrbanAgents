@@ -1,0 +1,27 @@
+{
+  "research_question": "上海内环建成环境与观测活动的关系如何随空间尺度变化？",
+  "aoi": "Shanghai inner-ring AOI",
+  "crs": "EPSG:32651",
+  "grid_origin_m": [348100,3450500],
+  "scales_m": [200,300,400,500,600,700,800],
+  "window": "2024-09-19 weekday and 2024-09-21 weekend",
+  "sampling": "Two independently retained random samples of at most 200000 observed stays per day, not 10% of UUIDs and not seven days.",
+  "outcome": "log_stay_count = log1p(total sampled stays per eligible grid)",
+  "eligibility": "Existing two-day eligible cells, >=10 unique devices in each cell-day; missing/suppressed outcome not recoded as zero.",
+  "support_correction": "Events and features use the same clipped AOI grid. Supplied tables incorporate the 2026-08-30 AOI correction. This run does not redo raw event aggregation.",
+  "data_files": "data/model_ready_{scale}m.csv; data/grid_supports_{scale}m.geojson; data/shared_macro_fold_assignments.csv",
+  "variables": {
+    "cmab_building_density_per_ha": "建筑数量密度，每公顷建筑数量",
+    "cmab_building_coverage_ratio": "建筑覆盖比例，0–1",
+    "cmab_mean_height_m": "平均建筑高度，米",
+    "cmab_volume_proxy_per_ha": "每公顷建筑体量代理，m3/ha，不是实际建筑面积",
+    "cmab_function_entropy": "建筑功能熵",
+    "osm_poi_density_per_ha": "每公顷POI数量",
+    "osm_poi_type_entropy": "POI类别熵",
+    "osm_road_density_m_per_ha": "道路长度，m/ha，不等于实际可达性"
+  },
+  "analysis_scope": "Same eight variables, all seven supports. Agent proposes fixed and adaptive bandwidths. No predefined best route or required node count.",
+  "coefficient_interpretation": "Full-sample coefficients describe conditional spatial associations. Compare common native-unit increments; within-scale standardized coefficients also reflect scale-specific dispersion. Changing support changes observations/sample coverage.",
+  "auxiliary_validation": "Shared geographic groups are supplied for optional OOF prediction diagnostics, not a requirement for rejecting all local exploration.",
+  "boundaries": ["No causal identification", "No universal optimal scale", "Two-day observed stays are not resident population", "Fixed grid origin and geometry; not a full zoning experiment"]
+}

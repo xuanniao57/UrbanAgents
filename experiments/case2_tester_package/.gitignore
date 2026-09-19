@@ -1,9 +1,0 @@
-# Local secrets and run artifacts
-.env
-*.env
-env/kimi_code.env
-hermes_home/
-hermes_memory/
-results/
-*.log
-*_transcript*.txt

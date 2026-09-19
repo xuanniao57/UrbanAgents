@@ -1,0 +1,49 @@
+{
+  "name": "harmonized_grid_analysis",
+  "entrypoint": "python analysis.py",
+  "version": "1.1.0",
+  "agent_tool": {
+    "name": "urban_python",
+    "method": "run_script",
+    "arguments": {
+      "script": "/absolute/path/to/long_case/analysis.py",
+      "args": ["--action", "inventory"]
+    },
+    "usage": "Replace the script path with the actual file. script is not a shell command or inline code. Put every CLI flag/value in args as separate strings. Use absolute --out paths when saving into a research run; cwd otherwise defaults to script parent.",
+    "errors": "A nonzero exit is a failed tool call, not a completed analysis. Read its diagnostic and correct arguments before claiming an artifact exists."
+  },
+  "dependencies": ["numpy", "pandas", "scikit-learn", "threadpoolctl (scikit-learn dependency)"],
+  "network_required": false,
+  "raw_device_data_required": false,
+  "input": "Corrected, already-harmonized grid CSVs and metric coordinates in data/; never cached results.",
+  "scope": "OLS and fixed/adaptive bisquare GWR, eight predictors; full-sample exploration primary, shared-region OOF auxiliary.",
+  "actions": {
+    "inventory": "Columns, shapes, missing/nonfinite counts, hashes, support counts; optional --out saves full JSON.",
+    "feasibility": "Geometry-only neighbour scan. --model plus arbitrary --bandwidths; --validation shared_regions adds holdouts. Optional --out saves CSV/JSON.",
+    "fit": "Actually compute from input rows. --out required, new/empty. Full-sample coefficients always included; default validation none.",
+    "compare": "--out names run or parent; filter --scales/--model/--variables. Verify hashes, save complete comparison CSV, print <=3000-char preview. No winner selected."
+  },
+  "parameters": {
+    "--scales": "Subset of 200,300,400,500,600,700,800; all default",
+    "--model": "ols | gwr_fixed | gwr_adaptive; fit default ols, feasibility default both GWR",
+    "--bandwidths": "Comma-separated positive fixed metres or adaptive fractions (0,1]; specify --model; omit for OLS",
+    "--validation": "none (default) | shared_regions",
+    "--data-root": "Defaults to data beside analysis.py",
+    "--variables": "Compare-only exact predictor names or intercept, comma-separated"
+  },
+  "fit_outputs": ["run_manifest.json", "model_summary.csv", "local_coefficients.csv", "global_coefficients.csv", "coefficient_summary.csv", "spatial_summary.csv", "predictions.csv", "preprocessing.csv"],
+  "coefficient_units": {
+    "native": "log1p(stay_count) response per original predictor unit, intercept at X=0",
+    "x_standardized": "log1p(stay_count) response per training-sample predictor standard deviation (ddof=0); y NOT standardized, intercept at training predictor means"
+  },
+  "numerics": "Train-only median imputation/StandardScaler. Minimum 20 neighbours, weight floor 1e-12. Adaptive ceil(fraction*n_train) with floor20. Fixed radius never expands. All local ranks/conditions/radii retained.",
+  "safety": "Nonempty fit outputs refused; failed runs labeled; input/code/output hashes. No network/raw aggregation/plotting.",
+  "examples": [
+    "python analysis.py --action inventory",
+    "python analysis.py --action feasibility --model gwr_fixed --bandwidths 1500,2500,4500",
+    "python analysis.py --action fit --model ols --out results/ols_01",
+    "python analysis.py --action fit --model gwr_adaptive --bandwidths 0.08,0.17 --out results/adaptive_01",
+    "python analysis.py --action compare --out results --variables cmab_mean_height_m"
+  ],
+  "claim_limits": ["No optimal choice, causal effects or significance tests", "Do not conflate full-sample and OOF", "Quadrants: per-support median-coordinate split, not matched zones", "Two sampled days, fixed zoning; not population-wide or complete MAUP"]
+}
