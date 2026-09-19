@@ -1,0 +1,17 @@
+{
+ "protocol":"scale-dialogue-v3-20260919",
+ "status":"frozen design; new results pending",
+ "conditions":["urban_full_v2","urban_no_memory_v2","pi_native_v2"],
+ "models":["kimi-for-coding","qwen3.8-max"],
+ "repeats":3,
+ "max_human_turns":16,
+ "execution_limits":{"requests_per_human_turn":512,"session_requests":4096,"tools_per_agent_turn":512,"consecutive_tool_errors":16,"seconds_per_human_turn":3600},
+ "context_policy":"Declare and record provider-supported context/output limits separately. Do not describe the historical Qwen 32k experimental cap as its native maximum. Keep these settings identical across frameworks within each model.",
+ "opening":"我想研究上海内环里，人们的活动分布与建筑、周边设施和道路有什么关系。这里有一个工作日和一个周末的设备停留样本，还有建筑、POI、道路和研究区边界，都是源数据。请先看一下数据说明，建议一个合适的网格尺度，用OLS做一个初步的整体关系分析。先把口径和方案说清楚，等我确认后再执行。不要展示设备编号或逐条位置记录。",
+ "opportunities":["initial_single_support_OLS","human_requests_seven_support_OLS","human_requests_local_GWR","bandwidth_sensitivity","cross_branch_synthesis_and_state_recovery"],
+ "dimensions":["analytical_delivery","human_revision_fulfilment","research_state_consistency","evidence_interpretation_correspondence","runtime_cost"],
+ "route_count_target":null,
+ "delegation_ablation":false,
+ "judge":"Independent blinded context; no framework-specific tool or node-count credit. Claims checked against each run's own verified artifacts.",
+ "budget_hit_policy":"Record as resource-censored, not a scientific error. If a ceiling prevents synthesis, revise the common preset and repeat all compared conditions under that preset; retain original runs. No selective rescue."
+}

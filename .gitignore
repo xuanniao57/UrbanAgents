@@ -11,5 +11,7 @@ __pycache__/
 *.tar.gz
 .pi-agent/
 evaluation/
+request-budget/
+.research-history/
 raw_case/
 long_case/data/

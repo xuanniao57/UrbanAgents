@@ -26,6 +26,8 @@ import { workspaceShellPrefix } from "../src/core/workspace-shell.js";
 import { prepareSharedEnvironment } from "../src/core/shared-environment.js";
 import { classifyTurn } from "../src/core/turn-outcome.js";
 import { fourCondition, FOUR_CONDITIONS } from "../src/core/framework-conditions.js";
+import { executionBudget } from "../src/core/execution-budget.js";
+const executionLimits=executionBudget();
 
 type Json = Record<string, any>;
 type Turn = { number: number; name: string; dir: string; started: number; events: Json[]; requestIds: number[]; budgetStop?: string };
@@ -253,7 +255,7 @@ const proxy = createServer((req, res) => {
       const payload = JSON.parse(Buffer.concat(chunks).toString("utf8"));
       // Parent, children and compaction all use this proxy: a shared request
       // ceiling prevents delegation from multiplying the inference budget.
-      if (spec && turn && turn.requestIds.length > 64) throw new Error("Shared human-turn request budget (64) exhausted");
+      if (spec && turn && turn.requestIds.length > executionLimits.requestsPerTurn) throw new Error(`Shared human-turn request budget (${executionLimits.requestsPerTurn}) exhausted`);
       const sessionLimit = Number(process.env.URBAN_SESSION_REQUEST_LIMIT || 0);
       if (sessionLimit > 0 && id > sessionLimit) throw new Error(`Shared session request budget (${sessionLimit}) exhausted`);
       Object.assign(payload,samplingParams);
@@ -347,8 +349,8 @@ function receive(event: Json, line: string): void {
   // This is an outer human-turn bound, not reset by internal compaction/restarts.
   if (active && !active.budgetStop && event.type === 'tool_execution_end') {
     const ends=active.events.filter(e=>e.type==='tool_execution_end');
-    if (ends.length>=32 || (ends.length>=4 && ends.slice(-4).every(e=>e.isError))) {
-      active.budgetStop=ends.length>=32 ? '32 outer-turn tool attempts' : '4 consecutive tool errors';
+    if (ends.length>=executionLimits.toolCallsPerTurn || (ends.length>=executionLimits.consecutiveToolErrors && ends.slice(-executionLimits.consecutiveToolErrors).every(e=>e.isError))) {
+      active.budgetStop=ends.length>=executionLimits.toolCallsPerTurn ? `${executionLimits.toolCallsPerTurn} outer-turn tool attempts` : `${executionLimits.consecutiveToolErrors} consecutive tool errors`;
       timeline('outer_budget_stop',{reason:active.budgetStop});
       void rpc({type:'abort'}).catch(error=>timeline('abort_error',{error:String(error)}));
     }
@@ -481,11 +483,11 @@ try {
   await json(resolve(out, resume ? `resume-${resumeStamp}.json` : "manifest.json"), {
     resumedFrom: resume ? {sessionFile:priorManifest!.sessionFile, completedTurns:priorTurn,lastRequest:priorRequest} : undefined,
     protocol: spec ? "framework-four-v2" : "framework-ablation-v1", startedAt: now(), condition, contextMode, model, provider,
-    architecture: spec, sharedRequestBudgetPerHumanTurn: spec ? 64 : null,
+    architecture: spec, sharedRequestBudgetPerHumanTurn: spec ? executionLimits.requestsPerTurn : null,
     baseUrl: baseUrl.toString(), contextWindow, outputTokens, compaction, turnDeadlineMs,
     ...samplingParams, sampling, seed, thinking, enableThinking, humanActor: actor,
     providerSeedSent: localProvider,
-    toolCallBudget: 32, toolErrorBudget: 4, automaticRetries: false, manualCompaction: false,
+    toolCallBudget: executionLimits.toolCallsPerTurn, toolErrorBudget: executionLimits.consecutiveToolErrors, sessionRequestLimit:Number(process.env.URBAN_SESSION_REQUEST_LIMIT||0), automaticRetries: false, manualCompaction: false,
     repositoryRoot, dataRoot, expectedRunDir, cwd, sessionFile, python,
     workspaceLayout: { contract: "data_contract.json", inputs: "data/", code: "work/", outputs: "outputs/" },
     initialResearchState: resume ? "retained on disk" : null, initialConversation: resume ? "existing Pi session retained" : "fresh empty Pi session", builtinTools: true, contextFiles: false,
@@ -504,7 +506,7 @@ try {
     URBAN_DISABLED_TOOLS: disabledByCondition[condition] ?? "", URBAN_AUTHENTICATED_ACTOR: actor, URBAN_CONTEXT_PROFILE: "auto",
     URBAN_CONTEXT_WINDOW: String(contextWindow), URBAN_MAX_OUTPUT_TOKENS: String(outputTokens),
     URBAN_BUDGET_LOG_DIR: out,
-    URBAN_TOOL_ERROR_BUDGET: "4", URBAN_TOOL_CALL_BUDGET: "32" };
+    URBAN_TOOL_ERROR_BUDGET: String(executionLimits.consecutiveToolErrors), URBAN_TOOL_CALL_BUDGET: String(executionLimits.toolCallsPerTurn) };
   Object.assign(env, { URBAN_AGENT_ROLE: "planner", URBAN_PI_PROVIDER: provider, URBAN_PI_MODEL: model, URBAN_PI_THINKING:thinking,
     URBAN_DELEGATION_LOG_DIR: resolve(cwd, "outputs/delegations"), URBAN_DELEGATE_TIMEOUT_MS: String(turnDeadlineMs), NODE_USE_ENV_PROXY: "0" });
   const piArgs = [resolve(root, "node_modules/@earendil-works/pi-coding-agent/dist/cli.js"), "-a"];
